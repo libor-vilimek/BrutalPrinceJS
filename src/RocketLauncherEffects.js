@@ -236,26 +236,6 @@ PrinceJS.RocketLauncherEffects.prototype.drawGround = function () {
   this.rect(graphics, 0xe2993b, -13, 8, 30, 2, pulse * 0.3);
   this.drawWeapon(graphics, false);
 
-  let letters = {
-    R: [6, 5, 6, 5, 5],
-    O: [7, 5, 5, 5, 7],
-    C: [7, 4, 4, 4, 7],
-    K: [5, 5, 6, 5, 5],
-    E: [7, 4, 6, 4, 7],
-    T: [7, 2, 2, 2, 2],
-    S: [7, 4, 7, 1, 7]
-  };
-  let label = "ROCKETS";
-  this.rect(graphics, 0x171d21, -14, -22, 33, 9, 0.88);
-  for (let letter = 0; letter < label.length; letter++) {
-    for (let row = 0; row < 5; row++) {
-      for (let column = 0; column < 3; column++) {
-        if (letters[label[letter]][row] & (4 >> column)) {
-          this.rect(graphics, 0xffc881, -11 + letter * 4 + column, -20 + row, 1, 1);
-        }
-      }
-    }
-  }
   let glintY = -9 + Math.round(Math.sin(this.elapsed * 3.3));
   this.rect(graphics, 0xffbb50, 10, glintY - 2, 1, 5, pulse);
   this.rect(graphics, 0xffbb50, 8, glintY, 5, 1, pulse);

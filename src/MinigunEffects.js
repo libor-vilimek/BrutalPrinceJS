@@ -39,6 +39,15 @@ PrinceJS.MinigunEffects = function (game, kid, pickup) {
   this.casingRoomGrid = {};
   this.casingFloorColumns = {};
   this.casingWorldBottom = 0;
+  this.casingDepthCursor = Math.floor(Math.random() * 10);
+  this.casingDepths = [];
+  for (let depth = 0; depth < 10; depth++) {
+    let graphics = game.add.graphics(0, 0);
+    this.casingLayer.addChild(graphics);
+    let moving = game.add.graphics(0, 0);
+    graphics.addChild(moving);
+    this.casingDepths.push({ graphics: graphics, moving: moving });
+  }
   this.buildCasingFloors();
 
   // Short-lived sparks, smoke, and pickup glitter still share a bounded pool.
@@ -207,14 +216,24 @@ PrinceJS.MinigunEffects.prototype.buildCasingFloors = function () {
   });
 };
 
-PrinceJS.MinigunEffects.prototype.emitCasing = function (x, y, vx, vy, color, floorY) {
+PrinceJS.MinigunEffects.prototype.emitCasing = function (x, y, vx, vy, color, floorY, depthLayer) {
   let tilted = Math.random() < 0.25;
+  // A coprime stride spreads each burst over the slab instead of filling adjacent lanes first.
+  if (depthLayer === undefined) {
+    depthLayer = this.casingDepthCursor;
+    this.casingDepthCursor = (this.casingDepthCursor + 7) % 10;
+  }
+  depthLayer = Math.max(0, Math.min(9, Math.floor(depthLayer)));
   let casing = {
     x: x,
     y: y,
     vx: vx,
     vy: vy,
     color: color,
+    depthLayer: depthLayer,
+    depthProgress: 0,
+    shade: this.casingDepthColor(color, depthLayer),
+    highlight: this.casingDepthColor(0xffec99, depthLayer),
     floorY: floorY,
     room: this.kid.room || this.pickup.room || 0,
     width: tilted ? 2 : 3,
@@ -245,8 +264,9 @@ PrinceJS.MinigunEffects.prototype.casingFloorWalkable = function (floor) {
   );
 };
 
-PrinceJS.MinigunEffects.prototype.casingPileHeight = function (floorY, x, width) {
-  let columns = this.pileColumns[floorY];
+PrinceJS.MinigunEffects.prototype.casingPileHeight = function (floorY, x, width, depthLayer) {
+  let layers = this.pileColumns[floorY];
+  let columns = layers && layers[depthLayer || 0];
   let height = 0;
   if (columns) {
     for (let pixel = Math.round(x); pixel < Math.round(x) + width; pixel++) {
@@ -271,7 +291,7 @@ PrinceJS.MinigunEffects.prototype.findCasingSupport = function (casing, previous
     if (floor.floorY < previousBottom - 1 || (!fallback && !this.casingFloorWalkable(floor))) {
       continue;
     }
-    let surfaceY = floor.floorY - this.casingPileHeight(floor.floorY, casing.x, casing.width);
+    let surfaceY = floor.floorY - this.casingPileHeight(floor.floorY, casing.x, casing.width, casing.depthLayer);
     if (surfaceY <= nextBottom && (!support || surfaceY < support.y)) {
       support = { room: floor.room, row: floor.row, column: floor.column, floorY: floor.floorY, y: surfaceY };
     }
@@ -279,7 +299,7 @@ PrinceJS.MinigunEffects.prototype.findCasingSupport = function (casing, previous
   return support;
 };
 
-PrinceJS.MinigunEffects.prototype.casingSurfaceAt = function (x, width, floorY) {
+PrinceJS.MinigunEffects.prototype.casingSurfaceAt = function (x, width, floorY, depthLayer) {
   if (this.kid.level && this.kid.level.rooms) {
     let floors = this.casingFloorColumns[Math.floor((x + width / 2) / 32)] || [];
     let floor = floors.find((candidate) => candidate.floorY === floorY);
@@ -290,7 +310,7 @@ PrinceJS.MinigunEffects.prototype.casingSurfaceAt = function (x, width, floorY) 
       return floorY + 20;
     }
   }
-  return floorY - this.casingPileHeight(floorY, x, width);
+  return floorY - this.casingPileHeight(floorY, x, width, depthLayer);
 };
 
 PrinceJS.MinigunEffects.prototype.moveCasing = function (casing, dt) {
@@ -325,19 +345,38 @@ PrinceJS.MinigunEffects.prototype.getCasingRoom = function (id) {
       x: room ? room.x * 320 : 0,
       y: room ? room.y * 189 : 0,
       settled: [],
-      batches: []
+      batches: [],
+      depthBatches: Array.from({ length: 10 }, () => [])
     };
   }
   return this.casingRooms[id];
 };
 
+PrinceJS.MinigunEffects.prototype.casingDepthColor = function (color, depthLayer) {
+  let brightness = 0.72 + depthLayer * (0.28 / 9);
+  let red = Math.round(((color >> 16) & 255) * brightness);
+  let green = Math.round(((color >> 8) & 255) * brightness);
+  let blue = Math.round((color & 255) * brightness);
+  return (red << 16) | (green << 8) | blue;
+};
+
+PrinceJS.MinigunEffects.prototype.casingDepthOffset = function (casing) {
+  // The floor top runs diagonally from its back edge (Y 50) to its lip (Y 63).
+  // Keep all ten landing lanes inside that surface, around the true floor at Y 56.
+  let y = (casing.depthLayer - 5) * casing.depthProgress;
+  return { x: -y * 2, y: y };
+};
+
 PrinceJS.MinigunEffects.prototype.drawCasing = function (graphics, casing, x, y, moving) {
+  let offset = this.casingDepthOffset(casing);
+  x += offset.x;
+  y += offset.y;
   let horizontal = Math.abs(Math.cos(casing.rotation)) > 0.55;
   let width = moving ? (horizontal ? 3 : 1) : casing.width;
   let height = moving ? (horizontal ? 1 : 3) : casing.height - 1;
   this.rect(graphics, 0x684825, x, y + 1, width, height);
-  this.rect(graphics, casing.color, x, y, width, height);
-  this.rect(graphics, 0xffec99, x, y, 1, 1);
+  this.rect(graphics, casing.shade, x, y, width, height);
+  this.rect(graphics, casing.highlight, x, y, 1, 1);
 };
 
 PrinceJS.MinigunEffects.prototype.dirtyCasingBatch = function (batch) {
@@ -356,6 +395,7 @@ PrinceJS.MinigunEffects.prototype.settleCasing = function (casing, support) {
   casing.y = Math.round(support.y - casing.height);
   casing.vx = casing.vy = casing.spin = 0;
   casing.settled = true;
+  casing.depthProgress = 1;
   casing.room = support.room;
   casing.floorY = support.floorY;
   casing.floorRow = support.row;
@@ -367,19 +407,23 @@ PrinceJS.MinigunEffects.prototype.settleCasing = function (casing, support) {
     this.casingSupports[supportKey] = group;
   }
   group.casings.push(casing);
-  let columns = this.pileColumns[support.floorY] || (this.pileColumns[support.floorY] = {});
+  let layers = this.pileColumns[support.floorY] || (this.pileColumns[support.floorY] = {});
+  let columns = layers[casing.depthLayer] || (layers[casing.depthLayer] = {});
   for (let pixel = casing.x; pixel < casing.x + casing.width; pixel++) {
     columns[pixel] = Math.max(columns[pixel] || 0, support.floorY - casing.y);
   }
 
   let room = this.getCasingRoom(support.room);
   room.settled.push(casing);
-  let batch = room.batches[room.batches.length - 1];
+  let batches = room.depthBatches[casing.depthLayer];
+  let batch = batches[batches.length - 1];
   if (!batch || batch.casings.length >= 128) {
     let graphics = this.game.add.graphics(room.x, room.y);
-    this.casingLayer.addChild(graphics);
+    let depth = this.casingDepths[casing.depthLayer];
+    depth.graphics.addChildAt(graphics, depth.graphics.children.length - 1);
     graphics.autoCull = true;
-    batch = { graphics: graphics, casings: [], dirty: false };
+    batch = { graphics: graphics, casings: [], depthLayer: casing.depthLayer, dirty: false };
+    batches.push(batch);
     room.batches.push(batch);
   }
   this.dirtyCasingBatch(batch);
@@ -428,10 +472,11 @@ PrinceJS.MinigunEffects.prototype.checkCasingFloors = function (dt) {
     delete this.casingSupports[key];
   });
   Object.keys(changedRows).forEach((floorY) => {
-    let columns = (this.pileColumns[floorY] = {});
+    let layers = (this.pileColumns[floorY] = {});
     Object.keys(this.casingRooms).forEach((id) => {
       this.casingRooms[id].settled.forEach((casing) => {
         if (casing.floorY === Number(floorY)) {
+          let columns = layers[casing.depthLayer] || (layers[casing.depthLayer] = {});
           for (let pixel = casing.x; pixel < casing.x + casing.width; pixel++) {
             columns[pixel] = Math.max(columns[pixel] || 0, casing.floorY - casing.y);
           }
@@ -443,8 +488,10 @@ PrinceJS.MinigunEffects.prototype.checkCasingFloors = function (dt) {
 
 PrinceJS.MinigunEffects.prototype.updateCasings = function (dt) {
   this.checkCasingFloors(dt);
+  this.casingDepths.forEach((depth) => depth.moving.clear());
   for (let i = this.activeCasings.length - 1; i >= 0; i--) {
     let casing = this.activeCasings[i];
+    casing.depthProgress = Math.min(1, casing.depthProgress + dt * 4);
     let previousBottom = casing.y + casing.height;
     this.moveCasing(casing, dt);
     casing.y += casing.vy * dt;
@@ -463,8 +510,8 @@ PrinceJS.MinigunEffects.prototype.updateCasings = function (dt) {
         casing.bounces++;
       } else {
         casing.rolling = true;
-        let left = this.casingSurfaceAt(casing.x - 3, casing.width, support.floorY);
-        let right = this.casingSurfaceAt(casing.x + 3, casing.width, support.floorY);
+        let left = this.casingSurfaceAt(casing.x - 3, casing.width, support.floorY, casing.depthLayer);
+        let right = this.casingSurfaceAt(casing.x + 3, casing.width, support.floorY, casing.depthLayer);
         let lower = Math.max(left, right);
         if (lower > support.y + 2 && casing.rollTime < 1.2) {
           let direction = left === right ? (casing.vx < 0 ? -1 : 1) : left > right ? -1 : 1;
@@ -488,7 +535,7 @@ PrinceJS.MinigunEffects.prototype.updateCasings = function (dt) {
       this.activeCasings.splice(i, 1);
       continue;
     }
-    this.drawCasing(this.debris, casing, casing.x, casing.y, true);
+    this.drawCasing(this.casingDepths[casing.depthLayer].moving, casing, casing.x, casing.y, true);
   }
   for (let i = 0; i < this.dirtyCasingBatches.length; i++) {
     let batch = this.dirtyCasingBatches[i];
@@ -593,24 +640,6 @@ PrinceJS.MinigunEffects.prototype.drawGround = function () {
   this.rect(graphics, 0x000000, -11, 8, 30, 2, 0.6);
   this.rect(graphics, 0xdba931, -8, 7, 25, 2, pulse * 0.35);
   this.drawWeapon(graphics, false);
-  let letters = {
-    M: [5, 7, 7, 5, 5],
-    I: [7, 2, 2, 2, 7],
-    N: [5, 7, 7, 7, 5],
-    G: [7, 4, 5, 5, 7],
-    U: [5, 5, 5, 5, 7]
-  };
-  let label = "MINIGUN";
-  this.rect(graphics, 0x111822, -12, -22, 33, 9, 0.85);
-  for (let letter = 0; letter < label.length; letter++) {
-    for (let row = 0; row < 5; row++) {
-      for (let column = 0; column < 3; column++) {
-        if (letters[label[letter]][row] & (4 >> column)) {
-          this.rect(graphics, 0xffd87b, -9 + letter * 4 + column, -20 + row, 1, 1);
-        }
-      }
-    }
-  }
   let glintY = -10 + Math.round(Math.sin(this.elapsed * 3));
   this.rect(graphics, 0xffce47, 2, glintY - 2, 1, 7, pulse);
   this.rect(graphics, 0xffce47, -1, glintY + 1, 7, 1, pulse);
@@ -769,6 +798,7 @@ PrinceJS.MinigunEffects.prototype.destroy = function () {
   this.particles.length = 0;
   this.casings.length = 0;
   this.activeCasings.length = 0;
+  this.casingDepths.length = 0;
   this.casingRooms = {};
   this.pileColumns = {};
   this.casingSupports = {};

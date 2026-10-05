@@ -36,7 +36,7 @@ PrinceJS.RocketLauncher.prototype.advanceBullets = function (delta) {
   });
 };
 
-PrinceJS.RocketLauncher.prototype.impact = function (rocket, directHit) {
+PrinceJS.RocketLauncher.prototype.impact = function (rocket, directHit, obstacle) {
   this.effects.explode(rocket.x, rocket.y);
   this.playExplosionSound();
   for (let enemy of this.delegate.enemies) {
@@ -55,6 +55,25 @@ PrinceJS.RocketLauncher.prototype.impact = function (rocket, directHit) {
       this.hitEnemy(enemy);
     }
   }
+  // Evaluate splash against the intact wall, then leave an opening for the next shot and the Prince.
+  if (obstacle) {
+    this.level.destroyBarrier(obstacle);
+  }
+};
+
+PrinceJS.RocketLauncher.prototype.obstacleAt = function (rocket, room) {
+  let obstacle = PrinceJS.RangedWeapon.prototype.obstacleAt.call(this, rocket, room);
+  if (obstacle) {
+    return obstacle;
+  }
+  let column = Math.floor((rocket.x - room.x * PrinceJS.ROOM_WIDTH) / PrinceJS.BLOCK_WIDTH);
+  let row = Math.floor((rocket.y - room.y * PrinceJS.ROOM_HEIGHT) / PrinceJS.BLOCK_HEIGHT);
+  let tile = this.level.getTileAt(column, row, rocket.room);
+  if (tile.element === PrinceJS.Level.TILE_EXIT_LEFT) {
+    tile = this.level.getTileAt(column + 1, row, rocket.room);
+  }
+  // Exit stairs face the camera, but their closed panels can still be blasted open.
+  return tile.element === PrinceJS.Level.TILE_EXIT_RIGHT && !tile.open ? tile : null;
 };
 
 PrinceJS.RocketLauncher.prototype.blastCanReach = function (rocket, x, y) {

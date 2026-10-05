@@ -95,6 +95,69 @@ PrinceJS.Level.prototype = {
     this.trobs.push(trob);
   },
 
+  destroyBarrier: function (tile) {
+    if (!tile || !this.rooms[tile.room] || this.getTileAt(tile.roomX, tile.roomY, tile.room) !== tile) {
+      return false;
+    }
+    if (tile.element === PrinceJS.Level.TILE_EXIT_LEFT) {
+      tile = this.getTileAt(tile.roomX + 1, tile.roomY, tile.room);
+    }
+    if (tile.element === PrinceJS.Level.TILE_EXIT_RIGHT) {
+      if (!tile.blastOpen || tile.destroyedByRocket) {
+        return false;
+      }
+      tile.blastOpen();
+      this.exitDoorOpen = true;
+      return true;
+    }
+    if (!tile.isBarrier()) {
+      return false;
+    }
+
+    // Keep a solid walking surface inside breached stone walls and beneath gates.
+    // Hanging tapestry tops have no floor, so they leave the existing gap intact.
+    let element =
+      tile.element === PrinceJS.Level.TILE_TAPESTRY_TOP ? PrinceJS.Level.TILE_SPACE : PrinceJS.Level.TILE_DEBRIS;
+    let rubble = new PrinceJS.Tile.Base(this.game, element, 0, tile.type);
+    rubble.destroyedElement = tile.element;
+    let backIndex = this.back.getIndex(tile.back);
+    let frontIndex = this.front.getIndex(tile.front);
+    this.trobs = this.trobs.filter((trob) => trob !== tile);
+    this.activeGates = this.activeGates.filter((gate) => gate !== tile);
+    for (let id of Object.keys(this.maskedTiles)) {
+      if (this.maskedTiles[id] === tile) {
+        delete this.maskedTiles[id];
+      }
+    }
+    if (this.mirror === tile) {
+      this.mirror = null;
+    }
+    if (this.delegate && this.delegate.kid && this.delegate.kid.delegate === tile) {
+      this.delegate.kid.delegate = null;
+    }
+    this.addTile(tile.roomX, tile.roomY, tile.room, rubble);
+    tile.destroy();
+    // Tile artwork overlaps its neighbor; retain the original painter ordering.
+    this.back.setChildIndex(rubble.back, backIndex);
+    this.front.setChildIndex(rubble.front, frontIndex);
+    this.refreshWallAppearance(this.getTileAt(rubble.roomX - 1, rubble.roomY, rubble.room));
+    this.refreshWallAppearance(this.getTileAt(rubble.roomX + 1, rubble.roomY, rubble.room));
+    return true;
+  },
+
+  refreshWallAppearance: function (tile) {
+    if (!tile || tile.element !== PrinceJS.Level.TILE_WALL || !this.rooms[tile.room]) {
+      return;
+    }
+    let leftWall = this.getTileAt(tile.roomX - 1, tile.roomY, tile.room).element === PrinceJS.Level.TILE_WALL;
+    let rightWall = this.getTileAt(tile.roomX + 1, tile.roomY, tile.room).element === PrinceJS.Level.TILE_WALL;
+    if (tile.type === PrinceJS.Level.TYPE_DUNGEON) {
+      let pattern = (leftWall ? "W" : "S") + "W" + (rightWall ? "W" : "S");
+      tile.front.frameName = pattern + "_" + (tile.roomY * 10 + tile.roomX + Number(tile.room));
+    }
+    tile.back.frameName = rightWall ? tile.key + "_" + PrinceJS.Level.TILE_WALL : tile.key + "_wall_" + tile.modifier;
+  },
+
   update: function () {
     let i = this.trobs.length;
 

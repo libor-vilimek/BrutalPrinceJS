@@ -260,7 +260,7 @@ test("action fire preserves potion interactions, and hidden/inactive guards are 
   assert.equal(inactive.health, 3);
 });
 
-test("Ctrl holsters and re-equips an owned minigun, preventing hidden fire and restoring sword access", () => {
+test("Ctrl holsters and re-equips an owned minigun, preventing hidden fire and clearing stale combat stance", () => {
   const f = fixture();
   f.gun.toggleEquipped();
   assert.equal(f.kid.minigunEquipped, undefined);

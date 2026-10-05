@@ -65,6 +65,9 @@ PrinceJS.Tile.ExitDoor.prototype.initCrop = function () {
 };
 
 PrinceJS.Tile.ExitDoor.prototype.raise = function () {
+  if (this.destroyedByRocket) {
+    return;
+  }
   if (this.state === PrinceJS.Tile.ExitDoor.STATE_CLOSED) {
     this.state = PrinceJS.Tile.ExitDoor.STATE_RAISING;
     this.game.sound.play("ExitDoorOpening");
@@ -72,6 +75,9 @@ PrinceJS.Tile.ExitDoor.prototype.raise = function () {
 };
 
 PrinceJS.Tile.ExitDoor.prototype.drop = function () {
+  if (this.destroyedByRocket) {
+    return;
+  }
   if (this.state !== PrinceJS.Tile.ExitDoor.STATE_CLOSED) {
     this.state = PrinceJS.Tile.ExitDoor.STATE_DROPPING;
     this.game.sound.play("EntranceDoorCloses");
@@ -79,7 +85,14 @@ PrinceJS.Tile.ExitDoor.prototype.drop = function () {
 };
 
 PrinceJS.Tile.ExitDoor.prototype.mask = function () {
-  this.tileChildFront.visible = true;
+  this.tileChildFront.visible = !this.destroyedByRocket;
+};
+
+PrinceJS.Tile.ExitDoor.prototype.blastOpen = function () {
+  this.destroyedByRocket = true;
+  this.open = true;
+  this.tileChildBack.visible = false;
+  this.tileChildFront.visible = false;
 };
 
 Object.defineProperty(PrinceJS.Tile.ExitDoor.prototype, "open", {

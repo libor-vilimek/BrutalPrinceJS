@@ -17,8 +17,8 @@
       }
       iframe {
         display: block;
-        width: 960px;
-        height: 600px;
+        width: 800px;
+        height: 520px;
         border: 1px solid #596878;
       }
       pre {
@@ -30,13 +30,14 @@
   <body>
     <p>Development playtest — uses the real game, graphics, controls, and enemy death animations.</p>
     <button id="run">Run combat checks</button>
+    <button id="features">Check hordes and destruction</button>
     <button id="preview">Preview sustained fire</button>
     <button id="rockets">Preview rockets</button>
     <button id="piles">Build a brass pile</button>
     <button id="toggle">Toggle Ctrl / holster</button>
     <button id="stop">Stop firing</button>
     <button id="inspect">Inspect state</button>
-    <iframe id="game" title="PrinceJS playtest" src="../index.html?level=1&width=960"></iframe>
+    <iframe id="game" title="PrinceJS playtest" src="../index.html?level=1&health=3&width=800"></iframe>
     <pre id="results">Loading game…</pre>
     <script src="minigun-browser.js"></script>
   </body>

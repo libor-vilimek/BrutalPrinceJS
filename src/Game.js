@@ -48,8 +48,13 @@ PrinceJS.Game.prototype = {
 
     this.shadow = null;
     this.mouse = null;
-    for (let i = 0; i < json.guards.length; i++) {
-      let data = json.guards[i];
+    let reinforcements = PrinceJS.HordeSpawns.create(this.level, json);
+    let guards = json.guards.concat(reinforcements);
+    this.hordeEnabled = reinforcements.length > 0;
+    this.hordeEngaged = false;
+    this.spawnRoom = json.prince.room;
+    for (let i = 0; i < guards.length; i++) {
+      let data = guards[i];
       let enemy = new PrinceJS.Enemy(
         this.game,
         this.level,
@@ -61,6 +66,10 @@ PrinceJS.Game.prototype = {
         data.type,
         i + 1
       );
+      enemy.reinforcement = data.reinforcement === true;
+      if (enemy.reinforcement) {
+        PrinceJS.HordeSpawns.place(enemy, data.location);
+      }
       if (data.visible === false) {
         enemy.setInvisible();
       }
@@ -71,7 +80,9 @@ PrinceJS.Game.prototype = {
         enemy.setSneakUp(false);
       }
       enemy.onInitLife.add((fighter) => {
-        this.ui.setOpponentLive(fighter);
+        if (!this.hordeEnabled || this.kid.opponent === fighter) {
+          this.ui.setOpponentLive(fighter);
+        }
       }, this);
       this.enemies.push(enemy);
       if (enemy.charName === "shadow") {
@@ -91,9 +102,6 @@ PrinceJS.Game.prototype = {
       direction,
       json.prince.room
     );
-    if (typeof json.prince.sword === "boolean") {
-      this.kid.hasSword = json.prince.sword;
-    }
     if (turn) {
       this.kid.charX += 7;
       PrinceJS.Utils.delayed(() => {
@@ -123,8 +131,12 @@ PrinceJS.Game.prototype = {
     this.input.keyboard.addKey(Phaser.Keyboard.ONE).onDown.add(() => this.selectWeapon("minigun"), this);
     this.input.keyboard.addKey(Phaser.Keyboard.TWO).onDown.add(() => this.selectWeapon("rocketLauncher"), this);
     this.minigun = new PrinceJS.Minigun(this, json.prince.direction * (json.prince.reverse || 1));
-    this.rocketLauncher = new PrinceJS.RocketLauncher(this, -json.prince.direction * (json.prince.reverse || 1));
-    this.weapons = [this.minigun, this.rocketLauncher];
+    this.rocketLauncher = null;
+    this.weapons = [this.minigun];
+    if (PrinceJS.currentLevel >= 2) {
+      this.rocketLauncher = new PrinceJS.RocketLauncher(this, -json.prince.direction * (json.prince.reverse || 1));
+      this.weapons.push(this.rocketLauncher);
+    }
 
     this.world.sort("z");
     this.world.alpha = 1;
@@ -192,6 +204,9 @@ PrinceJS.Game.prototype = {
   updateWorld: function () {
     this.level.update();
     this.kid.updateActor();
+    if (this.hordeEnabled) {
+      this.checkForOpponent(this.currentCameraRoom || this.kid.room);
+    }
     for (let i = 0; i < this.enemies.length; i++) {
       this.enemies[i].updateActor();
     }
@@ -260,7 +275,13 @@ PrinceJS.Game.prototype = {
         if (this.firstUpdate) {
           for (let i = 0; i < this.enemies.length; i++) {
             let enemy = this.enemies[i];
-            if (enemy && enemy.room === 24 && enemy.charBlockX === 0 && enemy.charBlockY === 1) {
+            if (
+              enemy &&
+              !enemy.reinforcement &&
+              enemy.room === 24 &&
+              enemy.charBlockX === 0 &&
+              enemy.charBlockY === 1
+            ) {
               enemy.charX -= 12;
               enemy.updateBlockXY();
             }
@@ -818,6 +839,10 @@ PrinceJS.Game.prototype = {
   },
 
   checkForOpponent: function (room) {
+    if (this.hordeEnabled) {
+      this.checkHordeOpponents(room);
+      return;
+    }
     let currentEnemy;
     // Same Room / Same BlockY
     for (let i = 0; i < this.enemies.length; i++) {
@@ -887,6 +912,56 @@ PrinceJS.Game.prototype = {
         !this.kid.opponentOnSameLevel() ||
         !opponentNextRoom
       ) {
+        this.ui.resetOpponentLive();
+      }
+    }
+  },
+
+  checkHordeOpponents: function (room) {
+    if (this.kid.room !== this.spawnRoom) {
+      this.hordeEngaged = true;
+    }
+    let currentEnemy = null;
+    let bestPriority = Infinity;
+    let bestDistance = Infinity;
+    let kidX = this.kid.baseX + PrinceJS.Utils.convertX(this.kid.charX);
+
+    for (let enemy of this.enemies) {
+      if (!enemy.alive || !enemy.active || !enemy.visible || (enemy.reinforcement && !this.hordeEngaged)) {
+        enemy.opponent = null;
+        continue;
+      }
+      // Every soldier in this room and visible adjoining rooms can react independently.
+      let canReact =
+        this.kid.opponentInSameRoom(enemy, this.kid.room) || this.kid.opponentNearRoom(enemy, this.kid.room, true);
+      enemy.opponent = canReact ? this.kid : null;
+      if (canReact) {
+        enemy.meet = true;
+      }
+
+      let sameRoom = this.kid.opponentInSameRoom(enemy, room);
+      let nearRoom = this.kid.opponentNearRoom(enemy, room);
+      if (!sameRoom && !nearRoom) {
+        continue;
+      }
+      let sameRow = this.kid.charBlockY === enemy.charBlockY;
+      let priority = (sameRow ? 0 : 2) + (sameRoom ? 0 : 1);
+      let distance = Math.abs(enemy.baseX + PrinceJS.Utils.convertX(enemy.charX) - kidX);
+      if (priority < bestPriority || (priority === bestPriority && distance < bestDistance)) {
+        currentEnemy = enemy;
+        bestPriority = priority;
+        bestDistance = distance;
+      }
+    }
+
+    if (this.kid.opponent !== currentEnemy) {
+      this.kid.opponent = currentEnemy;
+      this.kid.flee = false;
+    }
+    if (this.ui) {
+      if (currentEnemy && this.kid.opponentOnSameLevel()) {
+        this.ui.setOpponentLive(currentEnemy);
+      } else {
         this.ui.resetOpponentLive();
       }
     }

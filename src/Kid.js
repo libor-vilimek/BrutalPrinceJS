@@ -41,7 +41,9 @@ PrinceJS.Kid = function (game, level, location, direction, room) {
   this.maxHealth = PrinceJS.maxHealth;
   this.health = PrinceJS.currentHealth || this.maxHealth;
 
-  this.hasSword = PrinceJS.currentLevel > 1;
+  this.hasSword = false;
+  this.charSword = false;
+  this.sword.visible = false;
   this.blockEngarde = false;
   this.bumpTimer = 0;
   this.shadowFlashTimer = 0;
@@ -167,10 +169,15 @@ PrinceJS.Kid.prototype.updateActor = function () {
   this.checkRoomChange();
   this.updateCharPosition();
   this.updateSwordPosition();
-  if (this.minigunEquipped || this.rocketLauncherEquipped) {
-    this.sword.visible = false;
-  }
   this.maskAndCrop();
+};
+
+PrinceJS.Kid.prototype.updateSwordFrame = function () {
+  this.charSword = false;
+};
+
+PrinceJS.Kid.prototype.updateSwordPosition = function () {
+  this.sword.visible = false;
 };
 
 PrinceJS.Kid.prototype.drinkPotion = function () {
@@ -222,11 +229,6 @@ PrinceJS.Kid.prototype.drinkPotion = function () {
 PrinceJS.Kid.prototype.gotSword = function () {
   this.pickupSword = false;
   this.allowCrawl = true;
-  this.action = "pickupsword";
-  PrinceJS.Utils.flashYellowSword(this.game);
-  this.game.sound.play("Victory");
-  this.level.removeObject(this.charBlockX + this.charFace, this.charBlockY, this.room);
-  this.hasSword = true;
 };
 
 PrinceJS.Kid.prototype.updateTimer = function () {
@@ -272,16 +274,6 @@ PrinceJS.Kid.prototype.updateBehaviour = function () {
     case "stand":
       this.blockEngarde = false;
       this.ledgeSwing = 0;
-      if (!this.flee && this.canReachOpponent() && this.facingOpponent() && this.hasSword) {
-        if (this.tryEngarde()) {
-          return;
-        }
-      }
-      if (this.flee && this.keyS() && this.canReachOpponent() && this.facingOpponent() && this.hasSword) {
-        if (this.tryEngarde()) {
-          return;
-        }
-      }
       if (this.keyL() && this.faceR()) {
         return this.turn();
       }
@@ -310,6 +302,10 @@ PrinceJS.Kid.prototype.updateBehaviour = function () {
         return this.jump();
       }
       if (this.keyD()) {
+        // The shadow puzzle still uses Down to surrender and merge, without drawing a sword.
+        if (this.opponentSync && this.opponent && this.opponent.charName === "shadow" && this.opponent.active) {
+          return this.fastsheathe();
+        }
         return this.stoop();
       }
       if (this.keyS()) {
@@ -376,9 +372,6 @@ PrinceJS.Kid.prototype.updateBehaviour = function () {
 
     case "stoop":
       this.charRepeat = false;
-      if (this.pickupSword && this.frameID(109)) {
-        return this.gotSword();
-      }
       if (this.pickupPotion && this.frameID(109)) {
         return this.drinkPotion();
       }
@@ -438,48 +431,6 @@ PrinceJS.Kid.prototype.updateBehaviour = function () {
       }
       break;
 
-    case "engarde":
-      this.charRepeat = false;
-      if (this.keyL() && this.faceL() && this.allowAdvance) {
-        return this.advance();
-      }
-      if (this.keyR() && this.faceR() && this.allowAdvance) {
-        return this.advance();
-      }
-      if (this.keyL() && this.faceR() && this.allowRetreat) {
-        return this.retreat();
-      }
-      if (this.keyR() && this.faceL() && this.allowRetreat) {
-        return this.retreat();
-      }
-      if (this.keyU() && this.allowBlock) {
-        return this.block();
-      }
-      if (this.keyS() && this.allowStrike) {
-        return this.strike();
-      }
-      if (this.keyD()) {
-        return this.fastsheathe();
-      }
-      break;
-
-    case "advance":
-    case "blockedstrike":
-      this.charRepeat = false;
-      if (this.keyU() && this.allowBlock) {
-        return this.block();
-      }
-      break;
-
-    case "retreat":
-    case "strike":
-    case "block":
-      this.charRepeat = false;
-      if (this.keyS() && this.allowStrike) {
-        return this.strike();
-      }
-      break;
-
     case "climbup":
     case "climbdown":
       this.charRepeat = false;
@@ -497,20 +448,22 @@ PrinceJS.Kid.prototype.updateBehaviour = function () {
 };
 
 PrinceJS.Kid.prototype.tryEngarde = function () {
-  if (!this.hasSword || this.minigunEquipped || this.rocketLauncherEquipped) {
-    return false;
-  }
-  if (this.blockEngarde) {
-    return false;
-  }
-  this.dodgeChoppers();
-
-  this.level.recheckCurrentRoom();
-  let engardeDistance = !this.opponent.facingOpponent() && this.opponent.sneakUp ? 35 : 100;
-  if (this.opponent && this.opponent.alive && this.opponentDistance() <= engardeDistance) {
-    return this.engarde();
-  }
   return false;
+};
+
+// The Prince uses ranged weapons only, including while both guns are holstered.
+// Override the shared Fighter entry points so enemies cannot pull him into sword combat.
+PrinceJS.Kid.prototype.engarde = PrinceJS.Kid.prototype.tryEngarde;
+PrinceJS.Kid.prototype.turnengarde = PrinceJS.Kid.prototype.tryEngarde;
+PrinceJS.Kid.prototype.advance = PrinceJS.Kid.prototype.tryEngarde;
+PrinceJS.Kid.prototype.retreat = PrinceJS.Kid.prototype.tryEngarde;
+PrinceJS.Kid.prototype.strike = PrinceJS.Kid.prototype.tryEngarde;
+PrinceJS.Kid.prototype.block = PrinceJS.Kid.prototype.tryEngarde;
+PrinceJS.Kid.prototype.checkFight = PrinceJS.Kid.prototype.tryEngarde;
+
+PrinceJS.Kid.prototype.sheathe = function () {
+  this.swordDrawn = false;
+  this.sword.visible = false;
 };
 
 PrinceJS.Kid.prototype.inFallDistance = function (tile) {
@@ -798,33 +751,12 @@ PrinceJS.Kid.prototype.bumpFall = function () {
 
 PrinceJS.Kid.prototype.fastsheathe = function () {
   this.flee = true;
-  this.action = "fastsheathe";
-  this.swordDrawn = false;
+  this.action = "stand";
+  this.sheathe();
   if (this.opponent !== null) {
     this.opponent.fastsheathe();
     this.opponent.refracTimer = 9;
   }
-};
-
-PrinceJS.Kid.prototype.block = function () {
-  if (this.frameID(158) || this.frameID(165)) {
-    if (this.opponent !== null) {
-      if (this.opponent.frameID(18)) {
-        return;
-      }
-      this.action = "block";
-      if (this.opponent.frameID(3)) {
-        this.processCommand();
-      }
-    }
-  } else {
-    if (!this.frameID(167)) {
-      return;
-    }
-    this.action = "striketoblock";
-  }
-
-  this.allowBlock = false;
 };
 
 PrinceJS.Kid.prototype.prepareCheckFloor = function () {
@@ -895,7 +827,7 @@ PrinceJS.Kid.prototype.checkFloor = function () {
   if (["strike"].includes(this.action)) {
     return;
   }
-  if (this.pickupPotion || this.pickupSword) {
+  if (this.pickupPotion) {
     return;
   }
 
@@ -1083,18 +1015,18 @@ PrinceJS.Kid.prototype.tryPickup = function () {
   let tile = this.level.getTileAt(this.charBlockX, this.charBlockY, this.room);
   let tileF = this.level.getTileAt(this.charBlockX + this.charFace, this.charBlockY, this.room);
 
-  this.pickupSword = tile.element === PrinceJS.Level.TILE_SWORD || tileF.element === PrinceJS.Level.TILE_SWORD;
+  this.pickupSword = false;
   this.pickupPotion = tile.element === PrinceJS.Level.TILE_POTION || tileF.element === PrinceJS.Level.TILE_POTION;
 
-  if (this.pickupPotion || this.pickupSword) {
+  if (this.pickupPotion) {
     if (this.faceR()) {
-      if (tileF.element === PrinceJS.Level.TILE_POTION || tileF.element === PrinceJS.Level.TILE_SWORD) {
+      if (tileF.element === PrinceJS.Level.TILE_POTION) {
         this.charBlockX++;
       }
-      this.charX = PrinceJS.Utils.convertBlockXtoX(this.charBlockX) + 1 * this.pickupPotion;
+      this.charX = PrinceJS.Utils.convertBlockXtoX(this.charBlockX) + 1;
     }
     if (this.faceL()) {
-      if (tile.element === PrinceJS.Level.TILE_POTION || tile.element === PrinceJS.Level.TILE_SWORD) {
+      if (tile.element === PrinceJS.Level.TILE_POTION) {
         this.charBlockX++;
       }
       this.charX = PrinceJS.Utils.convertBlockXtoX(this.charBlockX) - 3;
@@ -1230,18 +1162,7 @@ PrinceJS.Kid.prototype.flashShadowOverlay = function () {
 };
 
 PrinceJS.Kid.prototype.turn = function () {
-  if (!this.hasSword || !this.canReachOpponent(false, true)) {
-    this.action = "turn";
-  } else if (this.hasSword && this.canReachOpponent(false, true) && !this.facingOpponent() && !this.nearBarrier()) {
-    this.action = "turndraw";
-    this.flee = false;
-    if (!this.swordDrawn) {
-      this.game.sound.play("UnsheatheSword");
-    }
-    this.swordDrawn = true;
-  } else {
-    this.action = "turn";
-  }
+  this.action = "turn";
 };
 
 PrinceJS.Kid.prototype.standjump = function () {

@@ -8,9 +8,9 @@ Prince of Persia reimplementation written in HTML5 / JavaScript (MS-DOS version)
 - Keyboard
   - `Cursor keys`: Movement
     - `Left / Right key`: Move Left/Right, Advance/Retreat
-    - `Up key`: Jump, Climb Up, Block Attack
-    - `Down key`: Crouch, Crawl, Climb Down, Sheathe Sword
-  - `SHIFT`: Drink Potion, Grab Edge, Sword Strike
+    - `Up key`: Jump, Climb Up
+    - `Down key`: Crouch, Crawl, Climb Down
+  - `SHIFT`: Drink Potion, Grab Edge, Fire Equipped Weapon
   - `F`: Hold to fire the selected weapon
   - `CTRL`: Hide or equip the selected weapon
   - `1 / 2`: Select the collected minigun / rocket launcher
@@ -21,10 +21,10 @@ Prince of Persia reimplementation written in HTML5 / JavaScript (MS-DOS version)
 - Game Controller
   - `Left / Right Stick, DPad`: Movement
     - `Left / Right`: Move Left/Right, Advance/Retreat
-    - `Up`: Jump, Climb Up, Block Attack
-    - `Down`: Crouch, Crawl, Climb Down, Sheathe Sword
-  - `A / R / ZR Button`: Jump, Climb Up, Block Attack
-  - `B / Y / L / ZL Button`: Drink Potion, Grab Edge, Sword Strike
+    - `Up`: Jump, Climb Up
+    - `Down`: Crouch, Crawl, Climb Down
+  - `A / R / ZR Button`: Jump, Climb Up
+  - `B / Y / L / ZL Button`: Drink Potion, Grab Edge, Fire Equipped Weapon
   - `X`: (1x) Show Remaining Time, (2x) Restart Level
   - `Minus Button`: Previous Level
   - `Plus Button`: Next Level
@@ -32,13 +32,17 @@ Prince of Persia reimplementation written in HTML5 / JavaScript (MS-DOS version)
 
 ## Minigun and Rocket Launcher
 
-A minigun and rocket launcher lie on safe ground beside the starting area of each level. Walk over either to pick it up. On level 1, the minigun is just to the right of the ledge where the Prince lands; the rocket launcher is to the left.
+The Prince starts with 10 health points. Each enemy sword hit removes one point, including when the Prince has no weapon drawn; a surviving hit briefly staggers him before normal movement resumes.
 
-Hold `F` to fire in the direction the Prince faces. Press `1` for the minigun or `2` for the rocket launcher once collected. Press `CTRL` to hide the selected weapon or take it out again; both stay in your inventory, and normal sword combat resumes while they are hidden. `SHIFT`, the touch action area, and controller action buttons also fire while a weapon is equipped; potion pickups and ledge grabs keep their normal controls. Both weapons have unlimited ammunition and can fire while standing, running, or crouching; firing stops during jumps, climbing, and item animations.
+A minigun lies on safe ground beside the starting area of each level. The rocket launcher becomes available from level 2 onward. Walk over a weapon to pick it up. On level 1, the minigun is just to the right of the ledge where the Prince lands.
 
-The minigun fires rapid bullets with a bright yellow muzzle flash, heavy firing audio, and brass casings. Spent casings stay for the entire level, bounce on floors, and stack into growing piles that remain when you leave and revisit rooms. Restarting the level clears its piles and restores the pickups.
+Hold `F` to fire in the direction the Prince faces. Press `1` for the minigun or `2` for the rocket launcher once collected. Press `CTRL` to hide the selected weapon or take it out again; both stay in your inventory. The Prince's sword is disabled, including automatic sword combat near enemies. `SHIFT`, the touch action area, and controller action buttons also fire while a weapon is equipped; potion pickups and ledge grabs keep their normal controls. Both weapons have unlimited ammunition and can fire while standing, running, or crouching; firing stops during jumps, climbing, and item animations.
 
-Rockets leave fiery smoke trails and explode on impact, dealing damage to nearby enemies. Bullets and blasts trigger guards' normal deaths. Walls and closed gates stop shots and shield enemies from explosions; open gates and linked rooms let shots through. Special enemies retain their original rules.
+The minigun fires rapid bullets with a bright yellow muzzle flash, heavy firing audio, and brass casings. Spent casings stay for the entire level, bounce on floors, and stack into growing piles across ten depth layers on the floor. Each layer piles independently, and every pile remains when you leave and revisit rooms. Restarting the level clears its piles and restores the pickups.
+
+Rockets leave fiery smoke trails and explode on impact, dealing damage to nearby enemies. Each rocket can blast a wall or gate into walkable rubble. Exit doors stay open when blasted, preserving the level exit. Openings persist when revisiting rooms. Intact walls shield enemies from the first blast; later shots can pass through the breach. Bullets and blasts trigger guards' normal deaths, and special enemies retain their original rules.
+
+The first two missions have 167 and 189 additional soldiers respectively, spread across every room outside the spawn room. Starting rooms and their approaches leave space to collect the weapons. Nearby soldiers react independently; the enemy health display follows the nearest relevant opponent.
 
 Run `npm test` for weapon collision and inventory tests. Open `http://localhost:8080/tests/minigun-browser.html` after starting the local server for the browser playtest.
 
@@ -57,11 +61,9 @@ Run `npm test` for weapon collision and inventory tests. Open `http://localhost:
   - Dragging can be used to trigger continuous move sequences, e.g.
     - _Run Jump_: Tap Left or Right -> Hold -> Drag in Left or Right corner
     - _Jump Grab_: (Run) Jump -> Hold -> Drag to Center (Shift)
-  - Fight
-    - _Left/Right_: Advance/Retreat
-    - _Shift_: Sword Strike
-    - _Up_: Block Attack
-    - _Down_: Sheathe Sword
+
+- Weapons
+  - _Shift_: Fire the equipped weapon
 
 ## Play on Apple Watch
 
@@ -92,7 +94,7 @@ Run `npm test` for weapon collision and inventory tests. Open `http://localhost:
 Url parameters are leveraged to save game state automatically (shortcut in brackets)
 
 - `level (l)`: Current Level (1-14, default: 1)
-- `health (h)`: Max Health (3-10, default: 3)
+- `health (h)`: Max Health (fixed at 10; older saved values are ignored)
 - `time (t)`: Remaining Minutes (1-60, default: 60)
 - `strength (s)`: Guard Strength in "%" (0-100, default: 100)
 - `width (w)`: Game Width in "px" (default: 0 (fit to screen))
@@ -100,11 +102,11 @@ Url parameters are leveraged to save game state automatically (shortcut in brack
 
 Default url looks as follows:
 
-https://princejs.com?level=1&health=3&time=60&strength=100&width=0
+https://princejs.com?level=1&health=10&time=60&strength=100&width=0
 
 Default shortcut url looks as follows:
 
-https://princejs.com?l=1&h=3&t=60&s=100&w=0&_=true
+https://princejs.com?l=1&h=10&t=60&s=100&w=0&_=true
 
 Manual adjustments of url parameters is possible as preset options.
 

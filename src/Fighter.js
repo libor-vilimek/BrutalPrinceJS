@@ -102,6 +102,9 @@ PrinceJS.Fighter.prototype.CMD_DIE = function (data) {
   this.proceedOnDead();
   if (this.charName !== "kid") {
     PrinceJS.Utils.delayed(() => {
+      if (!this.game) {
+        return;
+      }
       if (this.baseCharName === "jaffar") {
         this.game.sound.play("JaffarDead");
         PrinceJS.Utils.flashWhiteVizierVictory(this.game);
@@ -552,15 +555,18 @@ PrinceJS.Fighter.prototype.stabbed = function () {
   this.charY = PrinceJS.Utils.convertBlockYtoY(this.charBlockY);
 
   if (this.charName !== "skeleton") {
-    if (this.charName === "kid" && !this.swordDrawn) {
-      this.die();
-    } else {
-      this.damageLife();
-    }
+    this.damageLife();
   }
 
   if (this.health === 0) {
     this.action = "stabkill";
+  } else if (this.charName === "kid" && !this.swordDrawn) {
+    // Recover to ordinary movement; the sword recoil animation returns to a combat stance.
+    this.charXVel = this.charYVel = 0;
+    this.inFallDown = this.inJumpUp = false;
+    this.pickupPotion = this.pickupSword = false;
+    this.allowCrawl = true;
+    this.action = "bump";
   } else {
     this.action = "stabbed";
   }

@@ -192,3 +192,10 @@ PrinceJS.Tile.Gate.prototype.setCanMute = function (canMute) {
   this.canMute = canMute;
   this.soundActive = !this.canMute;
 };
+
+PrinceJS.Tile.Gate.prototype.destroy = function () {
+  syncSoundGatesRaise.delete(this);
+  syncSoundGatesDrop.delete(this);
+  this.onFastDrop.dispose();
+  PrinceJS.Tile.Base.prototype.destroy.call(this);
+};

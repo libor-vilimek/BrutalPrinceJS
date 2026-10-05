@@ -355,12 +355,7 @@ PrinceJS.Utils = {
         PrinceJS.currentLevel = queryLevel;
       }
     }
-    if (query.get("health") || query.get("h")) {
-      let queryHealth = parseInt(query.get("health") || query.get("h"), 10);
-      if (!isNaN(queryHealth) && queryHealth >= 3 && queryHealth <= 10) {
-        PrinceJS.maxHealth = queryHealth;
-      }
-    }
+    // Health is fixed at ten in this version; older saved health/h values must not reduce it.
     if (query.get("time") || query.get("t")) {
       let queryTime = parseInt(query.get("time") || query.get("t"), 10);
       if (!isNaN(queryTime) && queryTime >= 1 && queryTime <= 60) {

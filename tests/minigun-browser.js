@@ -69,11 +69,17 @@ async function combatChecks() {
   output.textContent = "";
   try {
     await ready();
-    gameState().restartLevel(true);
-    await pause(1100);
-    testGame.input.reset(false);
-    let state = gameState();
+    let state = await freshLevel(1);
+    // Keep these original weapon scenarios deterministic; the separate horde checks exercise reinforcements.
+    for (const enemy of state.enemies.filter((enemy) => enemy.reinforcement)) {
+      enemy.setInactive();
+      enemy.setInvisible();
+    }
     check(!state.kid.hasMinigun && !state.minigun.pickup.collected, "Fresh spawn has a ground pickup");
+    check(state.kid.health === 10 && state.ui.playerHPActive === 10, "The Prince and HUD start with ten health");
+    check(!state.rocketLauncher && state.weapons.length === 1, "Mission one has no rocket launcher or rocket graphics");
+    state.selectWeapon("rocketLauncher");
+    check(!state.kid.hasRocketLauncher && !state.kid.rocketLauncherEquipped, "Rocket selection cannot unlock it early");
     check(state.minigun.pickup.worldY === state.kid.baseY + state.kid.charY, "Pickup is on the spawn landing floor");
     const keyR = state.kid.keyR;
     state.kid.keyR = () => true;
@@ -132,6 +138,11 @@ async function combatChecks() {
     placeKid(21, 42, 0, 1);
     check(state.minigun.effects.casings.length === shells, "All brass survives room travel");
     check(state.minigun.effects.casingRooms[21].settled.length >= roomShells, "Room piles remain on return");
+    state = await freshLevel(2);
+    for (const enemy of state.enemies.filter((enemy) => enemy.reinforcement)) {
+      enemy.setInactive();
+      enemy.setInvisible();
+    }
     const rocketPickup = state.rocketLauncher.pickup;
     const rocketRoom = state.level.rooms[rocketPickup.room];
     placeKid(rocketPickup.room, ((rocketPickup.worldX - rocketRoom.x * 320) * 140) / 320, 1, 1);
@@ -151,22 +162,21 @@ async function combatChecks() {
           pickup: rocketPickup
         })
     );
-    placeKid(3, 42, 1, 1);
-    const rocketGuard = state.enemies.find((enemy) => enemy.room === 3);
+    placeKid(11, 98, 1, -1);
+    const rocketGuard = state.enemies.find((enemy) => enemy.room === 11 && !enemy.reinforcement);
     check(rocketGuard.alive, "Rocket target starts alive");
     state.weaponFireKey.isDown = true;
     await pause(1500);
     state.weaponFireKey.isDown = false;
     check(!rocketGuard.alive && rocketGuard.health === 0, "A real rocket impact kills the target");
+    await collectWeapon(state.minigun);
     state.selectWeapon("minigun");
     check(
       state.kid.minigunEquipped && !state.kid.rocketLauncherEquipped,
       "Weapon selection draws only the selected weapon"
     );
     const oldGun = state.minigun;
-    state.restartLevel(true);
-    await pause(1100);
-    state = gameState();
+    state = await freshLevel(1);
     check(oldGun.destroyed && oldGun.bullets.length === 0, "Restart cleans up old weapon and projectiles");
     check(!state.kid.hasMinigun && !state.minigun.pickup.collected, "Restart restores the ground pickup");
     report("ALL BROWSER CHECKS PASSED");
@@ -182,7 +192,7 @@ async function combatChecks() {
 
 async function preview() {
   await ready();
-  const state = gameState();
+  const state = gameState().level.number === 1 ? gameState() : await freshLevel(1);
   if (!state.kid.hasMinigun) {
     placeKid(state.minigun.pickup.room, ((state.minigun.pickup.worldX - state.kid.baseX) * 140) / 320, 1, 1);
     await pause(600);
@@ -196,18 +206,192 @@ async function preview() {
   output.textContent = "Sustained fire preview. Ctrl toggles holster; Stop firing releases the trigger.";
 }
 
+async function freshLevel(number) {
+  const state = gameState();
+  // Skip cutscenes with one state transition, so a second reset cannot remove the new world's timer.
+  const reset = state.reset;
+  state.reset = function () {
+    reset.call(this, true);
+  };
+  try {
+    if (state.level.number < number) {
+      state.nextLevel(undefined, true, true);
+    } else if (state.level.number > number) {
+      state.previousLevel(undefined, true);
+    } else {
+      state.restartLevel(true);
+    }
+  } finally {
+    state.reset = reset;
+  }
+  for (let i = 0; i < 60; i++) {
+    await pause(100);
+    if (testGame.state.current === "Game" && gameState().level && gameState().level.number === number) {
+      await pause(900);
+      testGame.input.reset(false);
+      return gameState();
+    }
+  }
+  throw new Error("Mission " + number + " did not load");
+}
+
+async function fireUntil(predicate, description) {
+  const state = gameState();
+  state.weaponFireKey.isDown = true;
+  for (let i = 0; i < 40 && !predicate(); i++) {
+    await pause(50);
+  }
+  state.weaponFireKey.isDown = false;
+  check(predicate(), description);
+}
+
+async function collectWeapon(weapon) {
+  const room = gameState().level.rooms[weapon.pickup.room];
+  const x = ((weapon.pickup.worldX - room.x * 320) * 140) / 320;
+  const row = Math.floor((weapon.pickup.worldY - room.y * 189) / 63);
+  placeKid(weapon.pickup.room, x, row, 1);
+  await pause(650);
+  check(gameState().kid[weapon.spec.owned], "Walking over the " + weapon.spec.id + " equips it");
+}
+
+async function walkUntil(predicate, description) {
+  const kid = gameState().kid;
+  const keyR = kid.keyR;
+  kid.keyR = () => true;
+  try {
+    for (let i = 0; i < 40 && !predicate(); i++) {
+      await pause(50);
+    }
+    check(predicate(), description);
+  } finally {
+    kid.keyR = keyR;
+  }
+  await pause(300);
+}
+
+async function featureChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    await ready();
+    for (const number of [1, 2]) {
+      const state = await freshLevel(number);
+      await pause(1500);
+      const spawnRoom = testGame.cache.getJSON("level").prince.room;
+      check(state.enemies.length >= 100, "Mission " + number + " has " + state.enemies.length + " soldiers");
+      check(
+        state.enemies.filter((enemy) => enemy.reinforcement).every((enemy) => enemy.alive),
+        "Mission " + number + " reinforcements keep safe footing before combat"
+      );
+      check(!state.enemies.some((enemy) => enemy.room === spawnRoom), "Mission " + number + " spawn room is clear");
+      check(!state.kid.hasSword && !state.kid.sword.visible, "Mission " + number + " starts without a sword");
+      check(state.kid.alive && state.minigun.pickup, "Minigun is available safely");
+      check(!!state.rocketLauncher === number >= 2, "Rocket launcher unlocks at mission two");
+      check(state.kid.health === 10 && state.ui.playerHPActive === 10, "Mission starts with ten health points");
+      if (number === 1) {
+        state.kid.stabbed();
+        await pause(500);
+        check(
+          state.kid.health === 9 && state.ui.playerHPActive === 9 && state.kid.alive,
+          "An unarmed stab removes exactly one health point"
+        );
+        check(state.kid.action === "stand" && !state.kid.swordDrawn, "The Prince recovers to ordinary movement");
+      }
+    }
+    const state = gameState();
+    // Keep collision and animation real, but let this controlled fixture survive the crowd.
+    state.kid.damageLife = () => {};
+    placeKid(11, 70, 1, 1);
+    await pause(900);
+    const fighters = state.enemies.filter((enemy) => enemy.room === 11 && enemy.opponent === state.kid);
+    check(fighters.length > 1, "Multiple soldiers in the room simultaneously track the Prince");
+    check(!state.kid.swordDrawn && !state.kid.sword.visible, "Nearby soldiers cannot activate the Prince's sword");
+    state.kid.engarde();
+    state.kid.strike();
+    check(!state.kid.swordDrawn && state.kid.action !== "strike", "Direct sword actions remain disabled");
+
+    // Isolate terrain checks from enemy damage and projectile interception.
+    for (const enemy of state.enemies) {
+      enemy.setInactive();
+      enemy.setInvisible();
+    }
+    await collectWeapon(state.rocketLauncher);
+    state.selectWeapon("rocketLauncher");
+    placeKid(18, 91, 2, 1);
+    check(state.level.getTileAt(8, 2, 18).element === 20, "Wall initially blocks the corridor");
+    await fireUntil(
+      () => state.level.getTileAt(8, 2, 18).element !== 20,
+      "A real rocket turns the wall into an opening"
+    );
+    check(state.level.getTileAt(8, 2, 18).isWalkable(), "Destroyed wall retains a walkable floor");
+    await walkUntil(() => state.kid.charX > 117, "The Prince runs through the destroyed wall");
+    placeKid(11, 70, 1, 1);
+    placeKid(18, 91, 2, 1);
+    check(!state.level.getTileAt(8, 2, 18).isBarrier(), "Wall opening persists after a room change");
+
+    placeKid(13, 49, 1, 1);
+    check(state.level.getTileAt(5, 1, 13).element === 4, "Gate initially exists");
+    state.level.getTileAt(5, 1, 13).drop();
+    await pause(600);
+    await fireUntil(() => state.level.getTileAt(5, 1, 13).element !== 4, "A real rocket destroys the gate");
+    await walkUntil(() => state.kid.charX > 87, "The Prince runs through the destroyed gate");
+
+    const exit = state.level.getTileAt(4, 1, 23);
+    placeKid(23, 28, 1, 1);
+    check(!exit.open, "Level exit starts closed");
+    await fireUntil(() => exit.open, "Rockets open the exit door while retaining the level exit");
+
+    await collectWeapon(state.minigun);
+    state.selectWeapon("minigun");
+    placeKid(11, 70, 1, 1);
+    const effects = state.minigun.effects;
+    const muzzle = effects.getMuzzle();
+    for (let i = 0; i < 300; i++) {
+      effects.shot(muzzle.x, muzzle.y, muzzle.direction);
+      effects.update(1 / 60, false);
+    }
+    for (let i = 0; i < 500; i++) {
+      effects.update(1 / 60, false);
+    }
+    const layers = new Set(effects.casings.map((casing) => casing.depthLayer));
+    check(layers.size === 10, "Spent casings occupy all ten floor-depth layers");
+    check(effects.casings.length >= 900, "The large pile retains every emitted casing");
+    const settled = effects.casings.filter((casing) => casing.settled);
+    check(settled.length >= 850, "Ten-layer casings settle into persistent cached piles");
+    const shellCount = effects.casings.length;
+    const settledCount = effects.casingRooms[11].settled.length;
+    placeKid(18, 70, 2, 1);
+    await pause(200);
+    placeKid(11, 70, 1, 1);
+    check(effects.casings.length === shellCount, "No shells disappear when returning to the room");
+    check(effects.casingRooms[11].settled.length >= settledCount, "Every settled depth layer survives room travel");
+    report("ALL HORDE AND DESTRUCTION CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    if (gameState().weaponFireKey) {
+      gameState().weaponFireKey.isDown = false;
+    }
+    busy = false;
+  }
+}
+
 document.getElementById("run").addEventListener("click", combatChecks);
+document.getElementById("features").addEventListener("click", featureChecks);
 document.getElementById("preview").addEventListener("click", preview);
 document.getElementById("rockets").addEventListener("click", async () => {
   await ready();
-  const state = gameState();
+  const state = await freshLevel(2);
   if (!state.kid.hasRocketLauncher) {
     const pickup = state.rocketLauncher.pickup;
     const room = state.level.rooms[pickup.room];
     placeKid(pickup.room, ((pickup.worldX - room.x * 320) * 140) / 320, 1, 1);
     await pause(600);
   }
-  placeKid(21, 49, 0, 1);
+  placeKid(11, 98, 1, -1);
   state.selectWeapon("rocketLauncher");
   state.weaponFireKey.isDown = true;
   output.textContent = "Rocket preview: smoke trails, impact explosions, and area damage.";
@@ -230,6 +414,25 @@ document.getElementById("inspect").addEventListener("click", () => {
   const state = gameState();
   output.textContent = JSON.stringify(
     {
+      level: state.level.number,
+      soldiers: {
+        total: state.enemies.length,
+        alive: state.enemies.filter((enemy) => enemy.alive).length,
+        tracking: state.enemies.filter((enemy) => enemy.opponent === state.kid).length,
+        fallen: state.enemies
+          .filter((enemy) => !enemy.alive)
+          .map((enemy) => ({
+            id: enemy.id,
+            reinforcement: enemy.reinforcement,
+            room: enemy.room,
+            x: enemy.charX,
+            y: enemy.charY,
+            column: enemy.charBlockX,
+            row: enemy.charBlockY,
+            action: enemy.action,
+            tile: state.level.getTileAt(enemy.charBlockX, enemy.charBlockY, enemy.room).element
+          }))
+      },
       player: {
         x: state.kid.charX,
         y: state.kid.charY,
@@ -241,10 +444,17 @@ document.getElementById("inspect").addEventListener("click", () => {
         fall: state.kid.inFallDown,
         jump: state.kid.inJumpUp
       },
-      launcherPickup: state.rocketLauncher.pickup,
+      health: state.kid.health,
+      maxHealth: state.kid.maxHealth,
+      launcherPickup: state.rocketLauncher && state.rocketLauncher.pickup,
       launcherOwned: state.kid.hasRocketLauncher,
+      launcherEquipped: state.kid.rocketLauncherEquipped,
+      launcherMuzzle: state.rocketLauncher && state.rocketLauncher.effects.getMuzzle(),
+      rocketShots: state.rocketLauncher ? state.rocketLauncher.effects.shots : 0,
       equipped: state.kid.activeWeapon,
       shots: state.minigun.effects.shots,
+      casings: state.minigun.effects.casings.length,
+      depthLayers: new Set(state.minigun.effects.casings.map((casing) => casing.depthLayer)).size,
       audioShots: state.weaponAudio.shots,
       audioState: testGame.sound.context && testGame.sound.context.state,
       audioLocked: testGame.sound.touchLocked,

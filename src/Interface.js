@@ -143,9 +143,8 @@ PrinceJS.Interface.prototype = {
     for (let i = 0; i < this.oppHPs.length; i++) {
       this.oppHPs[i].destroy();
     }
-    this.opp.onDamageLife.removeAll();
-    this.opp.onDead.removeAll();
-    // this.opp.opponent = null;
+    this.opp.onDamageLife.remove(this.damageOpponentLive, this);
+    this.opp.onDead.remove(this.resetOpponentLive, this);
     this.opp = null;
     this.oppHPs = [];
     this.oppHPActive = 0;

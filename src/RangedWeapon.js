@@ -182,10 +182,10 @@ PrinceJS.RangedWeapon.prototype = {
     if (!this.kid.keyS()) {
       return false;
     }
-    // Keep the existing action button available for potions and the original sword pickup.
+    // Keep the existing action button available for potions.
     return ![0, this.kid.charFace].some((offset) => {
       let tile = this.level.getTileAt(this.kid.charBlockX + offset, this.kid.charBlockY, this.kid.room);
-      return [PrinceJS.Level.TILE_POTION, PrinceJS.Level.TILE_SWORD].includes(tile.element);
+      return tile.element === PrinceJS.Level.TILE_POTION;
     });
   },
 
@@ -239,10 +239,11 @@ PrinceJS.RangedWeapon.prototype = {
           return false;
         }
       }
-      if (this.blockedAt(bullet, room)) {
+      let obstacle = this.obstacleAt(bullet, room);
+      if (obstacle) {
         bullet.x = previousX;
         bullet.room = previousRoom;
-        this.impact(bullet);
+        this.impact(bullet, null, obstacle);
         return false;
       }
       for (let enemy of this.delegate.enemies) {
@@ -275,16 +276,20 @@ PrinceJS.RangedWeapon.prototype = {
   },
 
   blockedAt: function (bullet, room) {
+    return !!this.obstacleAt(bullet, room);
+  },
+
+  obstacleAt: function (bullet, room) {
     let localX = bullet.x - room.x * PrinceJS.ROOM_WIDTH;
     let localY = bullet.y - room.y * PrinceJS.ROOM_HEIGHT;
     let row = Math.floor(localY / PrinceJS.BLOCK_HEIGHT);
     let column = Math.floor(localX / PrinceJS.BLOCK_WIDTH);
     if (row < 0 || row > 2) {
-      return true;
+      return this.level.dummyWall;
     }
     let tile = this.level.getTileAt(column, row, bullet.room);
     if (!tile || tile.element === PrinceJS.Level.TILE_WALL) {
-      return true;
+      return tile || this.level.dummyWall;
     }
     // Gate posts sit just beyond their tile. Test the neighboring tile as well.
     for (let x = column - 1; x <= column; x++) {
@@ -301,10 +306,10 @@ PrinceJS.RangedWeapon.prototype = {
       let left = barrierRoom.x * PrinceJS.ROOM_WIDTH + bounds.x;
       let top = barrierRoom.y * PrinceJS.ROOM_HEIGHT + bounds.y + 3;
       if (bullet.x >= left && bullet.x <= left + bounds.width && bullet.y >= top && bullet.y <= top + bounds.height) {
-        return true;
+        return barrier;
       }
     }
-    return false;
+    return null;
   },
 
   hitEnemy: function (enemy) {
