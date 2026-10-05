@@ -11,7 +11,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "start": "http-server",
+    "start": "http-server . -c-1",
     "convert": "node converter/index.js",
     "convert:own:99": "node converter/index.js './converter/98 - Own/level1.xml' 98",
     "convert:own:100": "node converter/index.js './converter/98 - Own/level2.xml' 98",

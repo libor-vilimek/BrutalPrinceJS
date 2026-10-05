@@ -87,7 +87,9 @@ Run `npm test` for weapon collision and inventory tests. Open `http://localhost:
 - Terminal:
   - `npm install`
   - `npm start`
-- Browser: `localhost:8080`
+- Browser: Open the local address printed by `npm start`, usually `http://localhost:8080`. If another server already uses that port, the new server uses the next available port.
+
+The local server serves this checkout directly with browser caching disabled; no build is needed. If the game was opened before this setting changed, restart the server and press `Ctrl+F5` once to clear the previously cached version. The online links above point to the original game, not this local version.
 
 ## Options
 
