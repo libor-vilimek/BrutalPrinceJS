@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Minigun playtest</title>
+    <style>
+      body {
+        margin: 20px;
+        background: #11161d;
+        color: #ffe4a0;
+        font: 15px monospace;
+      }
+      button {
+        margin: 0 8px 12px 0;
+        padding: 9px 14px;
+        cursor: pointer;
+      }
+      iframe {
+        display: block;
+        width: 960px;
+        height: 600px;
+        border: 1px solid #596878;
+      }
+      pre {
+        max-width: 960px;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <p>Development playtest — uses the real game, graphics, controls, and enemy death animations.</p>
+    <button id="run">Run combat checks</button>
+    <button id="preview">Preview sustained fire</button>
+    <button id="rockets">Preview rockets</button>
+    <button id="piles">Build a brass pile</button>
+    <button id="toggle">Toggle Ctrl / holster</button>
+    <button id="stop">Stop firing</button>
+    <button id="inspect">Inspect state</button>
+    <iframe id="game" title="PrinceJS playtest" src="../index.html?level=1&width=960"></iframe>
+    <pre id="results">Loading game…</pre>
+    <script src="minigun-browser.js"></script>
+  </body>
+</html>

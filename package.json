@@ -10,6 +10,7 @@
     "src": "src"
   },
   "scripts": {
+    "test": "node --test",
     "start": "http-server",
     "convert": "node converter/index.js",
     "convert:own:99": "node converter/index.js './converter/98 - Own/level1.xml' 98",

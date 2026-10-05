@@ -25,6 +25,7 @@ PrinceJS.Game.prototype = {
 
   create: function () {
     this.game.sound.stopAll();
+    this.enemies = [];
 
     this.continueTimer = -1;
     this.pressButtonToContinueTimer = -1;
@@ -115,6 +116,16 @@ PrinceJS.Game.prototype = {
     this.currentRoom = json.prince.room;
     this.blockCamera = false;
 
+    this.weaponFireKey = this.input.keyboard.addKey(Phaser.Keyboard.F);
+    this.weaponAudio = new PrinceJS.WeaponAudio(this.game);
+    this.weaponToggleKey = this.input.keyboard.addKey(Phaser.Keyboard.CONTROL);
+    this.weaponToggleKey.onDown.add(this.toggleWeapon, this);
+    this.input.keyboard.addKey(Phaser.Keyboard.ONE).onDown.add(() => this.selectWeapon("minigun"), this);
+    this.input.keyboard.addKey(Phaser.Keyboard.TWO).onDown.add(() => this.selectWeapon("rocketLauncher"), this);
+    this.minigun = new PrinceJS.Minigun(this, json.prince.direction * (json.prince.reverse || 1));
+    this.rocketLauncher = new PrinceJS.RocketLauncher(this, -json.prince.direction * (json.prince.reverse || 1));
+    this.weapons = [this.minigun, this.rocketLauncher];
+
     this.world.sort("z");
     this.world.alpha = 1;
 
@@ -140,6 +151,9 @@ PrinceJS.Game.prototype = {
   },
 
   update: function () {
+    for (let weapon of this.weapons || []) {
+      weapon.update(this.game.time.elapsedMS / 1000);
+    }
     if (PrinceJS.Utils.continueGame(this.game)) {
       this.buttonPressed();
       let pos = PrinceJS.Utils.effectivePointer(this.game);
@@ -188,6 +202,39 @@ PrinceJS.Game.prototype = {
     this.ui.updateUI();
     this.checkTimers();
     this.firstUpdate = false;
+  },
+
+  shutdown: function () {
+    for (let weapon of this.weapons || []) {
+      weapon.destroy();
+    }
+    this.weapons = [];
+    this.minigun = this.rocketLauncher = null;
+    if (this.weaponAudio) {
+      this.weaponAudio.destroy();
+      this.weaponAudio = null;
+    }
+    for (let key of [Phaser.Keyboard.F, Phaser.Keyboard.CONTROL, Phaser.Keyboard.ONE, Phaser.Keyboard.TWO]) {
+      this.input.keyboard.removeKey(key);
+    }
+    this.game.onPause.remove(this.onPause, this);
+    this.game.onResume.remove(this.onResume, this);
+  },
+
+  toggleWeapon: function () {
+    let weapon = (this.weapons || []).find((item) => item.spec.id === this.kid.activeWeapon);
+    if (weapon) {
+      weapon.toggleEquipped();
+    }
+  },
+
+  selectWeapon: function (id) {
+    let weapon = (this.weapons || []).find((item) => item.spec.id === id);
+    if (weapon && this.kid[weapon.spec.owned]) {
+      weapon.equip();
+      this.ui.showText(weapon.spec.label + " READY - CTRL TO HIDE", "weapon");
+      this.ui.hideTextTimer = 40;
+    }
   },
 
   checkLevelLogic: function () {

@@ -11,6 +11,9 @@ Prince of Persia reimplementation written in HTML5 / JavaScript (MS-DOS version)
     - `Up key`: Jump, Climb Up, Block Attack
     - `Down key`: Crouch, Crawl, Climb Down, Sheathe Sword
   - `SHIFT`: Drink Potion, Grab Edge, Sword Strike
+  - `F`: Hold to fire the selected weapon
+  - `CTRL`: Hide or equip the selected weapon
+  - `1 / 2`: Select the collected minigun / rocket launcher
   - `SPACE`: Show Remaining Time
   - `ENTER`: Continue Game
 - Mouse
@@ -26,6 +29,18 @@ Prince of Persia reimplementation written in HTML5 / JavaScript (MS-DOS version)
   - `Minus Button`: Previous Level
   - `Plus Button`: Next Level
   - `Any`: Continue Game
+
+## Minigun and Rocket Launcher
+
+A minigun and rocket launcher lie on safe ground beside the starting area of each level. Walk over either to pick it up. On level 1, the minigun is just to the right of the ledge where the Prince lands; the rocket launcher is to the left.
+
+Hold `F` to fire in the direction the Prince faces. Press `1` for the minigun or `2` for the rocket launcher once collected. Press `CTRL` to hide the selected weapon or take it out again; both stay in your inventory, and normal sword combat resumes while they are hidden. `SHIFT`, the touch action area, and controller action buttons also fire while a weapon is equipped; potion pickups and ledge grabs keep their normal controls. Both weapons have unlimited ammunition and can fire while standing, running, or crouching; firing stops during jumps, climbing, and item animations.
+
+The minigun fires rapid bullets with a bright yellow muzzle flash, heavy firing audio, and brass casings. Spent casings stay for the entire level, bounce on floors, and stack into growing piles that remain when you leave and revisit rooms. Restarting the level clears its piles and restores the pickups.
+
+Rockets leave fiery smoke trails and explode on impact, dealing damage to nearby enemies. Bullets and blasts trigger guards' normal deaths. Walls and closed gates stop shots and shield enemies from explosions; open gates and linked rooms let shots through. Special enemies retain their original rules.
+
+Run `npm test` for weapon collision and inventory tests. Open `http://localhost:8080/tests/minigun-browser.html` after starting the local server for the browser playtest.
 
 ## Play Mobile
 

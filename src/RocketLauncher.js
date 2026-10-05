@@ -1,0 +1,96 @@
+"use strict";
+
+PrinceJS.RocketLauncher = function (delegate, direction) {
+  PrinceJS.RangedWeapon.call(this, delegate, direction, {
+    id: "rocketLauncher",
+    label: "ROCKETS",
+    owned: "hasRocketLauncher",
+    equipped: "rocketLauncherEquipped",
+    effects: PrinceJS.RocketLauncherEffects,
+    pickupRadius: 10,
+    interval: 0.7,
+    speed: 180,
+    lifetime: 3,
+    maxProjectiles: 8
+  });
+};
+
+PrinceJS.RocketLauncher.prototype = Object.create(PrinceJS.RangedWeapon.prototype);
+PrinceJS.RocketLauncher.prototype.constructor = PrinceJS.RocketLauncher;
+
+PrinceJS.RocketLauncher.prototype.updateEffects = function (delta) {
+  this.effects.update(delta, this.bullets);
+};
+
+PrinceJS.RocketLauncher.prototype.drawBullets = function () {};
+
+PrinceJS.RocketLauncher.prototype.advanceBullets = function (delta) {
+  this.bullets = this.bullets.filter((rocket) => {
+    rocket.life -= delta;
+    rocket.age += delta;
+    if (rocket.life <= 0) {
+      this.impact(rocket);
+      return false;
+    }
+    return this.advanceBullet(rocket, this.spec.speed * delta);
+  });
+};
+
+PrinceJS.RocketLauncher.prototype.impact = function (rocket, directHit) {
+  this.effects.explode(rocket.x, rocket.y);
+  this.playExplosionSound();
+  for (let enemy of this.delegate.enemies) {
+    if (!enemy.alive || !enemy.active || !enemy.visible || enemy.charFrame === undefined) {
+      continue;
+    }
+    let bounds = enemy.getCharBounds();
+    let targetX = Math.max(enemy.baseX + bounds.x, Math.min(rocket.x, enemy.baseX + bounds.x + bounds.width));
+    let targetY = Math.max(enemy.baseY + bounds.y, Math.min(rocket.y, enemy.baseY + bounds.y + bounds.height));
+    let distance = Math.hypot(targetX - rocket.x, targetY - rocket.y);
+    if (enemy !== directHit && (distance > 58 || !this.blastCanReach(rocket, targetX, targetY))) {
+      continue;
+    }
+    let damage = enemy === directHit ? 5 : distance < 28 ? 4 : 2;
+    for (let i = 0; i < damage && enemy.alive; i++) {
+      this.hitEnemy(enemy);
+    }
+  }
+};
+
+PrinceJS.RocketLauncher.prototype.blastCanReach = function (rocket, x, y) {
+  let distance = Math.hypot(x - rocket.x, y - rocket.y);
+  let steps = Math.max(1, Math.ceil(distance / 2));
+  for (let i = 1; i <= steps; i++) {
+    let point = { x: rocket.x + ((x - rocket.x) * i) / steps, y: rocket.y + ((y - rocket.y) * i) / steps };
+    let roomId = Object.keys(this.level.rooms).find((id) => {
+      let room = this.level.rooms[id];
+      return (
+        Math.floor(point.x / PrinceJS.ROOM_WIDTH) === room.x && Math.floor(point.y / PrinceJS.ROOM_HEIGHT) === room.y
+      );
+    });
+    point.room = roomId;
+    if (!roomId || this.blockedAt(point, this.level.rooms[roomId])) {
+      return false;
+    }
+    let room = this.level.rooms[roomId];
+    let localY = point.y - room.y * PrinceJS.ROOM_HEIGHT;
+    let row = Math.floor(localY / PrinceJS.BLOCK_HEIGHT);
+    let tile = this.level.getTileAt(
+      Math.floor((point.x - room.x * PrinceJS.ROOM_WIDTH) / PrinceJS.BLOCK_WIDTH),
+      row,
+      roomId
+    );
+    if (localY % PrinceJS.BLOCK_HEIGHT >= 53 && tile.isWalkable()) {
+      return false;
+    }
+  }
+  return true;
+};
+
+PrinceJS.RocketLauncher.prototype.playShotSound = function () {
+  this.game.sound.play("LooseFloorShakes3", 0.7);
+};
+
+PrinceJS.RocketLauncher.prototype.playExplosionSound = function () {
+  this.game.sound.play("LooseFloorLands", 0.9);
+};

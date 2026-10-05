@@ -13,6 +13,12 @@ PrinceJS.Kid = function (game, level, location, direction, room) {
   this.pickupSword = false;
   this.pickupPotion = false;
 
+  this.hasMinigun = false;
+  this.minigunEquipped = false;
+  this.hasRocketLauncher = false;
+  this.rocketLauncherEquipped = false;
+  this.activeWeapon = null;
+
   this.allowCrawl = true;
   this.charRepeat = false;
   this.recoverCrop = false;
@@ -161,6 +167,9 @@ PrinceJS.Kid.prototype.updateActor = function () {
   this.checkRoomChange();
   this.updateCharPosition();
   this.updateSwordPosition();
+  if (this.minigunEquipped || this.rocketLauncherEquipped) {
+    this.sword.visible = false;
+  }
   this.maskAndCrop();
 };
 
@@ -488,7 +497,7 @@ PrinceJS.Kid.prototype.updateBehaviour = function () {
 };
 
 PrinceJS.Kid.prototype.tryEngarde = function () {
-  if (!this.hasSword) {
+  if (!this.hasSword || this.minigunEquipped || this.rocketLauncherEquipped) {
     return false;
   }
   if (this.blockEngarde) {
