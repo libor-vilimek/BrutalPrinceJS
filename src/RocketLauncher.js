@@ -1,7 +1,7 @@
 "use strict";
 
 PrinceJS.RocketLauncher = function (delegate, direction) {
-  PrinceJS.RangedWeapon.call(this, delegate, direction, {
+  PrinceJS.RocketLauncherAction.call(this, delegate, direction, {
     id: "rocketLauncher",
     label: "ROCKETS",
     owned: "hasRocketLauncher",
@@ -9,14 +9,17 @@ PrinceJS.RocketLauncher = function (delegate, direction) {
     effects: PrinceJS.RocketLauncherEffects,
     pickupRadius: 10,
     interval: 0.7,
-    speed: 180,
+    speed: 90,
+    acceleration: 900,
+    maxSpeed: 720,
     // Cover the launch room and the entire next room, even when firing from the far edge.
+    range: 720,
     lifetime: 4,
     maxProjectiles: 8
   });
 };
 
-PrinceJS.RocketLauncher.prototype = Object.create(PrinceJS.RangedWeapon.prototype);
+PrinceJS.RocketLauncher.prototype = Object.create(PrinceJS.RocketLauncherAction.prototype);
 PrinceJS.RocketLauncher.prototype.constructor = PrinceJS.RocketLauncher;
 
 PrinceJS.RocketLauncher.prototype.updateEffects = function (delta) {
@@ -25,16 +28,34 @@ PrinceJS.RocketLauncher.prototype.updateEffects = function (delta) {
 
 PrinceJS.RocketLauncher.prototype.drawBullets = function () {};
 
+PrinceJS.RocketLauncher.prototype.flightDistance = function (age) {
+  let accelerationTime = (this.spec.maxSpeed - this.spec.speed) / this.spec.acceleration;
+  let accelerating = Math.min(age, accelerationTime);
+  return (
+    this.spec.speed * accelerating +
+    0.5 * this.spec.acceleration * accelerating * accelerating +
+    this.spec.maxSpeed * Math.max(0, age - accelerationTime)
+  );
+};
+
 PrinceJS.RocketLauncher.prototype.advanceBullets = function (delta) {
   this.bullets = this.bullets.filter((rocket) => {
     let flightTime = Math.min(delta, Math.max(0, rocket.life));
+    let age = rocket.age || 0;
+    let travelled = rocket.distance || 0;
+    let distance = Math.min(
+      this.spec.range - travelled,
+      this.flightDistance(age + flightTime) - this.flightDistance(age)
+    );
     rocket.life = Math.max(0, rocket.life - delta);
-    rocket.age += flightTime;
+    rocket.age = age + flightTime;
+    rocket.speed = Math.min(this.spec.maxSpeed, this.spec.speed + this.spec.acceleration * rocket.age);
+    rocket.distance = travelled + distance;
     // Sweep the final partial frame too, so a wall at the end of the range is still breached.
-    if (!this.advanceBullet(rocket, this.spec.speed * flightTime)) {
+    if (!this.advanceBullet(rocket, distance)) {
       return false;
     }
-    if (rocket.life === 0) {
+    if (rocket.life === 0 || rocket.distance >= this.spec.range) {
       this.impact(rocket);
       return false;
     }
@@ -58,7 +79,7 @@ PrinceJS.RocketLauncher.prototype.impact = function (rocket, directHit, obstacle
     }
     let damage = enemy === directHit ? 5 : distance < 28 ? 4 : 2;
     for (let i = 0; i < damage && enemy.alive; i++) {
-      this.hitEnemy(enemy);
+      this.hitEnemy(enemy, rocket);
     }
   }
   // Evaluate splash against the intact wall, then leave an opening for the next shot and the Prince.

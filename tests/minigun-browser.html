@@ -4,46 +4,86 @@
     <meta charset="utf-8" />
     <title>Weapons and jetpack playtest</title>
     <style>
+      html {
+        height: 100%;
+        overflow: hidden;
+      }
       body {
-        margin: 20px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        margin: 0;
+        padding: 12px 20px;
+        overflow: hidden;
         background: #11161d;
         color: #ffe4a0;
         font: 15px monospace;
       }
+      p {
+        flex: none;
+        margin: 0 0 12px;
+      }
+      .controls {
+        display: flex;
+        flex: none;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
       button {
-        margin: 0 8px 12px 0;
-        padding: 9px 14px;
+        padding: 7px 10px;
         cursor: pointer;
       }
       iframe {
         display: block;
-        width: 800px;
-        height: 520px;
+        flex: 1;
+        min-height: 0;
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 800px;
+        max-height: 500px;
         border: 1px solid #596878;
       }
       pre {
+        flex: none;
+        max-height: 22vh;
         max-width: 960px;
+        margin: 12px 0 0;
+        overflow: auto;
+        scrollbar-width: none;
         white-space: pre-wrap;
+      }
+      pre::-webkit-scrollbar {
+        display: none;
       }
     </style>
   </head>
   <body>
     <p>Development playtest — uses the real game, graphics, controls, and enemy death animations.</p>
-    <button id="run">Run combat checks</button>
-    <button id="features">Check hordes and destruction</button>
-    <button id="actions">Check new actions</button>
-    <button id="camera">Check scrolling camera</button>
-    <button id="scroll-preview">Preview room scrolling</button>
-    <button id="preview">Preview sustained fire</button>
-    <button id="holster">Preview stowing</button>
-    <button id="molotov">Preview molotov</button>
-    <button id="jetpack">Preview jetpack</button>
-    <button id="rockets">Preview rockets</button>
-    <button id="piles">Build a brass pile</button>
-    <button id="toggle">Hold / release Ctrl</button>
-    <button id="stop">Stop firing</button>
-    <button id="resume">Resume game</button>
-    <button id="inspect">Inspect state</button>
+    <div class="controls">
+      <button id="run">Run combat checks</button>
+      <button id="features">Check hordes and destruction</button>
+      <button id="actions">Check new actions</button>
+      <button id="gore">Check blood and deaths</button>
+      <button id="minigun-deaths">Preview minigun deaths</button>
+      <button id="rocket-deaths">Preview rocket deaths</button>
+      <button id="blood-preview">Preview blood stains</button>
+      <button id="palace-walls">Preview palace masonry</button>
+      <button id="camera">Check scrolling camera</button>
+      <button id="scroll-preview">Preview room scrolling</button>
+      <button id="boundary-preview">Preview map edges and pickup</button>
+      <button id="preview">Preview sustained fire</button>
+      <button id="holster">Preview stowing</button>
+      <button id="molotov">Preview molotov</button>
+      <button id="jetpack">Preview jetpack</button>
+      <button id="rockets">Preview rockets</button>
+      <button id="piles">Build a brass pile</button>
+      <button id="toggle">Hold / release Ctrl</button>
+      <button id="stop">Stop firing</button>
+      <button id="resume">Resume game</button>
+      <button id="inspect">Inspect state</button>
+    </div>
     <iframe id="game" title="PrinceJS playtest" src="../index.html?level=1&health=3&width=800"></iframe>
     <pre id="results">Loading game…</pre>
     <script src="minigun-browser.js"></script>

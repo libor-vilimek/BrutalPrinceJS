@@ -90,6 +90,10 @@ async function combatChecks() {
     check(!state.kid.hasRocketLauncher && !state.kid.rocketLauncherEquipped, "Rocket selection cannot unlock it early");
     check(state.minigun.pickup.worldY === state.kid.baseY + 179, "Minigun is on the lower landing ledge");
     check(
+      state.minigun.pickup.worldX === state.kid.baseX + 240 && state.level.getTileAt(7, 2, 1).element === 1,
+      "Minigun is clearly positioned on solid ground past the falling board"
+    );
+    check(
       state.molotov.pickup.worldY === state.kid.baseY + 116,
       "Only the molotov remains on the upper starting floor"
     );
@@ -180,6 +184,11 @@ async function combatChecks() {
     state.weaponFireKey.isDown = false;
     check(!rocketGuard.alive && rocketGuard.health === 0, "A real rocket impact kills the target");
     await pause(120);
+    check(
+      state.rocketLauncher.actionStage === "holstering" && state.kid.specialAction,
+      "Releasing rockets starts a locked stowing animation"
+    );
+    await pause(260);
     check(!state.rocketLauncher.effects.weapon.visible, "The launcher is hidden after fire is released");
     state.toggleJetpack();
     await pause(350);
@@ -232,6 +241,12 @@ async function preview() {
 
 async function freshLevel(number) {
   const state = gameState();
+  const expected =
+    state.level.number < number
+      ? state.level.number + 1
+      : state.level.number > number
+        ? state.level.number - 1
+        : number;
   // Skip cutscenes with one state transition, so a second reset cannot remove the new world's timer.
   const reset = state.reset;
   state.reset = function () {
@@ -250,9 +265,12 @@ async function freshLevel(number) {
   }
   for (let i = 0; i < 60; i++) {
     await pause(100);
-    if (testGame.state.current === "Game" && gameState().level && gameState().level.number === number) {
+    if (testGame.state.current === "Game" && gameState().level && gameState().level.number === expected) {
       await pause(900);
       testGame.input.reset(false);
+      if (expected !== number) {
+        return freshLevel(number);
+      }
       return gameState();
     }
   }
@@ -288,14 +306,15 @@ async function jumpToFirstMinigun(state) {
     await pause(160);
     kid.keyR = keyR;
     kid.keyU = keyU;
-    for (let i = 0; i < 60 && !kid.hasMinigun && kid.alive; i++) {
+    for (let i = 0; i < 60 && (kid.charBlockY !== 2 || kid.inFallDown || kid.inJumpUp) && kid.alive; i++) {
       await pause(50);
     }
     check(
-      kid.alive && kid.hasMinigun,
-      "The first real jump collects the minigun on landing " +
+      kid.alive && kid.charBlockY === 2 && !kid.hasMinigun,
+      "The first real jump lands below, with the minigun visible farther right " +
         JSON.stringify({ x: kid.charX, y: kid.charY, action: kid.action })
     );
+    await walkUntil(() => kid.hasMinigun, "Running past the falling board collects the minigun on solid ground");
     await pause(600);
   } finally {
     kid.keyR = keyR;
@@ -432,6 +451,201 @@ function quietEnemies(state) {
   for (const enemy of state.enemies) {
     enemy.setInactive();
     enemy.setInvisible();
+  }
+}
+
+function arrangeGoreTargets(state, room, row, positions, health = 1) {
+  const targets = state.enemies
+    .filter((enemy) => enemy.alive && enemy.baseCharName === "guard")
+    .slice(0, positions.length);
+  state.hordeEnabled = false;
+  targets.forEach((enemy, i) => {
+    enemy.room = room;
+    enemy.charX = positions[i];
+    enemy.charY = (row + 1) * 63 - 10;
+    enemy.charXVel = enemy.charYVel = 0;
+    enemy.charBlockX = Math.floor((positions[i] - 7) / 14);
+    enemy.charBlockY = row;
+    enemy.inFallDown = enemy.inJumpUp = false;
+    if (enemy.charFace !== -1) {
+      enemy.changeFace();
+    }
+    enemy.action = "stand";
+    enemy.health = health;
+    enemy.swordDrawn = false;
+    enemy.updateBehaviour = () => {};
+    enemy.fixtureDeathSignals = 0;
+    enemy.onDead.add(() => enemy.fixtureDeathSignals++);
+    enemy.setActive();
+    enemy.updateBase();
+    enemy.processCommand();
+    enemy.updateCharPosition();
+    enemy.updateSwordPosition();
+  });
+  return targets;
+}
+
+async function prepareGore(weapon, positions) {
+  await ready();
+  const state = await freshLevel(weapon === "minigun" ? 1 : 2);
+  quietEnemies(state);
+  state.kid.damageLife = () => {};
+  await collectWeapon(state[weapon]);
+  state.selectWeapon(weapon);
+  const room = weapon === "minigun" ? 2 : 11;
+  placeKid(room, 28, 1, 1);
+  state.enemyDeathEffects.variantOffset = 0;
+  const targets = arrangeGoreTargets(state, room, 1, positions);
+  return { state, targets };
+}
+
+async function shootGoreTargets(state, targets) {
+  state.weaponFireKey.isDown = true;
+  for (let i = 0; i < 100 && targets.some((enemy) => enemy.alive); i++) {
+    await pause(40);
+  }
+  state.weaponFireKey.isDown = false;
+  check(
+    targets.every((enemy) => !enemy.alive),
+    "Real shots kill every staged guard"
+  );
+}
+
+async function goreChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    let { state, targets } = await prepareGore("minigun", [63, 77, 91, 105, 119]);
+    await shootGoreTargets(state, targets);
+    check(
+      new Set(state.enemyDeathEffects.deaths.map((death) => death.variant)).size === 5,
+      "Minigun produces five distinct death animations"
+    );
+    check(
+      state.enemyDeathEffects.parts.some((part) => part.part === "head") &&
+        state.enemyDeathEffects.parts.some((part) => part.part === "arm"),
+      "Severed heads and arms use the native guard sprites"
+    );
+    await pause(3400);
+    check(
+      targets.every((enemy) => enemy.fixtureDeathSignals === 1),
+      "Each original death callback still fires exactly once"
+    );
+    check(
+      targets.every((enemy) => enemy.alpha === 0 && enemy.sword.alpha === 0),
+      "Native bodies and swords do not duplicate custom corpses"
+    );
+    check(
+      state.bloodEffects.stainCount > 25 && state.bloodEffects.decalRooms.size > 0,
+      "Blood impacts leave persistent floor and wall stains"
+    );
+    check(
+      state.bloodEffects.depthCounts.filter((count) => count > 0).length === 10,
+      "Blood settles across all ten floor depth layers"
+    );
+    check(state.bloodEffects.foregroundStainCount > 0, "Nearby foreground masonry catches blood drips");
+    const pieces = state.enemyDeathEffects.parts.map((piece) => ({ piece, x: piece.x, y: piece.y }));
+    check(
+      pieces.every(({ piece }) => piece.settled),
+      "All body pieces settle on actual terrain"
+    );
+    const stains = state.bloodEffects.stainCount;
+    const decalLayers = [...state.bloodEffects.decalRooms.values()];
+    const bloodImages = decalLayers
+      .flatMap((layer) => [layer, ...layer.floorDepths.values()])
+      .map((layer) => ({
+        layer,
+        bitmap: layer.bitmap,
+        sprite: layer.sprite,
+        revision: layer.revision,
+        pixels: layer.bitmap.canvas.toDataURL()
+      }));
+    placeKid(3, 49, 1, 1);
+    await pause(650);
+    placeKid(2, 49, 1, -1);
+    await pause(650);
+    check(
+      state.bloodEffects.stainCount === stains && decalLayers.every((layer) => !layer.sprite.destroyed),
+      "Blood stains remain after leaving and returning to the room"
+    );
+    check(
+      bloodImages.every(
+        ({ layer, bitmap, sprite, revision, pixels }) =>
+          layer.bitmap === bitmap &&
+          layer.sprite === sprite &&
+          layer.revision === revision &&
+          layer.bitmap.canvas.toDataURL() === pixels
+      ),
+      "Every cached blood layer retains identical pixels without repainting"
+    );
+    check(
+      pieces.every(({ piece, x, y }) => piece.x === x && piece.y === y),
+      "Settled body pieces remain in their world positions"
+    );
+    const oldBlood = state.bloodEffects;
+    const oldDeaths = state.enemyDeathEffects;
+    ({ state, targets } = await prepareGore("rocketLauncher", [70, 84, 98]));
+    check(oldBlood.destroyed && oldDeaths.destroyed, "Changing level clears old blood and corpse graphics");
+    await shootGoreTargets(state, targets);
+    check(
+      state.enemyDeathEffects.deaths.length === 3 &&
+        state.enemyDeathEffects.deaths.every((death) => death.parts.length === 6),
+      "Rocket kills propel six anatomical parts per guard"
+    );
+    check(
+      state.enemyDeathEffects.parts.some((part) => Math.abs(part.vx) > 150 || Math.abs(part.spin) > 2),
+      "Explosion pieces fly and spin with visible impulses"
+    );
+    await pause(3400);
+    check(
+      state.bloodEffects.stainCount > 25 && state.enemyDeathEffects.parts.every((part) => part.settled),
+      "Rocket fragments land and retain blood stains on the environment"
+    );
+    check(
+      targets.every((enemy) => enemy.fixtureDeathSignals === 1),
+      "Rocket deaths keep the original callbacks exactly once"
+    );
+    state = await freshLevel(1);
+    check(
+      state.bloodEffects.stainCount === 0 && state.enemyDeathEffects.parts.length === 0,
+      "Restart restores a clean level"
+    );
+    report("ALL BLOOD AND DEATH CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    if (gameState().weaponFireKey) {
+      gameState().weaponFireKey.isDown = false;
+    }
+    busy = false;
+  }
+}
+
+async function deathPreview(weapon, settled = false) {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    const { state, targets } = await prepareGore(weapon, weapon === "minigun" ? [63, 77, 91, 105, 119] : [70, 84, 98]);
+    await shootGoreTargets(state, targets);
+    await pause(settled ? 3500 : weapon === "minigun" ? 250 : 110);
+    testGame.paused = true;
+    report(
+      settled
+        ? "Permanent blood: ten depth layers on the floor, splashes and drips on nearby front masonry. Stains retain identical pixels when revisiting rooms."
+        : weapon === "minigun"
+          ? "Five minigun deaths: flying face hit, torn arm, waist split, spinning head and leg collapse. Resume to see fragments land and stains persist."
+          : "Rocket blast: native heads, torsos, arms and legs tumble through the corridor with blood trails. Resume to see permanent floor and wall stains."
+    );
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    busy = false;
   }
 }
 
@@ -606,15 +820,14 @@ async function actionChecks() {
 function roomFramed(state, id = state.kid.room) {
   const room = state.level.rooms[id];
   const scale = testGame.world.scale.x;
-  const left = testGame.camera.x / scale;
-  const top = testGame.camera.y / scale;
-  const width = testGame.width / scale;
-  const height = (testGame.height - 16) / scale;
+  const epsilon = 0.000001;
+  const left = room.x * 320 * scale - testGame.camera.x;
+  const top = room.y * 189 * scale - testGame.camera.y;
   return (
-    left <= room.x * 320 &&
-    left + width >= (room.x + 1) * 320 &&
-    top <= room.y * 189 &&
-    top + height >= (room.y + 1) * 189
+    left >= -epsilon &&
+    left + 320 * scale <= testGame.width + epsilon &&
+    top >= -epsilon &&
+    top + 189 * scale <= testGame.height - 16 + epsilon
   );
 }
 
@@ -683,7 +896,8 @@ async function cameraChecks() {
     let state = await freshLevel(1);
     quietEnemies(state);
     placeKid(7, 49, 1, 1);
-    check(testGame.world.scale.x === 1.6, "Gameplay is zoomed out by 20 percent");
+    check(testGame.world.scale.x === 1.4, "Gameplay is zoomed out by 30 percent");
+    check(state.roomCamera.paddingX >= 64, "The centered room includes at least two tiles of each side neighbor");
     check(roomFramed(state), "The complete primary room fits above the health display");
     check(
       state.roomCamera.isRoomVisible(17) && state.roomCamera.isRoomVisible(14),
@@ -706,7 +920,15 @@ async function cameraChecks() {
     );
     check(
       right.filter((sample) => sample.room === 2).every((sample) => sample.fullRoom),
-      "The departing room remains fully visible throughout the edge preview"
+      "The departing room remains fully visible throughout the edge preview" +
+        (right.some((sample) => sample.room === 2 && !sample.fullRoom)
+          ? ": " +
+            JSON.stringify({
+              room: state.level.rooms[2].x + "," + state.level.rooms[2].y,
+              sample: right.find((sample) => sample.room === 2 && !sample.fullRoom),
+              scale: testGame.world.scale.x
+            })
+          : "")
     );
     checkHorizontalSamples(right, "Running right through a room boundary");
     controls.right = false;
@@ -764,7 +986,7 @@ async function cameraChecks() {
     quietEnemies(state);
     check(state.roomCamera.room === state.kid.room, "Restart resets the camera to the new starting room");
     check(state.ui.layer.fixedToCamera, "HUD retains Phaser's camera attachment after restart");
-    check(testGame.world.scale.x === 1.6 && roomFramed(state), "Restart preserves zoom and the full starting room");
+    check(testGame.world.scale.x === 1.4 && roomFramed(state), "Restart preserves zoom and the full starting room");
     report("ALL CAMERA CHECKS PASSED");
   } catch (error) {
     report("FAIL: " + error.message);
@@ -797,7 +1019,7 @@ async function cameraPreview() {
     controls = null;
     testGame.paused = true;
     output.textContent =
-      "20% zoom: room 7 fully framed, with room 17 above and room 14 below. The pan finishes even after stopping at the entrance.";
+      "30% zoom: room 7 fully framed, with wider previews of neighboring rooms. The pan finishes even after stopping at the entrance.";
   } catch (error) {
     output.textContent = "FAIL: " + error.message;
   } finally {
@@ -810,9 +1032,33 @@ async function cameraPreview() {
 
 document.getElementById("camera").addEventListener("click", cameraChecks);
 document.getElementById("scroll-preview").addEventListener("click", cameraPreview);
+
+document.getElementById("boundary-preview").addEventListener("click", async () => {
+  await ready();
+  const state = await freshLevel(1);
+  quietEnemies(state);
+  placeKid(1, 35, 1, 1);
+  await watchCamera(state, () => !state.roomCamera.transition);
+  testGame.paused = true;
+  output.textContent =
+    "Areas without room data stay empty. The minigun is on solid ground to the right of the loose board; the molotov remains upstairs.";
+});
 document.getElementById("run").addEventListener("click", combatChecks);
 document.getElementById("features").addEventListener("click", featureChecks);
 document.getElementById("actions").addEventListener("click", actionChecks);
+document.getElementById("gore").addEventListener("click", goreChecks);
+document.getElementById("minigun-deaths").addEventListener("click", () => deathPreview("minigun"));
+document.getElementById("rocket-deaths").addEventListener("click", () => deathPreview("rocketLauncher"));
+document.getElementById("blood-preview").addEventListener("click", () => deathPreview("minigun", true));
+document.getElementById("palace-walls").addEventListener("click", async () => {
+  await ready();
+  const state = await freshLevel(4);
+  quietEnemies(state);
+  await watchCamera(state, () => !state.roomCamera.transition);
+  testGame.paused = true;
+  output.textContent =
+    "Palace masonry: brick colors and mortar courses align between mapped rooms. Unmapped areas stay empty.";
+});
 
 document.getElementById("molotov").addEventListener("click", async () => {
   await ready();
@@ -861,10 +1107,17 @@ document.getElementById("rockets").addEventListener("click", async () => {
     placeKid(pickup.room, ((pickup.worldX - room.x * 320) * 140) / 320, 1, 1);
     await pause(600);
   }
+  quietEnemies(state);
   placeKid(11, 98, 1, -1);
   state.selectWeapon("rocketLauncher");
   state.weaponFireKey.isDown = true;
-  output.textContent = "Rocket preview: smoke trails, impact explosions, and area damage.";
+  for (let i = 0; i < 100 && !state.rocketLauncher.effects.shots; i++) {
+    await pause(10);
+  }
+  await pause(45);
+  testGame.paused = true;
+  output.textContent =
+    "Rocket launcher: quick shoulder draw, both hands on the tube, native hair and small mouth, yellow shot lighting. Rockets accelerate from 90 to 720 px/s in 0.7 seconds.";
 });
 document.getElementById("piles").addEventListener("click", async () => {
   await preview();

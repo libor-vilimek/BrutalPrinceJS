@@ -12,21 +12,36 @@ PrinceJS.RocketLauncherEffects = function (game, kid, pickup) {
   this.recoil = 0;
   this.shots = 0;
   this.destroyed = false;
+  this.actionStage = "hidden";
+  this.drawProgress = 0;
+  this.firing = false;
+  this.originalTint = null;
 
   this.ground = game.add.graphics(0, 0);
   this.light = game.add.graphics(0, 0);
+  this.body = game.add.graphics(0, 0);
+  this.head = game.add.sprite(0, 0, "kid", "kid-15");
+  this.head.anchor.setTo(0, 1);
+  this.head.crop(new Phaser.Rectangle(0, 0, 12, 7));
+  this.head.visible = false;
+  this.bodyCrop = new Phaser.Rectangle(0, 0, 12, 16);
+  this.croppedKid = false;
   this.weapon = game.add.graphics(0, 0);
+  this.hands = game.add.graphics(0, 0);
   this.smoke = game.add.graphics(0, 0);
   this.projectiles = game.add.graphics(0, 0);
   this.debris = game.add.graphics(0, 0);
   this.fire = game.add.graphics(0, 0);
   this.ground.z = 22;
   this.light.z = 23;
-  this.weapon.z = 24;
-  this.smoke.z = 25;
-  this.projectiles.z = 26;
-  this.debris.z = 27;
-  this.fire.z = 28;
+  this.body.z = 24;
+  this.head.z = 25;
+  this.weapon.z = 26;
+  this.hands.z = 27;
+  this.smoke.z = 28;
+  this.projectiles.z = 29;
+  this.debris.z = 30;
+  this.fire.z = 31;
 
   // Only transient fire, smoke, and rocket fragments use these bounded pools.
   this.particles = [];
@@ -43,15 +58,30 @@ PrinceJS.RocketLauncherEffects = function (game, kid, pickup) {
   this.update(0, []);
 };
 
+PrinceJS.RocketLauncherEffects.prototype.setAction = function (stage, progress) {
+  this.actionStage = stage;
+  this.drawProgress = Math.max(0, Math.min(1, progress || 0));
+  if (stage === "hidden" || stage === "holstering") {
+    this.firing = false;
+    this.flashTime = this.recoil = 0;
+    this.restoreTint();
+    if (stage === "hidden") {
+      this.weapon.visible = this.body.visible = this.hands.visible = this.head.visible = false;
+      this.restoreBody();
+    }
+  }
+};
+
 PrinceJS.RocketLauncherEffects.prototype.getPose = function () {
   let kid = this.kid;
   let action = kid.action || "stand";
   let crouched = /stoop|crawl|land|standup/.test(action);
-  let running = /run|step|advance|retreat/.test(action);
-  let bob = running ? Math.round(Math.sin((kid.charFrame || 0) * 1.8)) : 0;
+  let floorY = kid.baseY + kid.charY;
   return {
     x: kid.baseX + PrinceJS.Utils.convertX(kid.charX),
-    y: kid.baseY + kid.charY - (crouched ? 13 : 24) + bob,
+    y: floorY - (crouched ? 13 : 28),
+    floorY: floorY,
+    crouched: crouched,
     direction: kid.charFace === -1 ? -1 : 1,
     visible:
       kid.alive !== false &&
@@ -60,8 +90,8 @@ PrinceJS.RocketLauncherEffects.prototype.getPose = function () {
       kid.exists !== false &&
       kid.hasRocketLauncher !== false &&
       kid.rocketLauncherEquipped === true &&
-      !kid.specialAction &&
-      this.firing === true &&
+      this.actionStage !== "hidden" &&
+      (!kid.specialAction || kid.specialAction.type === "rocketLauncher") &&
       !/hang|climb|drink|pickupsword|rdiveroll|stabkill|dropdead|impale|halve|falldead/.test(action)
   };
 };
@@ -72,7 +102,7 @@ PrinceJS.RocketLauncherEffects.prototype.getMuzzle = function () {
     x: Math.round(pose.x + (18 - Math.round(this.recoil)) * pose.direction),
     y: Math.round(pose.y),
     direction: pose.direction,
-    visible: !this.destroyed && this.collected && this.collectTime === 0 && pose.visible
+    visible: !this.destroyed && this.collected && this.actionStage === "firing" && pose.visible
   };
 };
 
@@ -177,7 +207,170 @@ PrinceJS.RocketLauncherEffects.prototype.explode = function (worldX, worldY) {
   }
 };
 
-PrinceJS.RocketLauncherEffects.prototype.drawWeapon = function (graphics, held) {
+PrinceJS.RocketLauncherEffects.prototype.litColor = function (color, amount) {
+  amount = amount === undefined ? Math.min(1, this.flashTime / 0.07) * 0.65 : amount;
+  let target = 0xffd35d;
+  let red = Math.round(((color >> 16) & 255) * (1 - amount) + ((target >> 16) & 255) * amount);
+  let green = Math.round(((color >> 8) & 255) * (1 - amount) + ((target >> 8) & 255) * amount);
+  let blue = Math.round((color & 255) * (1 - amount) + (target & 255) * amount);
+  return (red << 16) | (green << 8) | blue;
+};
+
+PrinceJS.RocketLauncherEffects.prototype.restoreTint = function () {
+  if (this.originalTint !== null) {
+    this.kid.tint = this.originalTint;
+    this.originalTint = null;
+  }
+  this.head.tint = 0xffffff;
+};
+
+PrinceJS.RocketLauncherEffects.prototype.restoreBody = function () {
+  if (!this.croppedKid) {
+    return;
+  }
+  if (this.kid.cropRect === this.bodyCrop) {
+    this.kid.crop(this.savedCrop);
+  }
+  if (this.croppedShadow && this.croppedShadow.cropRect === this.bodyCrop) {
+    this.croppedShadow.crop(this.savedShadowCrop);
+  }
+  this.croppedKid = false;
+  this.croppedShadow = null;
+  this.savedCrop = this.savedShadowCrop = null;
+};
+
+PrinceJS.RocketLauncherEffects.prototype.cropBody = function (pose) {
+  let copyCrop = (crop) => (crop ? new Phaser.Rectangle(crop.x, crop.y, crop.width, crop.height) : null);
+  if (!this.croppedKid) {
+    this.savedCrop = copyCrop(this.kid.cropRect);
+    this.croppedKid = true;
+  }
+  let height = pose.crouched ? 19 : 41;
+  let legs = pose.crouched ? 5 : 16;
+  this.bodyCrop.y = height - legs;
+  this.bodyCrop.width = pose.crouched ? 20 : 12;
+  this.bodyCrop.height = legs;
+  this.kid.crop(this.bodyCrop);
+  if (this.kid.shadowOverlay && this.kid.shadowOverlay.visible) {
+    if (this.croppedShadow !== this.kid.shadowOverlay) {
+      this.croppedShadow = this.kid.shadowOverlay;
+      this.savedShadowCrop = copyCrop(this.croppedShadow.cropRect);
+    }
+    this.croppedShadow.crop(this.bodyCrop);
+  }
+};
+
+PrinceJS.RocketLauncherEffects.prototype.updatePrinceLight = function (pose) {
+  if (!pose.visible || this.flashTime <= 0) {
+    this.restoreTint();
+    return;
+  }
+  if (this.originalTint === null) {
+    this.originalTint = typeof this.kid.tint === "number" ? this.kid.tint : 0xffffff;
+  }
+  this.kid.tint = this.litColor(this.originalTint);
+  this.head.tint = this.kid.tint;
+};
+
+PrinceJS.RocketLauncherEffects.prototype.drawLimb = function (graphics, from, to, color, width) {
+  let steps = Math.max(Math.abs(to[0] - from[0]), Math.abs(to[1] - from[1]), 1);
+  for (let i = 0; i <= steps; i++) {
+    let progress = i / steps;
+    this.rect(
+      graphics,
+      color,
+      from[0] + (to[0] - from[0]) * progress - Math.floor(width / 2),
+      from[1] + (to[1] - from[1]) * progress - Math.floor(width / 2),
+      width,
+      width
+    );
+  }
+};
+
+PrinceJS.RocketLauncherEffects.prototype.getWeaponTransform = function () {
+  let moving = this.actionStage === "drawing" || this.actionStage === "holstering";
+  let draw = moving ? Math.max(0, Math.min(1, (this.drawProgress - 0.26) / 0.74)) : 1;
+  let ease = 1 - Math.pow(1 - draw, 2);
+  return { x: -14 * (1 - ease), y: -10 * (1 - ease), angle: moving && draw < 1 ? -1.15 * (1 - ease) : 0 };
+};
+
+PrinceJS.RocketLauncherEffects.prototype.drawPrince = function (pose) {
+  let body = this.body;
+  let hands = this.hands;
+  body.clear();
+  hands.clear();
+  body.visible = hands.visible = this.head.visible = this.collected && pose.visible;
+  if (!body.visible) {
+    this.restoreBody();
+    return;
+  }
+  this.cropBody(pose);
+  let recoil = this.actionStage === "firing" ? Math.round(this.recoil) : 0;
+  body.x = hands.x = Math.round(pose.x - recoil * pose.direction);
+  body.y = hands.y = Math.round(pose.floorY);
+  body.scale.x = hands.scale.x = pose.direction;
+
+  let progress = this.actionStage === "firing" ? 1 : this.drawProgress;
+  let reaching = progress < 0.26;
+  let headY = pose.crouched ? -19 : -41;
+  let shoulderY = pose.crouched ? -12 : -31;
+  let waistY = pose.crouched ? -5 : -19;
+  let twist = reaching ? -Math.round(Math.sin((progress / 0.26) * Math.PI) * 2) : 0;
+  let sleeve = this.litColor(0xffffdd);
+  let sleeveShade = this.litColor(0xddbbaa);
+  let skin = this.litColor(0xdd8866);
+  let skinShade = this.litColor(0xbb7766);
+
+  this.rect(body, sleeveShade, -11 + twist, shoulderY, 9, waistY - shoulderY + 1);
+  this.rect(body, sleeve, -9 + twist, shoulderY, 8, waistY - shoulderY);
+  this.rect(body, sleeve, -6 + twist, shoulderY + 1, 4, waistY - shoulderY - 1);
+  this.rect(body, sleeveShade, -10, waistY, 9, 2);
+  this.rect(body, skinShade, -7 + twist, headY + 7, 3, 3);
+  this.rect(body, skin, -6 + twist, headY + 7, 2, 3);
+  // Keep the original ochre hair and small face at the exact atlas dimensions.
+  this.head.x = Math.round(body.x + twist * pose.direction);
+  this.head.y = body.y + headY + 7;
+  this.head.scale.x = -pose.direction;
+  if (this.actionStage === "firing") {
+    this.rect(hands, this.litColor(0xffffdd), -5, headY + 5, 2, 1);
+  }
+
+  let transform = this.getWeaponTransform();
+  let grip = (x, y) => [
+    transform.x + Math.cos(transform.angle) * x - Math.sin(transform.angle) * y,
+    pose.y - pose.floorY + transform.y + Math.sin(transform.angle) * x + Math.cos(transform.angle) * y
+  ];
+  let reach = Math.min(1, progress / 0.16);
+  let relaxedHand = [-4, waistY + 2];
+  let backHand = [-14 + twist, waistY - 4];
+  let triggerHand = grip(-1, 7);
+  let nearHand = reaching
+    ? [relaxedHand[0] + (backHand[0] - relaxedHand[0]) * reach, relaxedHand[1] + (backHand[1] - relaxedHand[1]) * reach]
+    : triggerHand;
+  let pickupBlend = Math.max(0, Math.min(1, (progress - 0.16) / 0.1));
+  if (reaching) {
+    nearHand[0] += (triggerHand[0] - nearHand[0]) * pickupBlend;
+    nearHand[1] += (triggerHand[1] - nearHand[1]) * pickupBlend;
+  }
+  let nearElbow = reaching ? [-7 - 8 * reach + twist, waistY - 3] : [-12, shoulderY + 8];
+  nearElbow[0] += (-12 - nearElbow[0]) * pickupBlend;
+  nearElbow[1] += (shoulderY + 8 - nearElbow[1]) * pickupBlend;
+  this.drawLimb(body, [-8 + twist, shoulderY + 2], nearElbow, sleeveShade, 4);
+  this.drawLimb(body, nearElbow, nearHand, sleeve, 3);
+  this.rect(hands, skinShade, nearHand[0] - 1, nearHand[1] - 1, 4, 4);
+  this.rect(hands, skin, nearHand[0] - 1, nearHand[1] - 1, 3, 3);
+
+  let support = Math.max(0, Math.min(1, (progress - 0.52) / 0.48));
+  let frontGrip = grip(7, 6);
+  let supportHand = [-3 + (frontGrip[0] + 3) * support, waistY + (frontGrip[1] - waistY) * support];
+  let supportElbow = [-4 + 7 * support, waistY + support];
+  this.drawLimb(body, [-3 + twist, shoulderY + 3], supportElbow, sleeveShade, 3);
+  this.drawLimb(body, supportElbow, supportHand, sleeve, 3);
+  this.rect(hands, skinShade, supportHand[0] - 1, supportHand[1] - 1, 4, 4);
+  this.rect(hands, skin, supportHand[0] - 1, supportHand[1] - 1, 3, 3);
+};
+
+PrinceJS.RocketLauncherEffects.prototype.drawWeapon = function (graphics) {
   let rect = (color, x, y, width, height) => this.rect(graphics, color, x, y, width, height);
 
   // A compact olive tube, flared steel ends, red warhead collar, and flip-up sight.
@@ -210,18 +403,6 @@ PrinceJS.RocketLauncherEffects.prototype.drawWeapon = function (graphics, held) 
   rect(0x19262a, 5, 4, 4, 3);
   rect(0xd5bd60, 1, -1, 3, 1);
   rect(0x1b2d2b, 1, 1, 4, 1);
-
-  if (held) {
-    // Sleeves and small hands join the existing Prince sprite to the two grips.
-    rect(0xc4c29a, -11, 3, 5, 4);
-    rect(0xf2edc4, -10, 3, 3, 3);
-    rect(0xf3efc8, -8, 6, 7, 2);
-    rect(0xffca95, -2, 4, 3, 4);
-    rect(0xd9936d, -2, 7, 3, 1);
-    rect(0xe4ddb3, 1, 8, 7, 2);
-    rect(0xffcd97, 6, 4, 3, 4);
-    rect(0xda9568, 8, 5, 1, 3);
-  }
 };
 
 PrinceJS.RocketLauncherEffects.prototype.drawGround = function () {
@@ -236,7 +417,7 @@ PrinceJS.RocketLauncherEffects.prototype.drawGround = function () {
   let pulse = 0.72 + Math.sin(this.elapsed * 3) * 0.18;
   this.rect(graphics, 0x000000, -15, 9, 35, 2, 0.58);
   this.rect(graphics, 0xe2993b, -13, 8, 30, 2, pulse * 0.3);
-  this.drawWeapon(graphics, false);
+  this.drawWeapon(graphics);
 
   let glintY = -9 + Math.round(Math.sin(this.elapsed * 3.3));
   this.rect(graphics, 0xffbb50, 10, glintY - 2, 1, 5, pulse);
@@ -447,23 +628,20 @@ PrinceJS.RocketLauncherEffects.prototype.update = function (deltaSeconds, rocket
   this.drawGround();
 
   let pose = this.getPose();
-  this.weapon.clear();
-  this.weapon.visible = this.collected && pose.visible;
-  if (this.weapon.visible) {
-    let x = pose.x - Math.round(this.recoil) * pose.direction;
-    let y = pose.y;
-    if (this.collectTime > 0) {
-      let progress = 1 - this.collectTime / 0.42;
-      let ease = 1 - Math.pow(1 - progress, 3);
-      x = this.pickup.worldX + (x - this.pickup.worldX) * ease;
-      y = this.pickup.worldY - 9 + (y - this.pickup.worldY + 9) * ease - Math.sin(progress * Math.PI) * 14;
-    }
-    this.weapon.x = Math.round(x);
-    this.weapon.y = Math.round(y);
-    this.weapon.scale.x = pose.direction;
-    this.drawWeapon(this.weapon, this.collectTime < 0.12);
-  } else {
+  if (!pose.visible) {
     this.flashTime = this.recoil = 0;
+  }
+  this.updatePrinceLight(pose);
+  this.drawPrince(pose);
+  this.weapon.clear();
+  this.weapon.visible = this.collected && pose.visible && (this.actionStage === "firing" || this.drawProgress >= 0.26);
+  if (this.weapon.visible) {
+    let transform = this.getWeaponTransform();
+    this.weapon.x = Math.round(pose.x + (transform.x - Math.round(this.recoil)) * pose.direction);
+    this.weapon.y = Math.round(pose.y + transform.y);
+    this.weapon.scale.x = pose.direction;
+    this.weapon.rotation = transform.angle * pose.direction;
+    this.drawWeapon(this.weapon);
   }
 
   this.updateRockets(dt, Array.isArray(rockets) ? rockets : []);
@@ -476,10 +654,21 @@ PrinceJS.RocketLauncherEffects.prototype.destroy = function () {
   if (this.destroyed) {
     return;
   }
+  this.restoreTint();
+  this.restoreBody();
   this.destroyed = true;
-  [this.ground, this.light, this.weapon, this.smoke, this.projectiles, this.debris, this.fire].forEach((graphics) =>
-    graphics.destroy()
-  );
+  [
+    this.ground,
+    this.light,
+    this.body,
+    this.head,
+    this.weapon,
+    this.hands,
+    this.smoke,
+    this.projectiles,
+    this.debris,
+    this.fire
+  ].forEach((graphics) => graphics.destroy());
   this.particles.length = 0;
   this.blasts.length = 0;
   this.trails = Object.create(null);

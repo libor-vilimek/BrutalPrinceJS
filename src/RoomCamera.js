@@ -27,7 +27,7 @@ PrinceJS.RoomCamera = function (delegate) {
   this.transitionDuration = 0.45;
 };
 
-PrinceJS.RoomCamera.ZOOM = 0.8;
+PrinceJS.RoomCamera.ZOOM = 0.7;
 
 PrinceJS.RoomCamera.prototype = {
   setRoom: function (id) {

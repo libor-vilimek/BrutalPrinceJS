@@ -73,6 +73,7 @@ function fixture() {
     "tiles/Gate",
     "tiles/ExitDoor",
     "RangedWeapon",
+    "RocketLauncherAction",
     "RocketLauncher"
   ]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "src", file + ".js"), "utf8"), context);
@@ -282,13 +283,73 @@ test("rockets cannot enter a geometrically neighboring room without its level li
 test("a rocket sweeps its final partial frame and breaches the wall before its fuse expires", () => {
   const f = fixture();
   f.setTile(1, 2, 1, f.PrinceJS.Level.TILE_WALL);
-  const rocket = f.rocket(60);
+  const rocket = f.rocket(62);
   rocket.life = 0.025;
   f.launcher.bullets.push(rocket);
   f.launcher.advanceBullets(0.05);
   assert.equal(f.launcher.bullets.length, 0);
   assert.equal(f.level.getTileAt(2, 1, 1).isSafeWalkable(), true);
   assert.equal(rocket.age, 0.025);
+  assert.equal(f.launcher.effects.impacts, 1);
+});
+
+test("rockets visibly accelerate from a slow launch to eight times their initial speed", () => {
+  const f = fixture();
+  const rocket = f.rocket();
+  const distances = [];
+  f.launcher.advanceBullet = (projectile, distance) => {
+    distances.push(distance);
+    projectile.x += distance * projectile.direction;
+    return true;
+  };
+  f.launcher.bullets.push(rocket);
+  for (let i = 0; i < 7; i++) {
+    f.launcher.advanceBullets(0.1);
+  }
+  assert.ok(Math.abs(distances[0] - 13.5) < 1e-8);
+  assert.ok(distances[6] > distances[0] * 4.9);
+  assert.ok(Math.abs(rocket.speed - 720) < 1e-8);
+  f.launcher.advanceBullets(0.1);
+  assert.ok(Math.abs(distances[7] - 72) < 1e-8);
+  assert.equal(rocket.speed, 720);
+});
+
+test("acceleration is frame independent, including a frame crossing the maximum speed", () => {
+  for (const direction of [-1, 1]) {
+    const positions = [];
+    for (const steps of [[1], Array(20).fill(0.05), [0.65, 0.35]]) {
+      const f = fixture();
+      const rocket = f.rocket(60, direction);
+      f.launcher.advanceBullet = (projectile, distance) => {
+        projectile.x += distance * projectile.direction;
+        return true;
+      };
+      f.launcher.bullets.push(rocket);
+      for (const delta of steps) {
+        f.launcher.advanceBullets(delta);
+      }
+      positions.push(rocket.x);
+    }
+    for (const position of positions) {
+      assert.ok(Math.abs(position - (60 + direction * 499.5)) < 1e-8);
+    }
+  }
+});
+
+test("accelerating rockets sweep their entire final range and detonate once at 720 pixels", () => {
+  const f = fixture();
+  const rocket = f.rocket();
+  f.launcher.advanceBullet = (projectile, distance) => {
+    projectile.x += distance;
+    return true;
+  };
+  f.launcher.bullets.push(rocket);
+  f.launcher.advanceBullets(2);
+  assert.equal(rocket.x, 780);
+  assert.equal(rocket.distance, 720);
+  assert.equal(f.launcher.bullets.length, 0);
+  assert.equal(f.launcher.effects.impacts, 1);
+  f.launcher.advanceBullets(1);
   assert.equal(f.launcher.effects.impacts, 1);
 });
 

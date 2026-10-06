@@ -1,48 +1,24 @@
 "use strict";
 
-PrinceJS.Minigun = function (delegate, direction) {
-  PrinceJS.RangedWeapon.call(this, delegate, direction, {
-    id: "minigun",
-    label: "MINIGUN",
-    owned: "hasMinigun",
-    equipped: "minigunEquipped",
-    effects: PrinceJS.MinigunEffects,
-    pickupRadius: 18,
-    interval: 0.065,
-    speed: 640,
-    lifetime: 1.25,
-    maxProjectiles: 32
-  });
+// The launcher keeps the Prince planted while he draws, aims, and stows the tube.
+PrinceJS.RocketLauncherAction = function (delegate, direction, spec) {
+  PrinceJS.RangedWeapon.call(this, delegate, direction, spec);
   this.actionStage = "hidden";
   this.drawElapsed = 0;
-  this.drawDuration = 0.44;
+  this.drawDuration = 0.46;
   this.holsterElapsed = 0;
-  this.holsterDuration = 0.32;
+  this.holsterDuration = 0.34;
   this.holsterStartProgress = 1;
   this.stanceAction = "stand";
 };
 
-PrinceJS.Minigun.prototype = Object.create(PrinceJS.RangedWeapon.prototype);
-PrinceJS.Minigun.prototype.constructor = PrinceJS.Minigun;
+PrinceJS.RocketLauncherAction.prototype = Object.create(PrinceJS.RangedWeapon.prototype);
+PrinceJS.RocketLauncherAction.prototype.constructor = PrinceJS.RocketLauncherAction;
 
-PrinceJS.Minigun.prototype.findPickup = function (direction) {
-  let pickup = PrinceJS.RangedWeapon.prototype.findPickup.call(this, direction);
-  if (this.level.number === 1 && this.kid.room === 1) {
-    let tile = this.level.getTileAt(7, 2, this.kid.room);
-    if (tile.isSafeWalkable() && !tile.isBarrier()) {
-      let room = this.level.rooms[this.kid.room];
-      // Keep the weapon visible on solid ground beyond the loose landing board.
-      pickup.worldX = room.x * PrinceJS.ROOM_WIDTH + 7 * PrinceJS.BLOCK_WIDTH + 16;
-      pickup.worldY = room.y * PrinceJS.ROOM_HEIGHT + PrinceJS.Utils.convertBlockYtoY(2) + 3;
-    }
-  }
-  return pickup;
-};
-
-PrinceJS.Minigun.prototype.beginDraw = function () {
+PrinceJS.RocketLauncherAction.prototype.beginDraw = function () {
   this.stanceAction = /stoop|crawl/.test(this.kid.action) ? "stoop" : "stand";
   this.kid.action = this.stanceAction;
-  if (!this.kid.beginSpecialAction(this, "minigun")) {
+  if (!this.kid.beginSpecialAction(this, "rocketLauncher")) {
     return false;
   }
   this.kid.actionCode = this.stanceAction === "stoop" ? 1 : 0;
@@ -53,24 +29,21 @@ PrinceJS.Minigun.prototype.beginDraw = function () {
   return true;
 };
 
-PrinceJS.Minigun.prototype.cancelAction = function () {
+PrinceJS.RocketLauncherAction.prototype.cancelAction = function () {
   PrinceJS.RangedWeapon.prototype.cancelAction.call(this);
-  let owned = this.kid.specialAction && this.kid.specialAction.owner === this;
-  if (owned) {
-    // Never replace a hit, fall, or death sequence when an action is interrupted.
+  if (this.kid.specialAction && this.kid.specialAction.owner === this) {
+    // An injury, fall, or death still owns its original animation after interruption.
     if (this.kid.alive && this.kid.action === this.stanceAction) {
       this.kid.setSpecialActionFrame(this.stanceAction === "stoop" ? 109 : 15);
     }
     this.kid.endSpecialAction(this);
   }
   this.actionStage = "hidden";
-  this.drawElapsed = 0;
-  this.holsterElapsed = 0;
-  this.cooldown = 0;
+  this.drawElapsed = this.holsterElapsed = this.cooldown = 0;
   this.effects.setAction("hidden", 0);
 };
 
-PrinceJS.Minigun.prototype.beginHolster = function () {
+PrinceJS.RocketLauncherAction.prototype.beginHolster = function () {
   this.holsterStartProgress = Math.min(1, this.drawElapsed / this.drawDuration);
   this.holsterElapsed = 0;
   this.actionStage = "holstering";
@@ -78,7 +51,7 @@ PrinceJS.Minigun.prototype.beginHolster = function () {
   this.effects.setAction(this.actionStage, this.holsterStartProgress);
 };
 
-PrinceJS.Minigun.prototype.update = function (delta) {
+PrinceJS.RocketLauncherAction.prototype.update = function (delta) {
   if (this.destroyed) {
     return;
   }
@@ -108,7 +81,7 @@ PrinceJS.Minigun.prototype.update = function (delta) {
   }
   let progress = Math.min(1, this.drawElapsed / this.drawDuration);
   if (this.actionStage === "holstering") {
-    // Reverse only the portion actually drawn if the trigger was released early.
+    // A brief tap reverses the reached pose instead of playing a full stow sequence.
     let duration = this.holsterDuration * Math.max(0.2, this.holsterStartProgress);
     this.holsterElapsed += delta;
     progress = this.holsterStartProgress * Math.max(0, 1 - this.holsterElapsed / duration);
@@ -120,6 +93,7 @@ PrinceJS.Minigun.prototype.update = function (delta) {
   this.effects.setAction(this.actionStage, progress);
   this.firing = this.actionStage === "firing";
   this.effects.firing = this.firing;
+  // Rockets already in flight keep moving through drawing and stowing.
   this.advanceBullets(delta);
   if (this.firing && this.cooldown === 0) {
     let muzzle = this.effects.getMuzzle();
@@ -132,8 +106,6 @@ PrinceJS.Minigun.prototype.update = function (delta) {
   this.drawBullets();
 };
 
-PrinceJS.Minigun.prototype.playShotSound = function () {
-  if (this.delegate.weaponAudio) {
-    this.delegate.weaponAudio.minigunShot();
-  }
+PrinceJS.RocketLauncherAction.prototype.updateEffects = function (delta) {
+  this.effects.update(delta, this.bullets);
 };

@@ -153,7 +153,7 @@ PrinceJS.Level.prototype = {
     let rightWall = this.getTileAt(tile.roomX + 1, tile.roomY, tile.room).element === PrinceJS.Level.TILE_WALL;
     if (tile.type === PrinceJS.Level.TYPE_DUNGEON) {
       let pattern = (leftWall ? "W" : "S") + "W" + (rightWall ? "W" : "S");
-      tile.front.frameName = pattern + "_" + (tile.roomY * 10 + tile.roomX + Number(tile.room));
+      tile.front.frameName = pattern + "_" + (tile.wallSeed || tile.roomY * 10 + tile.roomX + Number(tile.room));
     }
     tile.back.frameName = rightWall ? tile.key + "_" + PrinceJS.Level.TILE_WALL : tile.key + "_wall_" + tile.modifier;
   },

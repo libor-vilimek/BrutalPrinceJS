@@ -84,16 +84,20 @@ function cameraY(f, row) {
   return Math.round((row * 189 - f.camera.paddingY) * f.camera.scale);
 }
 
+function cameraX(f, id) {
+  return Math.round((f.rooms[id].x * 320 - f.camera.paddingX) * f.camera.scale);
+}
+
 test("opening view aligns with a room and middle-screen movement leaves the camera still", () => {
   const f = fixture();
   f.position(480, 2);
   f.scene.setupCamera(2);
-  assert.equal(f.scene.game.camera.x, 448);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 2));
   assert.equal(f.scene.game.camera.y, cameraY(f, 0));
   for (const x of [420, 480, 540]) {
     f.position(x);
     f.advance(0.5);
-    assert.equal(f.camera.x, 280);
+    assert.equal(f.camera.x, 320 - f.camera.paddingX);
     assert.equal(containsRoom(f, 2), true);
   }
 });
@@ -103,7 +107,7 @@ test("approaching the right edge pans before crossing it and reveals the adjoini
   f.scene.setupCamera(1);
   f.position(290);
   f.scene.updateCamera(1 / 60);
-  assert.ok(f.camera.x > -40 && f.camera.x < -15);
+  assert.ok(f.camera.x > -f.camera.paddingX && f.camera.x < -f.camera.paddingX * 0.375);
   assert.equal(f.scene.game.camera.y, cameraY(f, 0));
   assert.deepEqual(Array.from(f.camera.visibleRooms()), [1, 2, 4, 5]);
   assert.equal(containsRoom(f, 1), true);
@@ -119,7 +123,7 @@ test("approaching the left edge pans left smoothly before a room change", () => 
   f.position(350, 2, -1);
   f.scene.setupCamera(2);
   f.scene.updateCamera(1 / 60);
-  assert.ok(f.camera.x < 280 && f.camera.x > 255);
+  assert.ok(f.camera.x < 320 - f.camera.paddingX && f.camera.x > 320 - f.camera.paddingX * 1.625);
   assert.equal(containsRoom(f, 2), true);
   assert.ok(f.camera.isRoomVisible(1));
 });
@@ -160,11 +164,11 @@ test("travel across multiple rooms and back never resets the horizontal camera",
     }
   };
   walk(160, 890, 1);
-  assert.ok(f.camera.x > 580);
+  assert.ok(f.camera.x > 640 - f.camera.paddingX - 20);
   f.advance(1);
   walk(890, 40, -1);
   f.advance(1);
-  assert.equal(f.scene.game.camera.x, -64);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 1));
 });
 
 test("camera limits follow connected rooms rather than the full map or rooms beyond a hole", () => {
@@ -173,18 +177,18 @@ test("camera limits follow connected rooms rather than the full map or rooms bey
   f.position(1500, 3);
   f.camera.setRoom(3);
   f.advance(2);
-  assert.equal(f.scene.game.camera.x, 960);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 3));
   assert.equal(containsRoom(f, 3), true);
   assert.equal(f.camera.isRoomVisible(6), false);
   f.position(-100, 1);
   f.camera.setRoom(1);
   f.advance(2);
-  assert.equal(f.scene.game.camera.x, -64);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 1));
   f.position(1450, 6);
   f.scene.changeRoom(6);
-  assert.equal(f.scene.game.camera.x, 1984);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 6));
   f.advance(1);
-  assert.equal(f.scene.game.camera.x, 1984);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 6));
   assert.equal(containsRoom(f, 6), true);
   assert.deepEqual(Array.from(f.camera.visibleRooms()), [6]);
 });
@@ -194,16 +198,16 @@ test("vertical room transitions cut immediately both down and up", () => {
   f.scene.setupCamera(1);
   f.position(310);
   f.advance(0.3);
-  assert.ok(f.camera.x > -40);
+  assert.ok(f.camera.x > -f.camera.paddingX);
   f.position(310, 4);
   f.scene.changeRoom(4);
-  assert.equal(f.scene.game.camera.x, -64);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 1));
   assert.equal(f.scene.game.camera.y, cameraY(f, 1));
   f.scene.updateCamera(1 / 60);
   assert.equal(f.scene.game.camera.y, cameraY(f, 1));
   f.position(310, 1);
   f.scene.changeRoom(1);
-  assert.equal(f.scene.game.camera.x, -64);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 1));
   assert.equal(f.scene.game.camera.y, cameraY(f, 0));
 });
 
@@ -213,16 +217,16 @@ test("a map opening camera override is honored before normal room travel resumes
   assert.equal(f.scene.game.camera.y, cameraY(f, 1));
   f.advance(0.5);
   assert.equal(f.scene.game.camera.y, cameraY(f, 1));
-  assert.equal(f.scene.game.camera.x, -64);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 1));
   f.position(160, 4);
   f.scene.changeRoom(4);
   assert.equal(f.scene.currentRoom, 4);
   assert.equal(f.scene.currentCameraRoom, 4);
   f.position(490, 5);
   f.scene.changeRoom(5, 0);
-  assert.equal(f.scene.game.camera.x, -64);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 1));
   f.advance(0.2);
-  assert.ok(f.scene.game.camera.x > -64);
+  assert.ok(f.scene.game.camera.x > cameraX(f, 1));
 });
 
 test("damping is independent of rendering frame rate", () => {
@@ -241,10 +245,10 @@ test("subpixel accumulation finishes slow camera movement despite Phaser's integ
   f.scene.setupCamera(1);
   f.position(241);
   f.scene.updateCamera(1 / 120);
-  assert.equal(f.scene.game.camera.x, -64);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 1));
   f.advance(1, 120);
-  assert.equal(f.scene.game.camera.x, -63);
-  assert.ok(f.camera.x > -39.501);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 1) + 1);
+  assert.ok(f.camera.x > -f.camera.paddingX + 0.5);
 });
 
 test("pause-sized deltas cannot jump the camera and camera locks freeze it", () => {
@@ -252,9 +256,9 @@ test("pause-sized deltas cannot jump the camera and camera locks freeze it", () 
   f.scene.setupCamera(1);
   f.position(300);
   f.scene.updateCamera(0);
-  assert.equal(f.camera.x, -40);
+  assert.equal(f.camera.x, -f.camera.paddingX);
   f.scene.updateCamera(10);
-  assert.ok(f.camera.x > -40 && f.camera.x < -25);
+  assert.ok(f.camera.x > -f.camera.paddingX && f.camera.x < -f.camera.paddingX * 0.625);
   const before = f.camera.x;
   f.scene.blockCamera = true;
   f.advance(1);
@@ -272,7 +276,7 @@ test("invalid room signals retain the normal out-of-map death behavior", () => {
   f.scene.setupCamera(1);
   f.scene.changeRoom(-1);
   assert.equal(f.scene.outside, true);
-  assert.equal(f.scene.game.camera.x, -64);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 1));
 });
 
 test("misaligned or cyclic links cannot make the camera reveal a disconnected map segment", () => {
@@ -281,7 +285,7 @@ test("misaligned or cyclic links cannot make the camera reveal a disconnected ma
   f.rooms[1].links.left = 3;
   f.scene.setupCamera(1);
   assert.deepEqual(Array.from(f.camera.rooms), [1, 2, 3]);
-  assert.equal(f.camera.maxX, 600);
+  assert.equal(f.camera.maxX, 640 - f.camera.paddingX);
 });
 
 test("gate audio follows every partly visible room and is muted again when it leaves the view", () => {
@@ -336,13 +340,27 @@ test("zoom frames the complete primary room with actual rooms visible above and 
   const f = fixture();
   f.position(480, 5);
   f.scene.setupCamera(5);
-  assert.equal(f.scene.game.world.scale.x, 1.6);
-  assert.equal(f.scene.game.world.scale.y, 1.6);
-  assert.equal(f.camera.viewWidth, 400);
-  assert.equal(f.camera.viewHeight, 240);
+  assert.equal(f.scene.game.world.scale.x, 1.4);
+  assert.equal(f.scene.game.world.scale.y, 1.4);
+  assert.ok(f.camera.viewWidth > 457 && f.camera.viewWidth < 458);
+  assert.ok(f.camera.viewHeight > 274 && f.camera.viewHeight < 275);
   assert.equal(containsRoom(f, 5), true);
   assert.equal(f.camera.isRoomVisible(2), true);
   assert.equal(f.camera.isRoomVisible(7), true);
+});
+
+test("wider zoom reveals two columns of the next room at rest and four before entering", () => {
+  const f = fixture();
+  f.position(480, 2);
+  f.scene.setupCamera(2);
+  const visibleNextRoomWidth = () => f.scene.game.camera.x / f.camera.scale + f.camera.viewWidth - 640;
+  assert.ok(visibleNextRoomWidth() >= 64);
+  f.position(639, 2);
+  f.advance(1);
+  assert.ok(visibleNextRoomWidth() >= 128);
+  assert.equal(f.scene.kid.room, 2);
+  assert.equal(f.camera.room, 2);
+  assert.equal(containsRoom(f, 2), true);
 });
 
 test("side previews never crop the primary room, even when the Prince stops at either exit", () => {
@@ -367,14 +385,14 @@ test("entering the next room completes its full frame even when the Prince stops
   f.scene.changeRoom(2, 0);
   assert.equal(f.scene.game.camera.x, before);
   f.advance(0.6);
-  assert.equal(f.scene.game.camera.x, 448);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 2));
   assert.equal(containsRoom(f, 2), true);
   f.advance(1);
-  assert.equal(f.scene.game.camera.x, 448);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 2));
   f.position(310, 1, -1);
   f.scene.changeRoom(1, 0);
   f.advance(0.6);
-  assert.equal(f.scene.game.camera.x, -64);
+  assert.equal(f.scene.game.camera.x, cameraX(f, 1));
   assert.equal(containsRoom(f, 1), true);
 });
 
@@ -403,7 +421,7 @@ test("leaving gameplay restores the original zoom and camera bounds for menus an
   assert.equal(f.scene.game.world.scale.y, 2);
   assert.equal(f.scene.game.camera.bounds, bounds);
   const nextCamera = new f.PrinceJS.RoomCamera(f.scene);
-  assert.equal(f.scene.game.world.scale.x, 1.6);
+  assert.equal(f.scene.game.world.scale.x, 1.4);
   nextCamera.destroy();
   assert.equal(f.scene.game.world.scale.x, 2);
   assert.equal(f.scene.game.camera.bounds, bounds);

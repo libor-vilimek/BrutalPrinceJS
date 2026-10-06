@@ -11,9 +11,6 @@ PrinceJS.LevelBuilder = function (game, delegate) {
   this.layout = [];
 
   this.wallColor = ["#D8A858", "#E0A45C", "#E0A860", "#D8A054", "#E0A45C", "#D8A458", "#E0A858", "#D8A860"];
-  this.wallPattern = [];
-
-  this.seed;
 
   this.level;
 };
@@ -42,10 +39,6 @@ PrinceJS.LevelBuilder.prototype = {
         this.layout[y][x] = id;
 
         if (id !== -1) {
-          if (this.type === PrinceJS.Level.TYPE_PALACE) {
-            this.generateWallPattern(id);
-          }
-
           this.level.rooms[id] = {};
           this.level.rooms[id].x = x;
           this.level.rooms[id].y = y;
@@ -101,51 +94,64 @@ PrinceJS.LevelBuilder.prototype = {
     }
   },
 
+  buildWall: function (x, y, id, modifier) {
+    let tile = new PrinceJS.Tile.Base(this.game, PrinceJS.Level.TILE_WALL, modifier, this.type);
+    let room = this.level.rooms[id];
+    let column = room.x * 10 + x;
+    let row = room.y * 3 + y;
+    // Atlas families 1..53 vary the stone chips without resetting at room
+    // boundaries. The same world cell always receives the same artwork.
+    let tileSeed = 1 + ((((row * this.width * 10 + column) % 53) + 53) % 53);
+    tile.wallSeed = tileSeed;
+    let wallType = this.getWorldTileAt(column - 1, row) === PrinceJS.Level.TILE_WALL ? "W" : "S";
+    wallType += "W";
+    wallType += this.getWorldTileAt(column + 1, row) === PrinceJS.Level.TILE_WALL ? "W" : "S";
+
+    if (this.type === PrinceJS.Level.TYPE_DUNGEON) {
+      tile.front.frameName = wallType + "_" + tileSeed;
+    } else {
+      let bmd = this.game.make.bitmapData(60, 79);
+      bmd.rect(0, 16, 32, 20, this.wallColor[this.wallColorIndex(column, row, 0)]);
+      bmd.rect(0, 36, 16, 21, this.wallColor[this.wallColorIndex(column, row, 1)]);
+      bmd.rect(16, 36, 16, 21, this.wallColor[this.wallColorIndex(column + 1, row, 1)]);
+      bmd.rect(0, 57, 8, 22, this.wallColor[this.wallColorIndex(column, row, 2)]);
+      bmd.rect(8, 57, 24, 22, this.wallColor[this.wallColorIndex(column + 1, row, 2)]);
+      bmd.add(tile.front);
+      tile.front.addChild(this.game.make.sprite(0, 16, tile.key, "W_" + tileSeed));
+    }
+
+    if (wallType.charAt(2) === "S") {
+      tile.back.frameName = tile.key + "_wall_" + modifier;
+    }
+    return tile;
+  },
+
+  getWorldTileAt: function (column, row) {
+    let roomX = Math.floor(column / 10);
+    let roomY = Math.floor(row / 3);
+    let id = this.getRoomId(roomX, roomY);
+    if (id <= 0) {
+      return PrinceJS.Level.TILE_WALL;
+    }
+    return this.level.rooms[id].tiles[(row - roomY * 3) * 10 + column - roomX * 10].element;
+  },
+
+  wallColorIndex: function (column, row, course) {
+    let brickRow = row * 3 + course;
+    let seed = Math.imul(column + 1, 7919) ^ Math.imul(brickRow + 1, 104729);
+    seed = Math.imul(seed ^ (seed >>> 13), 1274126177);
+    seed ^= seed >>> 16;
+    return (brickRow % 2 === 0 ? 4 : 0) + ((seed >>> 0) % 4);
+  },
+
   buildTile: function (x, y, id, startId, startLocation) {
     let tileNumber = y * 10 + x;
     let t = this.level.rooms[id].tiles[tileNumber];
 
-    let tile, tileChild, tileSeed, wallType, open;
+    let tile, tileChild, open;
     switch (t.element) {
       case PrinceJS.Level.TILE_WALL:
-        tile = new PrinceJS.Tile.Base(this.game, t.element, t.modifier, this.type);
-
-        tileSeed = tileNumber + id;
-
-        if (this.getTileAt(x - 1, y, id) === PrinceJS.Level.TILE_WALL) {
-          wallType = "W";
-        } else {
-          wallType = "S";
-        }
-
-        wallType += "W";
-
-        if (this.getTileAt(x + 1, y, id) === PrinceJS.Level.TILE_WALL) {
-          wallType += "W";
-        } else {
-          wallType += "S";
-        }
-
-        if (this.type === PrinceJS.Level.TYPE_DUNGEON) {
-          tile.front.frameName = wallType + "_" + tileSeed;
-        } else {
-          let bmd = this.game.make.bitmapData(60, 79);
-
-          bmd.rect(0, 16, 32, 20, this.wallColor[this.wallPattern[id][y * 44 + x]]);
-          bmd.rect(0, 36, 16, 21, this.wallColor[this.wallPattern[id][y * 44 + 11 + x]]);
-          bmd.rect(16, 36, 16, 21, this.wallColor[this.wallPattern[id][y * 44 + 11 + x + 1]]);
-          bmd.rect(0, 57, 8, 19, this.wallColor[this.wallPattern[id][y * 44 + 2 * 11 + x]]);
-          bmd.rect(8, 57, 24, 19, this.wallColor[this.wallPattern[id][y * 44 + 2 * 11 + x + 1]]);
-          bmd.rect(0, 76, 32, 3, this.wallColor[this.wallPattern[id][y * 44 + 3 * 11 + x]]);
-          bmd.add(tile.front);
-
-          tileChild = this.game.make.sprite(0, 16, tile.key, "W_" + tileSeed);
-          tile.front.addChild(tileChild);
-        }
-
-        if (wallType.charAt(2) === "S") {
-          tile.back.frameName = tile.key + "_wall_" + t.modifier;
-        }
+        tile = this.buildWall(x, y, id, t.modifier);
         break;
 
       case PrinceJS.Level.TILE_SPACE:
@@ -325,36 +331,6 @@ PrinceJS.LevelBuilder.prototype = {
     }
 
     return this.layout[y][x];
-  },
-
-  generateWallPattern: function (room) {
-    this.wallPattern[room] = [];
-    this.seed = room;
-
-    this.prandom(1);
-
-    let color;
-
-    for (let row = 0; row < 3; row++) {
-      for (let subrow = 0; subrow < 4; subrow++) {
-        let colorBase = subrow % 2 ? 0 : 4;
-        let prevColor = -1;
-
-        for (let col = 0; col <= 10; ++col) {
-          do {
-            color = colorBase + this.prandom(3);
-          } while (color === prevColor);
-
-          this.wallPattern[room][44 * row + 11 * subrow + col] = color;
-          prevColor = color;
-        }
-      }
-    }
-  },
-
-  prandom: function (max) {
-    this.seed = ((this.seed * 214013 + 2531011) & 0xffffffff) >>> 0;
-    return (this.seed >>> 16) % (max + 1);
   }
 };
 

@@ -27,7 +27,9 @@ function fixture() {
     "tiles/Gate",
     "RangedWeapon",
     "Minigun",
-    "RocketLauncher"
+    "RocketLauncherAction",
+    "RocketLauncher",
+    "Game"
   ]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "src", file + ".js"), "utf8"), context);
   }
@@ -143,7 +145,7 @@ function fixture() {
   return { PrinceJS, game, kid, level, delegate, gun, key, enemy, bullet, setTile };
 }
 
-test("level 1 minigun waits on the lower landing and cannot be collected from the upper starting floor", () => {
+test("level 1 minigun waits on solid ground past the loose landing and cannot be collected upstairs or in midair", () => {
   const f = fixture();
   const map = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/maps/level1.json"), "utf8"));
   map.room
@@ -152,10 +154,11 @@ test("level 1 minigun waits on the lower landing and cannot be collected from th
   f.kid.charBlockY = 0;
   f.level.number = 1;
   const pickup = f.gun.findPickup(1);
-  assert.equal(pickup.worldX, 168);
+  assert.equal(pickup.worldX, 240);
   assert.equal(pickup.worldY, 182);
+  assert.equal(f.level.getTileAt(7, 2, 1).element, f.PrinceJS.Level.TILE_FLOOR);
   f.gun.pickup = pickup;
-  f.kid.charX = 74;
+  f.kid.charX = 105;
   f.kid.charY = 53;
   f.gun.checkPickup();
   assert.equal(pickup.collected, false);
@@ -462,6 +465,114 @@ test("rockets explode on impact and kill a directly hit guard", () => {
   assert.equal(launcher.effects.impacts, 1);
   assert.equal(guard.health, 0);
   assert.equal(guard.alive, false);
+});
+
+test("each damaging minigun hit emits world-space blood and only the lethal hit starts a custom death", () => {
+  const f = fixture();
+  const guard = f.enemy(410, 2);
+  const hits = [];
+  const deaths = [];
+  f.delegate.bloodEffects = { hit: (enemy, impact) => hits.push({ health: enemy.health, ...impact }) };
+  f.delegate.enemyDeathEffects = { kill: (enemy, impact) => deaths.push({ health: enemy.health, ...impact }) };
+  const bullet = { x: 418, y: 95, room: 2, direction: -1 };
+  for (let i = 0; i < 3; i++) {
+    f.gun.impact(bullet, guard);
+  }
+  assert.deepEqual(
+    hits.map((hit) => hit.health),
+    [2, 1, 0]
+  );
+  assert.equal(deaths.length, 1);
+  assert.equal(guard.damage, 3, "the original health signals still account for all damage exactly once");
+  assert.equal(guard.alive, false);
+  assert.equal(guard.action, "dropdead", "the original death commands retain their story callbacks");
+  for (const hit of [...hits, ...deaths]) {
+    assert.equal(hit.x, 418);
+    assert.equal(hit.y, 95);
+    assert.equal(hit.room, 2);
+    assert.equal(hit.direction, -1);
+    assert.equal(hit.weapon, "minigun");
+  }
+  f.gun.impact(bullet, guard);
+  assert.equal(hits.length, 3);
+  assert.equal(deaths.length, 1);
+});
+
+test("invulnerable and skeleton hits create neither persistent blood nor custom corpses", () => {
+  const f = fixture();
+  let hits = 0;
+  let deaths = 0;
+  f.delegate.bloodEffects = { hit: () => hits++ };
+  f.delegate.enemyDeathEffects = { kill: () => deaths++ };
+  for (const name of ["skeleton", "guard-1"]) {
+    const guard = f.enemy(130);
+    guard.charName = name;
+    if (name !== "skeleton") {
+      guard.damageLife = () => {};
+    }
+    f.gun.impact({ x: 132, y: 95, room: 1, direction: 1 }, guard);
+    assert.equal(guard.health, 3);
+    assert.equal(guard.alive, true);
+  }
+  assert.equal(hits, 0);
+  assert.equal(deaths, 0);
+});
+
+test("rocket kills pass the original explosion origin to flying body parts without duplicating native damage", () => {
+  const f = fixture();
+  const launcher = new f.PrinceJS.RocketLauncher(f.delegate, -1);
+  const guard = f.enemy(130);
+  const hits = [];
+  const deaths = [];
+  f.delegate.bloodEffects = { hit: (enemy, impact) => hits.push({ health: enemy.health, ...impact }) };
+  f.delegate.enemyDeathEffects = { kill: (enemy, impact) => deaths.push({ health: enemy.health, ...impact }) };
+  launcher.impact({ x: 121, y: 95, room: 1, direction: 1 }, guard);
+  assert.equal(guard.alive, false);
+  assert.equal(guard.damage, 3);
+  assert.equal(hits.length, 3);
+  assert.equal(deaths.length, 1);
+  assert.deepEqual(deaths[0], { health: 0, x: 121, y: 95, room: 1, direction: 1, weapon: "rocketLauncher" });
+});
+
+test("game frames advance death physics and blood after weapons, and shutdown disposes them once", () => {
+  const f = fixture();
+  const calls = [];
+  f.PrinceJS.Utils.continueGame = () => false;
+  const effects = (name) => ({
+    update: (delta) => calls.push([name, delta]),
+    destroy: () => calls.push([name, "destroy"])
+  });
+  const state = {
+    game: {
+      time: { elapsedMS: 16 },
+      onPause: { remove() {} },
+      onResume: { remove() {} }
+    },
+    weapons: [effects("weapon")],
+    enemyDeathEffects: effects("deaths"),
+    bloodEffects: effects("blood"),
+    updateCamera: (delta) => calls.push(["camera", delta]),
+    input: { keyboard: { removeKey() {} } }
+  };
+  f.PrinceJS.Game.prototype.update.call(state);
+  assert.deepEqual(calls, [
+    ["weapon", 0.016],
+    ["deaths", 0.016],
+    ["blood", 0.016],
+    ["camera", 0.016]
+  ]);
+  calls.length = 0;
+  f.PrinceJS.Game.prototype.shutdown.call(state);
+  assert.deepEqual(calls, [
+    ["weapon", "destroy"],
+    ["deaths", "destroy"],
+    ["blood", "destroy"]
+  ]);
+  assert.equal(state.bloodEffects, null);
+  assert.equal(state.enemyDeathEffects, null);
+  calls.length = 0;
+  f.PrinceJS.Game.prototype.shutdown.call(state);
+  assert.deepEqual(calls, []);
 });
 
 test("rocket splash hurts nearby guards, falls off with distance, and cannot penetrate walls", () => {

@@ -9,6 +9,8 @@ PrinceJS.Game = function (game) {
   this.currentRoom;
 
   this.enemies = [];
+  this.bloodEffects = null;
+  this.enemyDeathEffects = null;
 };
 
 PrinceJS.Game.prototype = {
@@ -145,6 +147,9 @@ PrinceJS.Game.prototype = {
     this.jetpack = new PrinceJS.Jetpack(this);
     this.input.keyboard.addKey(Phaser.Keyboard.J).onDown.add(this.toggleJetpack, this);
 
+    this.bloodEffects = new PrinceJS.BloodEffects(this);
+    this.enemyDeathEffects = new PrinceJS.EnemyDeathEffects(this);
+
     this.world.sort("z");
     this.world.alpha = 1;
 
@@ -179,6 +184,12 @@ PrinceJS.Game.prototype = {
     }
     for (let weapon of this.weapons || []) {
       weapon.update(delta);
+    }
+    if (this.enemyDeathEffects) {
+      this.enemyDeathEffects.update(delta);
+    }
+    if (this.bloodEffects) {
+      this.bloodEffects.update(delta);
     }
     this.updateCamera(delta);
     if (PrinceJS.Utils.continueGame(this.game)) {
@@ -246,6 +257,12 @@ PrinceJS.Game.prototype = {
     }
     this.weapons = [];
     this.minigun = this.rocketLauncher = null;
+    for (let effects of [this.enemyDeathEffects, this.bloodEffects]) {
+      if (effects) {
+        effects.destroy();
+      }
+    }
+    this.enemyDeathEffects = this.bloodEffects = null;
     if (this.roomCamera) {
       this.roomCamera.destroy();
     }

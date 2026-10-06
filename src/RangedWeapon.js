@@ -291,7 +291,7 @@ PrinceJS.RangedWeapon.prototype = {
 
   impact: function (bullet, enemy) {
     if (enemy) {
-      this.hitEnemy(enemy);
+      this.hitEnemy(enemy, bullet);
     }
     this.effects.impact(bullet.x, bullet.y, !!enemy && enemy.charName !== "skeleton");
   },
@@ -333,14 +333,35 @@ PrinceJS.RangedWeapon.prototype = {
     return null;
   },
 
-  hitEnemy: function (enemy) {
+  hitEnemy: function (enemy, impact) {
     if (enemy.room === this.kid.room) {
       this.delegate.ui.setOpponentLive(enemy);
     }
     enemy.opponent = this.kid;
     enemy.startFight = true;
     // Preserve the original health signals, death animations, and special enemy rules.
+    let wasAlive = enemy.alive;
+    let previousHealth = enemy.health;
     enemy.damageLife();
+    if (this.spec && (enemy.health < previousHealth || (wasAlive && !enemy.alive))) {
+      let bounds = enemy.getCharBounds();
+      let hit = Object.assign(
+        {
+          x: enemy.baseX + bounds.x + bounds.width / 2,
+          y: enemy.baseY + bounds.y + bounds.height / 2,
+          room: enemy.room,
+          direction: this.kid.charFace
+        },
+        impact,
+        { weapon: this.spec.id }
+      );
+      if (this.delegate.bloodEffects) {
+        this.delegate.bloodEffects.hit(enemy, hit);
+      }
+      if (wasAlive && !enemy.alive && this.delegate.enemyDeathEffects) {
+        this.delegate.enemyDeathEffects.kill(enemy, hit);
+      }
+    }
     if (enemy.alive && !enemy.inFallDown && !enemy.inJumpUp) {
       enemy.action = "stabbed";
     }
