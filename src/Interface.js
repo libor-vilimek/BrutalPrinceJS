@@ -9,6 +9,10 @@ PrinceJS.Interface = function (game, delegate) {
 
   this.layer = this.game.add.sprite(0, (PrinceJS.SCREEN_HEIGHT - PrinceJS.UI_HEIGHT) * PrinceJS.SCALE_FACTOR, bmd);
   this.layer.fixedToCamera = true;
+  this.layer.scale.setTo(
+    PrinceJS.SCALE_FACTOR / this.game.world.scale.x,
+    PrinceJS.SCALE_FACTOR / this.game.world.scale.y
+  );
 
   let bmdRed = this.game.make.bitmapData(PrinceJS.SCREEN_WIDTH, PrinceJS.UI_HEIGHT);
   bmdRed.fill(255, 0, 0);

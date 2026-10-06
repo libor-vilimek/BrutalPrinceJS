@@ -603,12 +603,28 @@ async function actionChecks() {
   }
 }
 
+function roomFramed(state, id = state.kid.room) {
+  const room = state.level.rooms[id];
+  const scale = testGame.world.scale.x;
+  const left = testGame.camera.x / scale;
+  const top = testGame.camera.y / scale;
+  const width = testGame.width / scale;
+  const height = (testGame.height - 16) / scale;
+  return (
+    left <= room.x * 320 &&
+    left + width >= (room.x + 1) * 320 &&
+    top <= room.y * 189 &&
+    top + height >= (room.y + 1) * 189
+  );
+}
+
 function cameraSample(state) {
   return {
     x: testGame.camera.x,
     y: testGame.camera.y,
     room: state.kid.room,
     kidX: state.kid.baseX + (state.kid.charX * 320) / 140,
+    fullRoom: roomFramed(state),
     hudX: state.ui.layer.worldTransform.tx,
     hudY: state.ui.layer.worldTransform.ty
   };
@@ -666,21 +682,43 @@ async function cameraChecks() {
     await ready();
     let state = await freshLevel(1);
     quietEnemies(state);
+    placeKid(7, 49, 1, 1);
+    check(testGame.world.scale.x === 1.6, "Gameplay is zoomed out by 20 percent");
+    check(roomFramed(state), "The complete primary room fits above the health display");
+    check(
+      state.roomCamera.isRoomVisible(17) && state.roomCamera.isRoomVisible(14),
+      "The rooms directly above and below are partly visible"
+    );
+    check(
+      Math.abs(state.ui.layer.width * testGame.world.scale.x - 640) < 0.1 &&
+        Math.abs(state.ui.layer.height * testGame.world.scale.y - 16) < 0.1,
+      "The health display retains its original width and size at the new zoom"
+    );
     placeKid(2, 98, 1, 1);
+    await watchCamera(state, () => !state.roomCamera.transition);
     controls = cameraControls(state.kid);
     controls.right = true;
     const right = await watchCamera(state, () => state.kid.room === 3);
-    const origin = state.level.rooms[2].x * 640;
+    const origin = state.roomCamera.roomLeft(2) * state.roomCamera.scale;
     check(
       right.some((sample) => sample.room === 2 && sample.x > origin + 10),
       "Camera reveals the right neighbor before the Prince crosses the boundary"
     );
+    check(
+      right.filter((sample) => sample.room === 2).every((sample) => sample.fullRoom),
+      "The departing room remains fully visible throughout the edge preview"
+    );
     checkHorizontalSamples(right, "Running right through a room boundary");
     controls.right = false;
+    await watchCamera(state, () => !state.roomCamera.transition);
+    check(roomFramed(state, 3), "Stopping inside the right neighbor still completes its full room frame");
     controls.left = true;
     const left = await watchCamera(state, () => state.kid.room === 2 && state.kid.charX < 60);
     check(left.at(-1).x < left[0].x, "Camera follows the Prince back to the left");
     checkHorizontalSamples(left, "Running left through a room boundary");
+    controls.left = false;
+    await watchCamera(state, () => !state.roomCamera.transition);
+    check(roomFramed(state, 2), "Returning left completes the previous room's full frame");
     controls.restore();
 
     state = await freshLevel(1);
@@ -692,6 +730,8 @@ async function cameraChecks() {
     const flightRight = await watchCamera(state, () => state.kid.room === 3);
     checkHorizontalSamples(flightRight, "Flying right through a room boundary");
     controls.right = false;
+    await watchCamera(state, () => !state.roomCamera.transition);
+    check(roomFramed(state, 3), "Hovering just inside a neighbor completes its full frame");
     controls.left = true;
     const flightLeft = await watchCamera(state, () => state.kid.room === 2 && state.kid.charX < 100);
     checkHorizontalSamples(flightLeft, "Flying left through a room boundary");
@@ -703,16 +743,18 @@ async function cameraChecks() {
     check(state.jetpack.toggle(), "Jetpack activates in the existing vertical shaft");
     controls = cameraControls(state.kid);
     controls.down = true;
+    const upperY = testGame.camera.y;
+    const lowerY = Math.round((189 - state.roomCamera.paddingY) * state.roomCamera.scale);
     const down = await watchCamera(state, () => state.kid.room === 15);
     check(
-      down.every((sample) => sample.y === 0 || sample.y === 378) && down.at(-1).y === 378,
+      down.every((sample) => sample.y === upperY || sample.y === lowerY) && down.at(-1).y === lowerY,
       "Flying down still cuts directly to the next floor"
     );
     controls.down = false;
     controls.up = true;
     const up = await watchCamera(state, () => state.kid.room === 22);
     check(
-      up.every((sample) => sample.y === 378 || sample.y === 0) && up.at(-1).y === 0,
+      up.every((sample) => sample.y === lowerY || sample.y === upperY) && up.at(-1).y === upperY,
       "Flying up still cuts directly to the previous floor"
     );
     controls.restore();
@@ -722,6 +764,7 @@ async function cameraChecks() {
     quietEnemies(state);
     check(state.roomCamera.room === state.kid.room, "Restart resets the camera to the new starting room");
     check(state.ui.layer.fixedToCamera, "HUD retains Phaser's camera attachment after restart");
+    check(testGame.world.scale.x === 1.6 && roomFramed(state), "Restart preserves zoom and the full starting room");
     report("ALL CAMERA CHECKS PASSED");
   } catch (error) {
     report("FAIL: " + error.message);
@@ -743,14 +786,18 @@ async function cameraPreview() {
     await ready();
     const state = await freshLevel(1);
     quietEnemies(state);
-    placeKid(2, 98, 1, 1);
+    placeKid(20, 98, 1, 1);
     controls = cameraControls(state.kid);
     controls.right = true;
-    await watchCamera(state, () => state.kid.room === 3 && state.kid.charX > 50);
+    await watchCamera(state, () => !state.roomCamera.transition);
+    await watchCamera(state, () => state.kid.room === 7);
+    controls.right = false;
+    await watchCamera(state, () => !state.roomCamera.transition);
     controls.restore();
     controls = null;
     testGame.paused = true;
-    output.textContent = "Smooth scrolling preview paused between rooms 2 and 3. Resume game to continue.";
+    output.textContent =
+      "20% zoom: room 7 fully framed, with room 17 above and room 14 below. The pan finishes even after stopping at the entrance.";
   } catch (error) {
     output.textContent = "FAIL: " + error.message;
   } finally {

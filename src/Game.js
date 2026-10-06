@@ -246,6 +246,9 @@ PrinceJS.Game.prototype = {
     }
     this.weapons = [];
     this.minigun = this.rocketLauncher = null;
+    if (this.roomCamera) {
+      this.roomCamera.destroy();
+    }
     this.roomCamera = null;
     if (this.weaponAudio) {
       this.weaponAudio.destroy();

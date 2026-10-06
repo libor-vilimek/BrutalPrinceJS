@@ -33,7 +33,7 @@ Prince of Persia reimplementation written in HTML5 / JavaScript (MS-DOS version)
 
 ## Camera
 
-The camera scrolls smoothly sideways through connected rooms when the Prince approaches either edge of the screen. It stops at the ends of each corridor, while transitions to rooms above or below still cut immediately. The health display stays fixed, and gates and choppers in partially visible adjoining rooms remain audible.
+Gameplay is zoomed out by 20%, framing the complete current room with extra space on each side and a glimpse of the rooms above and below. Approaching a side exit gently previews the neighbor using that extra margin; entering it finishes a short smooth pan to frame the complete new room, even when the Prince stops just inside the entrance. Transitions up or down still cut immediately. The health display stays fixed at its original size, and gates and choppers in all partially visible neighboring rooms remain audible. Menus and cutscenes keep their original zoom.
 
 ## Minigun and Rocket Launcher
 
