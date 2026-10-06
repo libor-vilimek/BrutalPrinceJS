@@ -18,6 +18,7 @@ PrinceJS.ROOM_HEIGHT = PrinceJS.BLOCK_HEIGHT * 3;
 PrinceJS.ROOM_WIDTH = PrinceJS.SCREEN_WIDTH;
 
 PrinceJS.UI_HEIGHT = 8;
+PrinceJS.TIME_LIMIT = 600;
 
 PrinceJS.SKIP_TITLE = false;
 PrinceJS.SKIP_CUTSCENES = false;
@@ -26,7 +27,7 @@ PrinceJS.Init = function () {
   PrinceJS.currentLevel = 1;
   PrinceJS.maxHealth = 10;
   PrinceJS.currentHealth = null;
-  PrinceJS.minutes = 60;
+  PrinceJS.minutes = PrinceJS.TIME_LIMIT;
   PrinceJS.startTime = undefined;
   PrinceJS.endTime = undefined;
   PrinceJS.strength = 100;

@@ -11,9 +11,9 @@ Prince of Persia reimplementation written in HTML5 / JavaScript (MS-DOS version)
     - `Up key`: Jump, Climb Up
     - `Down key`: Crouch, Crawl, Climb Down
   - `SHIFT`: Walk slowly, Drink Potion, Grab Edge
-  - `CTRL / F`: Hold to draw and fire the selected weapon
-  - `CTRL` while hanging: Throw a collected molotov below
-  - `1 / 2`: Select the collected minigun / rocket launcher
+  - `CTRL / F`: Hold to draw and fire a gun, or charge a molotov and release to throw
+  - `CTRL / F` with molotov selected while hanging: Immediately light and drop it below
+  - `1 / 2 / 3`: Select molotov / minigun / rocket launcher when owned
   - `J`: Equip/activate the jetpack, or remove it; fly with the cursor keys
   - `SPACE`: Show Remaining Time
   - `ENTER`: Continue Game
@@ -35,27 +35,29 @@ Prince of Persia reimplementation written in HTML5 / JavaScript (MS-DOS version)
 
 Gameplay uses 70% zoom, framing the complete current room with more than two extra tile columns on each side and a glimpse of the rooms above and below. Approaching a side exit gently expands the preview to more than four columns of the next room; entering it finishes a short smooth pan to frame the complete new room, even when the Prince stops just inside the entrance. Transitions up or down still cut immediately. The health display stays fixed at its original size, and gates and choppers in all partially visible neighboring rooms remain audible. Menus and cutscenes keep their original zoom.
 
-## Minigun and Rocket Launcher
+## Weapons and Jetpack
 
 The Prince starts with 10 health points. Each enemy sword hit removes one point, including when the Prince has no weapon drawn; a surviving hit briefly staggers him before normal movement resumes.
 
-A minigun lies on safe ground in each level. The rocket launcher becomes available from level 2 onward. Walk over a weapon to pick it up. On level 1, the minigun waits on the lower ledge of the starting screen, on the solid floor to the right of the loose landing board. The molotov stays on the upper platform.
+A molotov lies on the first level's upper starting platform. The minigun waits on plain floor at the far left of the room below, away from the loose landing board; two guards nearby introduce the molotov before collecting the gun. Walk over a pickup to collect it. From level 2 onward the Prince automatically owns the molotov and minigun, and from level 3 onward he also owns the rocket launcher. Granted weapons have no visible pickup and the minigun is selected initially, with all guns hidden until firing.
 
-Hold `CTRL` or `F` to fire in the direction the Prince faces. Press `1` for the minigun or `2` for the rocket launcher once collected; both stay in your inventory. Guns are hidden while idle. The minigun starts with a quick reach behind the back and draw animation, then the Prince braces it with both hands. Drawing, firing and stowing lock movement. Releasing fire stops shots immediately, then the Prince puts the minigun behind his back and lowers his hands in a 0.32-second animation before movement resumes. A new trigger press waits for stowing to finish and draws again; weapon selection cannot skip it. Releasing an incomplete draw reverses that shorter part of the motion. Its head and ochre hair use the original Prince sprite at native size, with a small clenched smile. Muzzle flashes light his face and clothes yellow. The Prince's sword is disabled, including automatic sword combat near enemies. `SHIFT` keeps ordinary slow walking, potion pickups and ledge grabs without drawing a gun. The touch action area and controller action buttons can also fire; potion pickups keep priority on those inputs. Both guns have unlimited ammunition; firing stops during jumps, climbing, item animations, and jetpack flight.
+Hold `CTRL` or `F` to fire in the direction the Prince faces. Press `1` for molotov, `2` for minigun or `3` for rocket launcher when owned; all stay in your inventory. Guns are hidden while idle. The minigun starts with a quick reach behind the back and draw animation, then the Prince braces it with both hands. Drawing, firing and stowing lock movement. Releasing fire stops shots immediately, then the Prince puts the minigun behind his back and lowers his hands in a 0.32-second animation before movement resumes. A new trigger press waits for stowing to finish and draws again; weapon selection cannot skip it. Releasing an incomplete draw reverses that shorter part of the motion. Its head and ochre hair use the original Prince sprite at native size, with a small clenched smile. Muzzle flashes light his face and clothes yellow. The Prince's sword is disabled, including automatic sword combat near enemies. `SHIFT` keeps ordinary slow walking, potion pickups and ledge grabs without drawing a gun. The touch action area and controller action buttons can also fire; potion pickups keep priority on those inputs. Both guns have unlimited ammunition; firing stops during jumps, climbing, item animations, and jetpack flight.
 
-A molotov pickup remains on the upper platform of the first level's starting screen. Collect it, hold a ledge with `SHIFT`, then press `CTRL`: the Prince keeps one hand on the ledge while quickly taking out a lighter, holding its flame in his mouth, lighting the bottle and dropping it straight below. The sequence takes about a second. The bottle breaks into a patch of fire that burns enemies; collected molotovs have unlimited ammunition.
+A molotov pickup remains on the upper platform of the first level's starting screen. Collect it and select `1`. On the ground, hold `CTRL` or `F` to charge the distance, then release to light and throw it. Holding Up selects a 70-degree arc instead of the normal 30 degrees; ceilings stop the bottle. Hold a ledge with `SHIFT`, then press `CTRL` or `F`: the Prince immediately keeps one hand on the ledge while quickly taking out a lighter, holding its flame in his mouth, lighting the bottle and dropping it straight below. The sequence takes about a second. A wall impact ignites the struck face and drops burning oil onto the real floor below. Ground fire burns enemies; collected molotovs have unlimited ammunition.
 
-Press `J` to equip and activate the jetpack. The Prince holds both straps and flies with the cursor keys; releasing the keys lets him hover. Walls, gates, floors and ceilings still block him, and he can fly through connected room openings. Press `J` again to remove the pack and resume ordinary movement or falling.
+The jetpack first appears beside the starting Prince in level 12. Walk over it to collect it; from level 13 onward it is automatically owned. Press `J` to equip and activate it. The Prince holds both straps and flies with the cursor keys; releasing the keys lets him hover. Walls, gates, floors and ceilings still block him, and he can fly through connected room openings. Press `J` again to remove the pack and resume ordinary movement or falling. Collection and level entry leave the pack removed until J is pressed.
 
 The minigun fires rapid bullets with a bright yellow muzzle flash, heavy firing audio, and brass casings. Spent casings stay for the entire level, bounce on floors, and stack into growing piles across ten depth layers on the floor. Each layer piles independently, and every pile remains when you leave and revisit rooms. Restarting the level clears its piles and restores the pickups.
 
 The rocket launcher has a quick 0.46-second shoulder draw, a braced two-handed firing pose with yellow flash lighting, and a 0.34-second stow. These animations lock movement like the minigun and preserve the original Prince's head and hair. Rockets accelerate noticeably from 90 to 720 pixels per second in 0.7 seconds, leave fiery smoke trails and explode on impact, dealing damage to nearby enemies. Their 720-pixel range covers the launch room and the entire next room. Each rocket can blast a wall or gate into walkable rubble, and repeated shots can tunnel through a solid adjacent room. Exit doors stay open when blasted, preserving the level exit. Openings persist when revisiting rooms. Intact walls shield enemies from the first blast; later shots can pass through the breach. Bullets and blasts trigger guards' normal deaths, and special enemies retain their original rules.
 
+Blasting the next-level exit also tears its native door panels and stonework into flying fragments. They settle around a permanently cracked, scorched doorway that still leads to the next level. Both halves of the arrival door remain protected from rocket damage.
+
 Wall courses, textures and palace brick colors follow world coordinates, so walls in neighboring rooms fit together. Areas without room data stay empty. Linked neighboring rooms remain visible through their entrances. The game fits the visible browser viewport without scrollbars and preserves its aspect ratio when the window changes size.
 
 Shooting guards sprays blood onto floors, walls, gates and ceilings. Blood spreads across ten floor depth layers, with splashes and drips on nearby front masonry. Cached stains retain the same pixels for the entire level, including when leaving and revisiting rooms. Minigun deaths alternate between a tumbling face hit that throws the body several tiles back, a torn arm, a waist split, a spinning severed head and a leg collapse. Rocket kills scatter the head, torso, arms and legs outward with three variations of lift and spin. Bodies and fragments collide with real terrain, cross linked room boundaries, leave blood trails, bounce, slide and stay where they settle. Restarting or changing the level clears stains and remains. The original enemy health, death callbacks and story behavior still run; skeletons and the shadow keep their special rules.
 
-The first two missions have 167 and 189 additional soldiers respectively, spread across every room outside the spawn room. Starting rooms and their approaches leave space to collect the weapons. Nearby soldiers react independently; the enemy health display follows the nearest relevant opponent.
+Every native and bundled custom level adds crowds of soldiers on safe permanent floors, while starting areas, hazards and story puzzle routes stay clear. The first two missions have 160 and 189 additional soldiers respectively. Nearby soldiers react independently and pursue a visible Prince they can reach on the same floor; the enemy health display follows the nearest relevant opponent. Skeleton, shadow and Jaffar story events keep their original actors.
 
 Run `npm test` for camera, weapon collision and inventory tests. Open `http://localhost:8080/tests/minigun-browser.html` after starting the local server for the browser playtest, including running and flying through room boundaries in both directions.
 
@@ -110,18 +112,18 @@ Url parameters are leveraged to save game state automatically (shortcut in brack
 
 - `level (l)`: Current Level (1-14, default: 1)
 - `health (h)`: Max Health (fixed at 10; older saved values are ignored)
-- `time (t)`: Remaining Minutes (1-60, default: 60)
+- `time (t)`: Remaining Minutes (1-600, default: 600)
 - `strength (s)`: Guard Strength in "%" (0-100, default: 100)
 - `width (w)`: Game Width in "px" (default: 0 (fit to screen))
 - `shortcut (_)`: Write url in shortcut version (default: false)
 
 Default url looks as follows:
 
-https://princejs.com?level=1&health=10&time=60&strength=100&width=0
+http://127.0.0.1:8080?level=1&health=10&time=600&strength=100&width=0
 
 Default shortcut url looks as follows:
 
-https://princejs.com?l=1&h=10&t=60&s=100&w=0&_=true
+http://127.0.0.1:8080?l=1&h=10&t=600&s=100&w=0&_=true
 
 Manual adjustments of url parameters is possible as preset options.
 

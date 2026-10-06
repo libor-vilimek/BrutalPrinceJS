@@ -226,28 +226,33 @@ test("handling a bottle requires ownership, selection, a safe stance, and a live
   assert.equal(f.molotov.beginCharge(), false);
 });
 
-test("holding Ctrl readies an unlit bottle indefinitely; release lights, drops once, and restores the hanging grip", () => {
+test("pressing Ctrl on a ledge immediately lights and drops once, restores the grip, and does not repeat while held", () => {
   const f = fixture();
   f.equip();
   f.kid.action = "hang";
   f.kid.charFrame = 92;
+  f.kid.keyU = () => true;
   f.ctrlKey.isDown = true;
+  let launches = 0;
+  const createBottle = f.PrinceJS.MolotovBallistics.createBottle;
+  f.PrinceJS.MolotovBallistics.createBottle = function (...args) {
+    launches++;
+    return createBottle.apply(this, args);
+  };
   assert.equal(f.molotov.throwFromHang(), true);
   assert.equal(f.kid.alpha, 0);
   assert.equal(f.kid.specialAction.owner, f.molotov);
-  f.advance(12);
-  assert.equal(f.molotov.bottles.length, 0);
-  assert.equal(f.molotov.fires.length, 0);
-  assert.equal(f.molotov.throwState.charge, 1.5);
-  assert.equal(f.molotov.throwState.lighterLit, false);
-  assert.equal(f.molotov.throwState.phase, "charging");
-  f.ctrlKey.isDown = false;
-  f.molotov.releaseThrow();
+  assert.equal(f.molotov.throwState.phase, "throwing");
+  assert.equal(f.molotov.throwState.charge, 0);
+  assert.equal(f.molotov.throwState.aimUp, false);
   f.advance(0.41);
   assert.equal(f.molotov.bottles.length, 0);
+  assert.equal(f.molotov.fires.length, 0);
   assert.equal(f.molotov.throwState.lighterLit, true);
   f.advance(0.01);
   assert.equal(f.molotov.bottles.length, 1);
+  assert.equal(f.molotov.bottles[0].vx, 0);
+  assert.ok(f.molotov.bottles[0].vy > 0);
   assert.equal(f.molotov.throwState.released, true);
   f.advance(0.18);
   assert.equal(f.kid.action, "hang");
@@ -257,8 +262,34 @@ test("holding Ctrl readies an unlit bottle indefinitely; release lights, drops o
   assert.equal(f.kid.hasMolotov, true);
   assert.equal(f.molotov.throwState, null);
   assert.equal(f.molotov.actionStage, "hidden");
-  f.advance(0.2);
-  assert.equal(f.molotov.throwFromHang(), true);
+  f.advance(12);
+  assert.equal(launches, 1);
+  assert.equal(f.molotov.throwState, null);
+  f.ctrlKey.isDown = false;
+  f.advance(0.01);
+  f.ctrlKey.isDown = true;
+  f.advance(0.42);
+  assert.equal(launches, 2, "a new press starts the next hanging throw");
+});
+
+test("holding Ctrl on the floor stays unlit at maximum charge until release", () => {
+  const f = fixture();
+  f.equip();
+  f.ctrlKey.isDown = true;
+  f.advance(12);
+  assert.equal(f.molotov.throwState.phase, "charging");
+  assert.equal(f.molotov.throwState.charge, 1.5);
+  assert.equal(f.molotov.throwState.lighterLit, false);
+  assert.equal(f.molotov.bottles.length, 0);
+  assert.equal(f.molotov.fires.length, 0);
+  f.ctrlKey.isDown = false;
+  f.molotov.releaseThrow();
+  f.advance(0.42);
+  assert.equal(f.molotov.bottles.length, 1);
+  assert.ok(f.molotov.bottles[0].vx > 0);
+  f.advance(0.18);
+  assert.equal(f.kid.specialAction, null);
+  assert.equal(f.kid.cropRect, null);
 });
 
 test("standing and crouched throws retain native legs and head size, mirror direction, and sample Up on release", () => {
@@ -325,15 +356,16 @@ test("Shift leaves slow steps available and touch action preserves nearby potion
   assert.equal(f.kid.specialAction.owner, f.molotov, "keyboard trigger remains explicit beside a potion");
 });
 
-test("a short hanging tap still drops straight down into the opening fire encounter", () => {
+test("a short hanging tap drops straight down into the opening fire encounter without awaiting release", () => {
   const f = fixture();
   f.equip();
   f.kid.action = "hang";
   f.ctrlKey.isDown = true;
   f.advance(0.08);
+  assert.equal(f.molotov.throwState.phase, "throwing");
   f.ctrlKey.isDown = false;
-  f.molotov.releaseThrow();
-  f.advance(0.42);
+  assert.equal(f.molotov.releaseThrow(), false);
+  f.advance(0.34);
   assert.equal(f.molotov.bottles[0].vx, 0);
   const x = f.molotov.bottles[0].x;
   f.advance(0.6);
@@ -383,7 +415,7 @@ test("death, loss of a ledge, and an ownership change cancel safely before relea
     f.kid.action = "hang";
     f.ctrlKey.isDown = true;
     f.molotov.throwFromHang();
-    f.advance(0.5);
+    f.advance(0.2);
     const newOwner = {};
     if (disruption === "death") {
       f.kid.alive = false;
@@ -447,6 +479,72 @@ test("walls block a bottle, and an unlinked bottom edge cannot reach another roo
   assert.equal(f.molotov.fires.length, 0);
 });
 
+test("wall impacts burn the struck face and drop burning oil onto the actual floor below in both directions", () => {
+  for (const direction of [1, -1]) {
+    const f = fixture();
+    const wall = f.setTile(1, 3, 1, 20);
+    const impacts = [];
+    f.molotov.effects.shatter = (x, y, burning) => impacts.push({ x, y, burning });
+    const bottle = Object.assign(f.bottle(direction > 0 ? 90 : 134, 86), { vx: direction * 500, vy: 0 });
+    assert.equal(f.molotov.advanceBottle(bottle, 0.08), false);
+    assert.equal(impacts.length, 1);
+    assert.equal(impacts[0].burning, true);
+    assert.equal(f.molotov.fires.length, 1);
+    const attached = f.molotov.fires[0];
+    assert.equal(attached.kind, "wall");
+    assert.equal(attached.tile, wall);
+    assert.equal(attached.x, direction > 0 ? 96 : 128);
+    assert.equal(attached.normalX, -direction);
+    assert.equal(f.molotov.oils.length, 3);
+    assert.ok(f.molotov.oils.every((oil) => oil.oil && oil.vy > 0));
+    f.advance(0.65);
+    assert.equal(f.molotov.oils.length, 0);
+    const pools = f.molotov.fires.filter((fire) => fire.kind !== "wall");
+    assert.equal(pools.length, 3);
+    assert.ok(pools.every((pool) => pool.y === 119 && pool.room === 1 && pool.column === (direction > 0 ? 2 : 4)));
+    assert.equal(impacts.length, 1, "oil landing does not play another glass impact");
+    assert.ok(attached.life > 0);
+    f.setTile(1, 3, 1, 0);
+    f.molotov.updateFires(0.01);
+    assert.ok(!f.molotov.fires.includes(attached), "attached fire vanishes with the struck wall");
+    assert.equal(f.molotov.fires.length, 3, "supported pools remain after the wall is destroyed");
+  }
+});
+
+test("burning wall oil falls through a gap and linked lower room, and never ignites behind an unlinked edge", () => {
+  for (const linked of [true, false]) {
+    const f = fixture();
+    f.setTile(1, 3, 1, 20);
+    f.setTile(1, 2, 1, 0);
+    if (!linked) {
+      f.level.rooms[1].links.down = -1;
+    }
+    const bottle = Object.assign(f.bottle(90, 86), { vx: 500, vy: 0 });
+    f.molotov.advanceBottle(bottle, 0.08);
+    f.advance(1.5);
+    assert.equal(f.molotov.oils.length, 0);
+    const pools = f.molotov.fires.filter((fire) => fire.kind !== "wall");
+    assert.equal(pools.length, linked ? 3 : 0);
+    assert.ok(pools.every((pool) => pool.room === 2 && pool.y === 308 && pool.column === 2));
+  }
+});
+
+test("wall flame burns only the exposed side of a closed gate and disappears when the gate lifts clear", () => {
+  const f = fixture();
+  const gate = f.setTile(1, 3, 1, 4);
+  const near = f.enemy(115);
+  const shielded = f.enemy(142);
+  const bottle = Object.assign(f.bottle(130, 86), { vx: 500, vy: 0 });
+  f.molotov.advanceBottle(bottle, 0.08);
+  f.molotov.updateFires(0.01);
+  assert.equal(near.health, 3);
+  assert.equal(shielded.health, 4);
+  assert.equal(f.molotov.fires[0].kind, "wall");
+  gate.posY = -47;
+  f.molotov.updateFires(0.01);
+  assert.equal(f.molotov.fires.length, 0);
+});
+
 test("ground fire persists, uses the existing health/death signals, and cannot burn through closed gates", () => {
   const f = fixture();
   const close = f.enemy(110);
@@ -500,12 +598,14 @@ test("destroy restores an in-progress pose and disposes bounded graphics and tra
   f.kid.action = "hang";
   f.molotov.throwFromHang();
   f.molotov.bottles.push(f.bottle());
+  f.molotov.oils.push(Object.assign(f.bottle(), { oil: true }));
   f.molotov.ignite(f.bottle(), 3, 1, 119);
   f.molotov.destroy();
   f.molotov.destroy();
   assert.equal(f.kid.alpha, 0.8);
   assert.equal(f.kid.specialAction, null);
   assert.equal(f.molotov.bottles.length, 0);
+  assert.equal(f.molotov.oils.length, 0);
   assert.equal(f.molotov.fires.length, 0);
   assert.equal(f.molotov.effects.particles.length, 0);
   assert.ok(f.layers.every((layer) => layer.destroyed === 1));

@@ -1,11 +1,12 @@
 "use strict";
 
-PrinceJS.Jetpack = function (delegate) {
+PrinceJS.Jetpack = function (delegate, direction) {
   this.delegate = delegate;
   this.game = delegate.game;
   this.level = delegate.level;
   this.kid = delegate.kid;
-  this.effects = new PrinceJS.JetpackEffects(this.game, this.kid);
+  this.pickup = PrinceJS.currentLevel === 12 ? this.findPickup(direction) : null;
+  this.effects = new PrinceJS.JetpackEffects(this.game, this.kid, this.pickup);
   this.active = false;
   this.phase = "off";
   this.elapsed = 0;
@@ -15,11 +16,104 @@ PrinceJS.Jetpack = function (delegate) {
   this.height = 40;
   this.grounded = false;
   this.floorContact = null;
-  this.kid.hasJetpack = true;
   this.kid.jetpackEquipped = false;
 };
 
 PrinceJS.Jetpack.prototype = {
+  findPickup: function (direction) {
+    let kid = this.kid;
+    let room = this.level.rooms[kid.room];
+    let column = Math.max(0, Math.min(9, kid.charBlockX));
+    let row = kid.charBlockY;
+    while (row < 2 && !this.level.getTileAt(column, row, kid.room).isWalkable()) {
+      row++;
+    }
+    let safe = (x) => {
+      let tile = this.level.getTileAt(x, row, kid.room);
+      return (
+        x >= 0 && x < 10 && tile.isSafeWalkable() && !tile.isBarrier() && tile.element !== PrinceJS.Level.TILE_SPIKES
+      );
+    };
+    let occupied = (this.delegate.weapons || [])
+      .map((weapon) => weapon.pickup)
+      .filter((pickup) => pickup && !pickup.collected);
+    let candidates = [];
+    let footX = PrinceJS.Utils.convertX(kid.charX);
+    let forward = direction === -1 ? -1 : 1;
+    for (let x = 0; x < 10; x++) {
+      let tile = this.level.getTileAt(x, row, kid.room);
+      let localX = x * PrinceJS.BLOCK_WIDTH + 16;
+      let localY = PrinceJS.Utils.convertBlockYtoY(row) + 3;
+      if (
+        !safe(x) ||
+        [
+          PrinceJS.Level.TILE_EXIT_LEFT,
+          PrinceJS.Level.TILE_EXIT_RIGHT,
+          PrinceJS.Level.TILE_POTION,
+          PrinceJS.Level.TILE_SWORD,
+          PrinceJS.Level.TILE_SKELETON
+        ].includes(tile.element) ||
+        Math.abs(localX - footX) < 24 ||
+        occupied.some(
+          (pickup) =>
+            pickup.room === kid.room &&
+            Math.abs(pickup.worldX - room.x * PrinceJS.ROOM_WIDTH - localX) < 25 &&
+            Math.abs(pickup.worldY - room.y * PrinceJS.ROOM_HEIGHT - localY) < 8
+        )
+      ) {
+        continue;
+      }
+      let step = Math.sign(x - column);
+      let reachable = true;
+      for (let next = column; next !== x; next += step) {
+        if (!safe(next)) {
+          reachable = false;
+          break;
+        }
+      }
+      if (reachable) {
+        candidates.push({ x, distance: Math.abs(localX - footX), behind: Math.sign(x - column) !== forward });
+      }
+    }
+    candidates.sort((a, b) => a.distance - b.distance || Number(a.behind) - Number(b.behind));
+    if (!candidates.length) {
+      return null;
+    }
+    return {
+      room: kid.room,
+      worldX: room.x * PrinceJS.ROOM_WIDTH + candidates[0].x * PrinceJS.BLOCK_WIDTH + 16,
+      worldY: room.y * PrinceJS.ROOM_HEIGHT + PrinceJS.Utils.convertBlockYtoY(row) + 3,
+      collected: !!kid.hasJetpack
+    };
+  },
+
+  checkPickup: function () {
+    let kid = this.kid;
+    if (
+      !this.pickup ||
+      this.pickup.collected ||
+      !kid.alive ||
+      !kid.active ||
+      !kid.visible ||
+      kid.specialAction ||
+      kid.inFallDown ||
+      kid.inJumpUp ||
+      /hang|climb|jump|fall/.test(kid.action)
+    ) {
+      return false;
+    }
+    let x = kid.baseX + PrinceJS.Utils.convertX(kid.charX);
+    let y = kid.baseY + kid.charY;
+    if (Math.abs(x - this.pickup.worldX) > 17 || Math.abs(y - this.pickup.worldY) > 7) {
+      return false;
+    }
+    kid.hasJetpack = this.pickup.collected = true;
+    this.effects.collect();
+    this.game.sound.play("UnsheatheSword", 0.5);
+    this.showText("JETPACK COLLECTED - J TO EQUIP / ARROWS FLY");
+    return true;
+  },
+
   toggle: function () {
     if (this.destroyed) {
       return false;
@@ -31,6 +125,7 @@ PrinceJS.Jetpack.prototype = {
     }
     let kid = this.kid;
     if (
+      !kid.hasJetpack ||
       !kid.alive ||
       !kid.active ||
       !kid.visible ||
@@ -81,6 +176,7 @@ PrinceJS.Jetpack.prototype = {
       return;
     }
     let dt = Math.max(0, Math.min(Number(delta) || 0, 0.05));
+    this.checkPickup();
     if (this.active) {
       let kid = this.kid;
       if (

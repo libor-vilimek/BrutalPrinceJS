@@ -1,9 +1,11 @@
 "use strict";
 
-PrinceJS.JetpackEffects = function (game, kid) {
+PrinceJS.JetpackEffects = function (game, kid, pickup) {
   this.game = game;
   this.kid = kid;
+  this.pickup = pickup;
   this.elapsed = 0;
+  this.pickupGraphic = game.add.graphics(0, 0);
   this.pack = game.add.graphics(0, 0);
   this.exhaust = game.add.graphics(0, 0);
   this.grip = game.add.graphics(0, 0);
@@ -11,6 +13,7 @@ PrinceJS.JetpackEffects = function (game, kid) {
   this.head.anchor.setTo(0.5, 1);
   this.head.crop(new Phaser.Rectangle(0, 0, 12, 8));
   this.pack.z = 19;
+  this.pickupGraphic.z = 20;
   this.exhaust.z = 18;
   this.grip.z = 24;
   this.head.z = 25;
@@ -18,6 +21,7 @@ PrinceJS.JetpackEffects = function (game, kid) {
   this.bodyCrop = new Phaser.Rectangle(0, 0, 0, 15);
   this.croppedKid = false;
   this.hide();
+  this.drawPickup();
 };
 
 PrinceJS.JetpackEffects.prototype = {
@@ -25,6 +29,55 @@ PrinceJS.JetpackEffects.prototype = {
     graphics.beginFill(color, alpha === undefined ? 1 : alpha);
     graphics.drawRect(Math.round(x), Math.round(y), width, height);
     graphics.endFill();
+  },
+
+  drawPack: function (graphics, x, y) {
+    let rect = (color, rx, ry, width, height) => this.rect(graphics, color, x + rx, y + ry, width, height);
+    // The pickup and worn pack share the same steel tanks, caps, hoses and nozzles.
+    rect(0x101820, -18, 0, 13, 23);
+    rect(0x4c626a, -17, 1, 5, 21);
+    rect(0x97adb0, -16, 2, 2, 17);
+    rect(0x354950, -11, 1, 5, 21);
+    rect(0x718b91, -10, 2, 2, 17);
+    rect(0x762e24, -17, 0, 11, 3);
+    rect(0xd56742, -16, 0, 9, 1);
+    rect(0x182830, -18, 11, 14, 3);
+    rect(0xb49c56, -18, 12, 14, 1);
+    rect(0x202d35, -16, 22, 4, 4);
+    rect(0x202d35, -10, 22, 4, 4);
+    rect(0x9baba3, -16, 23, 4, 1);
+    rect(0x9baba3, -10, 23, 4, 1);
+    rect(0x243940, -6, 4, 5, 2);
+    rect(0xbd874c, -2, 5, 2, 6);
+  },
+
+  drawPickup: function () {
+    let graphics = this.pickupGraphic;
+    graphics.clear();
+    graphics.visible = !!this.pickup && !this.pickup.collected;
+    if (!graphics.visible) {
+      return;
+    }
+    graphics.x = this.pickup.worldX;
+    graphics.y = this.pickup.worldY;
+    let glow = 0.14 + Math.sin(this.elapsed * 3) * 0.05;
+    this.rect(graphics, 0x6ac6d6, -18, -2, 36, 3, glow);
+    this.rect(graphics, 0x172f39, -9, -26, 19, 25, 0.8);
+    this.rect(graphics, 0xa49a77, -10, -27, 2, 21);
+    this.rect(graphics, 0x62573d, 8, -26, 2, 21);
+    this.drawPack(graphics, 13, -26);
+    this.rect(graphics, 0xd9f1ed, -3, -24, 1, 4);
+    // A small J tag makes the pickup's control visible beside the twin tanks.
+    this.rect(graphics, 0x101c26, 12, -12, 8, 9);
+    this.rect(graphics, 0x92d9df, 14, -10, 4, 1);
+    this.rect(graphics, 0x92d9df, 17, -9, 1, 4);
+    this.rect(graphics, 0x92d9df, 14, -6, 3, 1);
+    this.rect(graphics, 0x92d9df, 14, -8, 1, 2);
+  },
+
+  collect: function () {
+    this.pickupGraphic.clear();
+    this.pickupGraphic.visible = false;
   },
 
   hide: function () {
@@ -74,6 +127,7 @@ PrinceJS.JetpackEffects.prototype = {
     }
     let dt = Math.max(0, Math.min(Number(delta) || 0, 0.05));
     this.elapsed += dt;
+    this.drawPickup();
     if (!jetpack.active || !this.kid.alive || !this.kid.visible) {
       this.hide();
       return;
@@ -106,22 +160,7 @@ PrinceJS.JetpackEffects.prototype = {
       this.rect(graphics, color, rx, ry, width, rh, alpha);
     };
 
-    // Twin steel tanks, red caps, fuel hoses and two nozzles read clearly at the game's pixel scale.
-    rect(this.pack, 0x101820, -18, packY, 13, 23);
-    rect(this.pack, 0x4c626a, -17, packY + 1, 5, 21);
-    rect(this.pack, 0x97adb0, -16, packY + 2, 2, 17);
-    rect(this.pack, 0x354950, -11, packY + 1, 5, 21);
-    rect(this.pack, 0x718b91, -10, packY + 2, 2, 17);
-    rect(this.pack, 0x762e24, -17, packY, 11, 3);
-    rect(this.pack, 0xd56742, -16, packY, 9, 1);
-    rect(this.pack, 0x182830, -18, packY + 11, 14, 3);
-    rect(this.pack, 0xb49c56, -18, packY + 12, 14, 1);
-    rect(this.pack, 0x202d35, -16, packY + 22, 4, 4);
-    rect(this.pack, 0x202d35, -10, packY + 22, 4, 4);
-    rect(this.pack, 0x9baba3, -16, packY + 23, 4, 1);
-    rect(this.pack, 0x9baba3, -10, packY + 23, 4, 1);
-    rect(this.pack, 0x243940, -6, packY + 4, 5, 2);
-    rect(this.pack, 0xbd874c, -2, packY + 5, 2, 6);
+    this.drawPack(this.pack, 0, packY);
 
     // Match the original Prince palette. Only these two bent arms remain above the cropped legs.
     let shoulder = top + 10;
@@ -201,6 +240,7 @@ PrinceJS.JetpackEffects.prototype = {
     }
     this.hide();
     this.destroyed = true;
+    this.pickupGraphic.destroy();
     this.pack.destroy();
     this.grip.destroy();
     this.exhaust.destroy();

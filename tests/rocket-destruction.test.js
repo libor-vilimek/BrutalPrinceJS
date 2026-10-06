@@ -35,7 +35,21 @@ function fixture() {
       this.children.push(child);
       child.parent = this;
     },
-    crop() {},
+    crop(rectangle) {
+      this.cropRect = rectangle;
+    },
+    beginFill(color, alpha) {
+      this.color = color;
+      this.alpha = alpha;
+    },
+    drawRect(x, y, width, height) {
+      this.draws.push({ x, y, width, height, color: this.color, alpha: this.alpha });
+    },
+    endFill() {},
+    clear() {
+      this.draws = [];
+    },
+    draws: [],
     destroy() {
       this.destroyed = true;
       for (const child of [...this.children]) {
@@ -72,6 +86,7 @@ function fixture() {
     "tiles/Base",
     "tiles/Gate",
     "tiles/ExitDoor",
+    "LevelBuilder",
     "RangedWeapon",
     "RocketLauncherAction",
     "RocketLauncher"
@@ -79,8 +94,9 @@ function fixture() {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "src", file + ".js"), "utf8"), context);
   }
   const game = {
+    world: { setBounds() {} },
     add: { group, graphics: () => ({}) },
-    make: { sprite },
+    make: { sprite, graphics: (x, y) => sprite(x, y) },
     sound: { play() {} }
   };
   const level = new PrinceJS.Level(game, 1, "Destruction test", 0);
@@ -160,7 +176,31 @@ function fixture() {
     delegate.enemies.push(target);
     return target;
   };
-  return { PrinceJS, level, kid, launcher, rocket, enemy, setTile };
+  return { PrinceJS, game, delegate, level, kid, launcher, rocket, enemy, setTile };
+}
+
+function realDoorFixture(number) {
+  const f = fixture();
+  const map = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "assets", "maps", "level" + number + ".json")));
+  const arrivalClosures = [];
+  f.PrinceJS.Utils.delayed = (fn) => arrivalClosures.push(fn);
+  const builder = new f.PrinceJS.LevelBuilder(f.game, f.delegate);
+  const buildTile = builder.buildTile;
+  // Use the real map, positions, door constructor and builder classification.
+  // Decorative/trap classes are irrelevant to these door interactions.
+  builder.buildTile = function (x, y, room, ...start) {
+    const source = this.level.rooms[room].tiles[y * 10 + x];
+    return source.element === f.PrinceJS.Level.TILE_EXIT_RIGHT
+      ? buildTile.call(this, x, y, room, ...start)
+      : new f.PrinceJS.Tile.Base(f.game, source.element, source.modifier, map.type);
+  };
+  f.level = builder.buildFromJSON(map);
+  f.delegate.level = f.launcher.level = f.kid.level = f.level;
+  arrivalClosures.forEach((fn) => fn());
+  f.kid.room = map.prince.room;
+  f.kid.charBlockX = map.prince.location % 10;
+  f.kid.charBlockY = Math.floor(map.prince.location / 10);
+  return { ...f, map, builder };
 }
 
 function fireFrom(f, x, direction, room) {
@@ -385,6 +425,126 @@ test("destroyed exit door panels stay open and retain the real climb-stairs leve
   f.kid.climbstairs = () => "climbstairs";
   assert.equal(f.kid.jump(), "climbstairs");
   assert.equal(f.launcher.advanceBullet(f.rocket(), 150), true);
+});
+
+test("real dungeon and palace maps classify both door halves using the Prince's arrival door", () => {
+  for (const number of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]) {
+    const f = realDoorFixture(number);
+    const rightDoors = f.level.rooms
+      .filter(Boolean)
+      .flatMap((room) => room.tiles.filter((tile) => tile.element === f.PrinceJS.Level.TILE_EXIT_RIGHT));
+    for (const door of rightDoors) {
+      const nearSpawn =
+        door.room === f.map.prince.room &&
+        Math.abs(door.roomY * 10 + door.roomX - (f.map.prince.location + (f.map.prince.bias || 0))) <= 1;
+      assert.equal(door.doorRole, nearSpawn ? "entrance" : "exit", "level " + number);
+      assert.equal(door.leftTile.doorRole, door.doorRole);
+      assert.equal(door.leftTile.exitDoor, door);
+      assert.equal(f.level[nearSpawn ? "entranceDoors" : "exitDoors"].includes(door), true);
+    }
+  }
+});
+
+test("rockets cannot damage either half of the real arrival door, directly or with a nearby blast", () => {
+  for (const number of [3, 4]) {
+    const f = realDoorFixture(number);
+    const door = f.level.entranceDoors[0];
+    const left = door.leftTile;
+    const room = f.level.rooms[door.room];
+    assert.equal(f.level.destroyBarrier(left, { direction: 1 }), false);
+    assert.equal(f.level.destroyBarrier(door, { direction: -1 }), false);
+    assert.equal(door.blastOpen({ direction: 1 }), false, "door protects itself too");
+    for (const direction of [-1, 1]) {
+      for (const half of [left, door]) {
+        const rocket = { x: half.x + 16, y: room.y * 189 + door.roomY * 63 + 30, room: door.room, direction };
+        assert.equal(f.launcher.obstacleAt(rocket, room), door);
+        f.launcher.impact(rocket, null, half);
+        assert.equal(door.destroyedByRocket, undefined);
+        assert.equal(door.damagedFacade, undefined);
+        assert.equal(f.level.exitDoorOpen, false);
+      }
+    }
+    f.launcher.impact({ x: left.x - 8, y: left.y + 40, room: door.room, direction: 1 });
+    assert.equal(door.destroyedByRocket, undefined);
+    assert.equal(f.level.exitDoorOpen, false);
+    // Native close/raise behavior remains available after rocket impacts.
+    door.state = f.PrinceJS.Tile.ExitDoor.STATE_CLOSED;
+    door.raise();
+    assert.equal(door.state, f.PrinceJS.Tile.ExitDoor.STATE_RAISING);
+  }
+});
+
+test("real exits shatter from either half even after being opened and preserve the native exit action", () => {
+  for (const number of [3, 4]) {
+    for (const direction of [-1, 1]) {
+      for (const fromLeft of [true, false]) {
+        const f = realDoorFixture(number);
+        const door = f.level.exitDoors[0];
+        const half = fromLeft ? door.leftTile : door;
+        const room = f.level.rooms[door.room];
+        door.open = true;
+        const rocket = { x: half.x + 16, y: room.y * 189 + door.roomY * 63 + 30, room: door.room, direction };
+        assert.equal(f.launcher.obstacleAt(rocket, room), door);
+        f.launcher.impact(rocket, null, half);
+        assert.equal(door.destroyedByRocket, true);
+        assert.equal(door.open, true);
+        assert.equal(f.level.exitDoorOpen, true);
+        assert.equal(f.level.getTileAt(door.roomX, door.roomY, door.room), door);
+        assert.equal(f.launcher.obstacleAt(rocket, room), null);
+        assert.equal(door.damagedFacade.parent, door.back);
+        assert.equal(door.damageRubble.parent, door.front);
+        assert.ok(door.damagedFacade.children.length >= 6);
+        assert.equal(door.damageAnimation.fragments.length, 16);
+        f.kid.room = door.room;
+        f.kid.charBlockX = half.roomX;
+        f.kid.charBlockY = half.roomY;
+        f.kid.climbstairs = () => "climbstairs";
+        assert.equal(f.kid.jump(), "climbstairs");
+      }
+    }
+  }
+});
+
+test("blasted doorway shards fly, settle permanently, and never restore an intact door on re-entry", () => {
+  const f = realDoorFixture(3);
+  const door = f.level.exitDoors[0];
+  f.level.destroyBarrier(door, { direction: 1 });
+  const originalY = door.damageAnimation.fragments[0].sprite.y;
+  f.level.update();
+  assert.notEqual(door.damageAnimation.fragments[0].sprite.y, originalY);
+  assert.ok(door.damageDust.draws.length > 0);
+  for (let i = 0; i < 25; i++) {
+    f.level.update();
+  }
+  assert.equal(
+    door.damageAnimation.fragments.every((fragment) => fragment.settled),
+    true
+  );
+  assert.equal(door.damageDust.draws.length, 0);
+  const settled = JSON.stringify(
+    door.damageAnimation.fragments.map(({ sprite }) => [sprite.x, sprite.y, sprite.angle])
+  );
+  const backDraws = JSON.stringify(door.damagedFacade.draws);
+  door.drop();
+  door.raise();
+  door.mask();
+  f.level.checkGates(door.room);
+  for (let i = 0; i < 30; i++) {
+    f.level.update();
+  }
+  assert.equal(door.open, true);
+  assert.equal(door.tileChildBack.visible, false);
+  assert.equal(door.tileChildFront.visible, false);
+  assert.equal(JSON.stringify(door.damagedFacade.draws), backDraws);
+  assert.equal(
+    JSON.stringify(door.damageAnimation.fragments.map(({ sprite }) => [sprite.x, sprite.y, sprite.angle])),
+    settled
+  );
+  assert.equal(f.level.destroyBarrier(door), false, "another rocket cannot duplicate persistent debris");
+  door.destroy();
+  assert.equal(door.damagedFacade.destroyed, true);
+  assert.equal(door.damageRubble.destroyed, true);
+  assert.equal(door.damageDust.destroyed, true);
 });
 
 test("tapestry barriers are removed but hanging tops do not create a floor over a gap", () => {

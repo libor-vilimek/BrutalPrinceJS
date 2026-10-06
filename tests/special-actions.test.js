@@ -100,7 +100,7 @@ test("another controller cannot steal or release an active action, and death res
   assert.equal(kid.beginSpecialAction({}, "minigun"), false);
 });
 
-test("Ctrl handles only the selected weapon; molotov charges on ground or ledge and releases after both triggers are up", () => {
+test("Ctrl handles only the selected weapon and ground molotov releases after both triggers are up", () => {
   const { PrinceJS, kid } = fixture();
   const calls = [];
   const state = Object.assign(Object.create(PrinceJS.Game.prototype), {
@@ -172,6 +172,9 @@ test("weapon selection respects throw and stow locks, preserves flight ownership
   state.selectWeapon("molotov");
   assert.equal(kid.activeWeapon, "molotov");
   assert.match(messages[0], /HOLD CTRL\/F, RELEASE/);
+  kid.action = "hangstraight";
+  state.selectWeapon("molotov");
+  assert.match(messages[1], /CTRL\/F TO DROP/);
 });
 
 test("render updates and shutdown manage the molotov once through the shared inventory", () => {

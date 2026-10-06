@@ -159,32 +159,16 @@ async function combatChecks() {
     placeKid(21, 42, 0, 1);
     check(state.minigun.effects.casings.length === shells, "All brass survives room travel");
     check(state.minigun.effects.casingRooms[21].settled.length >= roomShells, "Room piles remain on return");
-    state = await freshLevel(2);
-    for (const enemy of state.enemies.filter((enemy) => enemy.reinforcement)) {
-      enemy.setInactive();
-      enemy.setInvisible();
-    }
-    const rocketPickup = state.rocketLauncher.pickup;
-    const rocketRoom = state.level.rooms[rocketPickup.room];
-    placeKid(rocketPickup.room, ((rocketPickup.worldX - rocketRoom.x * 320) * 140) / 320, 1, 1);
-    await pause(650);
+    state = await freshLevel(3);
+    quietEnemies(state);
+    state.selectWeapon("rocketLauncher");
     check(
       state.kid.hasRocketLauncher && state.kid.rocketLauncherEquipped,
-      "Ground launcher pickup equips the rockets " +
-        JSON.stringify({
-          x: state.kid.charX,
-          y: state.kid.charY,
-          room: state.kid.room,
-          baseX: state.kid.baseX,
-          baseY: state.kid.baseY,
-          action: state.kid.action,
-          fall: state.kid.inFallDown,
-          jump: state.kid.inJumpUp,
-          pickup: rocketPickup
-        })
+      "Mission three's automatic launcher can be selected without collecting anything"
     );
-    placeKid(11, 98, 1, -1);
-    const rocketGuard = state.enemies.find((enemy) => enemy.room === 11 && !enemy.reinforcement);
+    placeKid(13, 28, 2, 1);
+    const rocketGuard = state.enemies.find((enemy) => enemy.reinforcement);
+    placeGuard(rocketGuard, 13, 27);
     check(rocketGuard.alive, "Rocket target starts alive");
     state.weaponFireKey.isDown = true;
     await pause(1500);
@@ -197,6 +181,9 @@ async function combatChecks() {
     );
     await pause(260);
     check(!state.rocketLauncher.effects.weapon.visible, "The launcher is hidden after fire is released");
+    state = await loadMission(13);
+    quietEnemies(state);
+    state.selectWeapon("rocketLauncher");
     state.toggleJetpack();
     await pause(350);
     state.weaponFireKey.isDown = true;
@@ -284,6 +271,369 @@ async function freshLevel(number) {
   throw new Error("Mission " + number + " did not load");
 }
 
+async function loadMission(number) {
+  const loaded = new Promise((resolve) => gameFrame.addEventListener("load", resolve, { once: true }));
+  gameFrame.src = "../index.html?level=" + number + "&width=800";
+  await loaded;
+  await ready();
+  return gameState();
+}
+
+async function campaignChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    for (const number of [...Array.from({ length: 14 }, (_, i) => i + 1), 99]) {
+      const state = await loadMission(number);
+      const guards = state.enemies.filter((enemy) => enemy.reinforcement);
+      check(
+        guards.length > 0 && guards.every((enemy) => Number.isFinite(enemy.health) && enemy.health > 0),
+        "Level " + number + " has " + guards.length + " real reinforcements with valid health"
+      );
+      check(
+        state.kid.hasMolotov === number >= 2 &&
+          state.kid.hasMinigun === number >= 2 &&
+          state.kid.hasRocketLauncher === number >= 3,
+        "Level " + number + " grants the correct weapons immediately"
+      );
+      check(
+        !!state.molotov && !!state.rocketLauncher === number >= 3,
+        "Level " + number + " has the correct controllers"
+      );
+      check(
+        state.kid.hasJetpack === number >= 13 &&
+          !state.jetpack.active &&
+          !state.kid.jetpackEquipped &&
+          !!state.jetpack.pickup === (number === 12) &&
+          state.jetpack.effects.pickupGraphic.visible === (number === 12),
+        "Level " + number + " starts with the correct jetpack ownership and pickup"
+      );
+      if (number >= 2) {
+        check(
+          state.kid.activeWeapon === "minigun" &&
+            state.weapons.every(
+              (weapon) => weapon.pickup.collected && weapon.effects.collected && !weapon.effects.ground.visible
+            ),
+          "Level " + number + " starts with hidden pickups and minigun selected"
+        );
+      }
+      state.ui.showRemainingMinutes(true);
+      check(
+        state.ui.text.text === "600 MINUTES LEFT" &&
+          new URLSearchParams(gameFrame.contentWindow.location.search).get("time") === "600",
+        "Level " + number + " displays and saves the full 600-minute clock"
+      );
+    }
+    const state = await loadMission(3);
+    quietEnemies(state);
+    const keys = gameFrame.contentWindow.Phaser.Keyboard;
+    for (const [code, id] of [
+      [keys.ONE, "molotov"],
+      [keys.TWO, "minigun"],
+      [keys.THREE, "rocketLauncher"]
+    ]) {
+      testGame.input.keyboard.addKey(code).onDown.dispatch();
+      check(state.kid.activeWeapon === id, "Key " + String.fromCharCode(code) + " selects the owned " + id);
+    }
+    const oldWeapons = [...state.weapons];
+    await freshLevel(3);
+    check(
+      oldWeapons.every((weapon) => weapon.destroyed) && gameState().weapons.every((weapon) => weapon.pickup.collected),
+      "Restart cleans up controllers and immediately restores all level-three weapons"
+    );
+    report("ALL CAMPAIGN LOADOUT AND CLOCK CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    busy = false;
+  }
+}
+
+async function jetpackProgressionChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  let savedKeys;
+  try {
+    for (const number of [1, 11]) {
+      const state = await loadMission(number);
+      quietEnemies(state);
+      testGame.input.keyboard.addKey(gameFrame.contentWindow.Phaser.Keyboard.J).onDown.dispatch();
+      check(
+        !state.kid.hasJetpack && !state.jetpack.active && !state.jetpack.pickup,
+        "J cannot activate an unavailable jetpack in level " + number
+      );
+    }
+    let state = await loadMission(12);
+    quietEnemies(state);
+    const pickup = state.jetpack.pickup;
+    const startRoom = state.level.rooms[state.kid.room];
+    check(
+      pickup &&
+        pickup.room === state.kid.room &&
+        Math.abs(pickup.worldX - state.kid.baseX - (state.kid.charX * 320) / 140) < 80 &&
+        pickup.worldY === startRoom.y * 189 + 182 &&
+        state.jetpack.effects.pickupGraphic.visible &&
+        !state.kid.hasJetpack,
+      "The uncollected jetpack is clearly visible beside the native level-twelve start"
+    );
+    const jKey = testGame.input.keyboard.addKey(gameFrame.contentWindow.Phaser.Keyboard.J);
+    jKey.onDown.dispatch();
+    check(!state.jetpack.active, "J stays blocked before collecting the level-twelve pickup");
+    await walkUntil(
+      () => state.kid.hasJetpack,
+      "Walking from the actual start collects the nearby jetpack",
+      Math.sign(pickup.worldX - state.kid.baseX - (state.kid.charX * 320) / 140)
+    );
+    check(
+      pickup.collected && !state.jetpack.effects.pickupGraphic.visible && !state.jetpack.active,
+      "Collection hides the pickup and leaves the pack unequipped"
+    );
+    const startY = state.kid.baseY + state.kid.charY;
+    jKey.onDown.dispatch();
+    savedKeys = { kid: state.kid, keyU: state.kid.keyU };
+    state.kid.keyU = () => true;
+    await pause(650);
+    check(
+      state.jetpack.active && state.kid.specialAction && state.kid.specialAction.owner === state.jetpack,
+      "The actual J binding equips the collected jetpack"
+    );
+    check(state.kid.baseY + state.kid.charY < startY - 8, "Up flies above the starting floor");
+    check(
+      state.jetpack.effects.pack.visible && state.jetpack.effects.grip.visible && state.jetpack.effects.head.visible,
+      "Flight reuses the original steel pack and both strap grips"
+    );
+    state.kid.keyU = savedKeys.keyU;
+    savedKeys = null;
+    await pause(200);
+    const hoverY = state.kid.baseY + state.kid.charY;
+    const shots = state.minigun.effects.shots;
+    state.weaponCtrlKey.isDown = true;
+    state.weaponCtrlKey.onDown.dispatch();
+    await pause(200);
+    check(
+      Math.abs(state.kid.baseY + state.kid.charY - hoverY) < 5 && state.minigun.effects.shots === shots,
+      "Hover remains stable and holding the straps prevents firing"
+    );
+    state.weaponCtrlKey.isDown = false;
+    jKey.onDown.dispatch();
+    await pause(700);
+    check(
+      !state.jetpack.active && !state.kid.specialAction && state.kid.alive,
+      "J removes the pack for a safe landing"
+    );
+    const oldPack = state.jetpack;
+    state = await freshLevel(12);
+    quietEnemies(state);
+    check(
+      oldPack.destroyed && !state.kid.hasJetpack && state.jetpack.effects.pickupGraphic.visible,
+      "Restarting level twelve cleans up flight and restores its pickup"
+    );
+    for (const number of [13, 14, 99]) {
+      state = await loadMission(number);
+      quietEnemies(state);
+      check(
+        state.kid.hasJetpack && !state.jetpack.active && !state.jetpack.pickup && !state.kid.jetpackEquipped,
+        "Level " + number + " grants the jetpack immediately without starting flight"
+      );
+      testGame.input.keyboard.addKey(gameFrame.contentWindow.Phaser.Keyboard.J).onDown.dispatch();
+      check(state.jetpack.active, "J can immediately equip the automatic level " + number + " jetpack");
+    }
+    state = await loadMission(13);
+    state = await freshLevel(13);
+    check(state.kid.hasJetpack && !state.jetpack.active, "Restart retains automatic ownership with the pack removed");
+    report("ALL JETPACK PROGRESSION CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    if (savedKeys) {
+      savedKeys.kid.keyU = savedKeys.keyU;
+    }
+    gameState().weaponFireKey.isDown = gameState().weaponCtrlKey.isDown = false;
+    busy = false;
+  }
+}
+
+async function wallFireChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    const state = await loadMission(1);
+    quietEnemies(state);
+    await collectWeapon(state.molotov);
+    placeKid(1, 56, 1, 1);
+    const wall = state.level.getTileAt(5, 1, 1);
+    const room = state.level.rooms[1];
+    state.weaponCtrlKey.isDown = true;
+    state.weaponCtrlKey.onDown.dispatch();
+    await pause(80);
+    check(state.molotov.throwState.phase === "charging", "A ground throw still charges until release");
+    state.weaponCtrlKey.isDown = false;
+    state.weaponCtrlKey.onUp.dispatch();
+    for (let i = 0; i < 60 && !state.molotov.fires.some((fire) => fire.kind === "wall"); i++) {
+      await pause(30);
+    }
+    const attached = state.molotov.fires.find((fire) => fire.kind === "wall");
+    check(
+      attached && attached.tile === wall && attached.normalX === -1 && attached.x === room.x * 320 + 160,
+      "The actual thrown bottle ignites the exposed native wall face"
+    );
+    check(state.molotov.oils.length > 0, "Burning oil falls from the wall impact");
+    for (let i = 0; i < 60 && !state.molotov.fires.some((fire) => fire.kind !== "wall"); i++) {
+      await pause(30);
+    }
+    check(
+      state.molotov.fires.some(
+        (fire) =>
+          fire.kind !== "wall" &&
+          fire.room === 1 &&
+          fire.column === 4 &&
+          fire.row === 2 &&
+          fire.y === room.y * 189 + 182
+      ),
+      "The oil falls through the real gap and burns on the lower floor beneath the wall"
+    );
+    check(state.molotov.fires.includes(attached), "The wall and lower floor burn together");
+    report("ALL MOLOTOV WALL FIRE CHECKS PASSED");
+    testGame.paused = true;
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    if (gameState().weaponCtrlKey) {
+      gameState().weaponCtrlKey.isDown = false;
+    }
+    busy = false;
+  }
+}
+
+async function blastExit(state) {
+  state.selectWeapon("rocketLauncher");
+  const door = state.level.exitDoors.find((item) => item.room === 6);
+  placeKid(6, 42, 2, 1);
+  await fireUntil(() => door.destroyedByRocket, "A real rocket shatters the next-level exit");
+  check(
+    door.open && state.level.exitDoorOpen && door.damageAnimation.fragments.length === 16,
+    "The blasted door is open with native fragments and its level trigger intact"
+  );
+  const before = door.damageAnimation.fragments.map((fragment) => fragment.sprite.y);
+  await pause(240);
+  check(
+    door.damageAnimation.fragments.some((fragment, i) => fragment.sprite.y !== before[i]),
+    "Door fragments fly during the destruction animation"
+  );
+  await pause(1800);
+  check(
+    door.damageAnimation.fragments.every((fragment) => fragment.settled) && door.damagedFacade.visible,
+    "Fragments settle beside the permanently damaged facade"
+  );
+  return door;
+}
+
+async function exitDoorChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  let impact;
+  let state;
+  let keyU;
+  let reset;
+  try {
+    state = await loadMission(3);
+    quietEnemies(state);
+    state.selectWeapon("rocketLauncher");
+    const entrance = state.level.entranceDoors[0];
+    check(
+      entrance.room === 9 && entrance.leftTile.doorRole === "entrance" && entrance.doorRole === "entrance",
+      "Both halves of the real arrival door are identified as the entrance"
+    );
+    placeKid(9, 28, 2, 1);
+    await pause(700);
+    impact = state.rocketLauncher.impact;
+    let entranceHits = 0;
+    state.rocketLauncher.impact = function (rocket, enemy, obstacle) {
+      if (obstacle === entrance || obstacle === entrance.leftTile) {
+        entranceHits++;
+      }
+      return impact.call(this, rocket, enemy, obstacle);
+    };
+    await fireUntil(() => entranceHits > 0, "A real rocket strikes the closed arrival door");
+    state.rocketLauncher.impact = impact;
+    check(
+      !entrance.destroyedByRocket && !entrance.damageAnimation && !state.level.exitDoorOpen,
+      "Arrival-door panels and the next-level trigger remain unchanged after the explosion"
+    );
+    await pause(400);
+    const door = await blastExit(state);
+    const settled = JSON.stringify(
+      door.damageAnimation.fragments.map(({ sprite }) => [sprite.x, sprite.y, sprite.angle])
+    );
+    placeKid(9, 28, 2, 1);
+    await pause(200);
+    placeKid(6, 42, 2, 1);
+    await pause(200);
+    check(
+      JSON.stringify(door.damageAnimation.fragments.map(({ sprite }) => [sprite.x, sprite.y, sprite.angle])) ===
+        settled,
+      "The damaged doorway and settled pieces persist after leaving and returning"
+    );
+    placeKid(6, 56, 2, 1);
+    keyU = state.kid.keyU;
+    reset = state.reset;
+    // Keep the native stair/level transition and skip only its story cutscene.
+    state.reset = function () {
+      reset.call(this, true);
+    };
+    state.kid.keyU = () => true;
+    for (
+      let i = 0;
+      i < 350 && !(testGame.state.current === "Game" && gameState().level && gameState().level.number === 4);
+      i++
+    ) {
+      await pause(60);
+    }
+    check(
+      gameState().level && gameState().level.number === 4,
+      "Up uses the real broken stairs and advances to level four"
+    );
+    report("ALL ROCKET EXIT DOOR CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+    if (state) {
+      report(
+        JSON.stringify({
+          room: state.kid.room,
+          x: state.kid.charX,
+          y: state.kid.charY,
+          action: state.kid.action,
+          health: state.kid.health
+        })
+      );
+    }
+  } finally {
+    if (state) {
+      state.rocketLauncher.impact = impact || state.rocketLauncher.impact;
+      state.weaponFireKey.isDown = state.weaponCtrlKey.isDown = false;
+      if (keyU) {
+        state.kid.keyU = keyU;
+      }
+      if (reset) {
+        state.reset = reset;
+      }
+    }
+    busy = false;
+  }
+}
+
 async function fireUntil(predicate, description) {
   const state = gameState();
   state.weaponFireKey.isDown = true;
@@ -295,12 +645,35 @@ async function fireUntil(predicate, description) {
 }
 
 async function collectWeapon(weapon) {
+  if (gameState().kid[weapon.spec.owned]) {
+    check(
+      weapon.pickup.collected && weapon.effects.collected,
+      "The " + weapon.spec.id + " is already available without collecting"
+    );
+    return;
+  }
   const room = gameState().level.rooms[weapon.pickup.room];
   const x = ((weapon.pickup.worldX - room.x * 320) * 140) / 320;
   const row = Math.floor((weapon.pickup.worldY - room.y * 189) / 63);
   placeKid(weapon.pickup.room, x, row, 1);
   await pause(650);
   check(gameState().kid[weapon.spec.owned], "Walking over the " + weapon.spec.id + " equips it");
+}
+
+async function collectJetpack(state) {
+  if (state.kid.hasJetpack) {
+    return;
+  }
+  const pickup = state.jetpack.pickup;
+  const room = state.level.rooms[pickup.room];
+  placeKid(
+    pickup.room,
+    ((pickup.worldX - room.x * 320) * 140) / 320,
+    Math.floor((pickup.worldY - room.y * 189) / 63),
+    1
+  );
+  await pause(500);
+  check(state.kid.hasJetpack && !state.jetpack.active, "The level-twelve ground pickup enables the jetpack");
 }
 
 async function jumpToFirstLanding(state) {
@@ -393,12 +766,12 @@ async function openingChecks() {
     state.weaponCtrlKey.onDown.dispatch();
     await pause(100);
     check(
-      state.molotov.throwState && state.molotov.throwState.phase === "charging" && !state.kid.hasMinigun,
-      "Holding Ctrl readies the first molotov before acquiring any gun"
+      state.molotov.throwState && state.molotov.throwState.phase === "throwing" && !state.kid.hasMinigun,
+      "Pressing Ctrl starts the original hanging ignition and downward throw immediately"
     );
     state.weaponCtrlKey.isDown = false;
     state.weaponCtrlKey.onUp.dispatch();
-    check(state.molotov.throwState.phase === "throwing", "Releasing Ctrl starts the ignition and throw");
+    check(state.molotov.throwState.phase === "throwing", "Releasing Ctrl does not cancel the hanging throw");
     for (let i = 0; i < 40 && !state.molotov.fires.length; i++) {
       await pause(60);
     }
@@ -481,7 +854,7 @@ async function openingPreview() {
     await watchCamera(prepared.state, () => !prepared.state.roomCamera.transition);
     testGame.paused = true;
     report(
-      "Opening: molotov first, two guards beneath the shaft, and the glowing minigun on clear floor to their left. Hold Shift to keep hanging; hold/release Ctrl for a bottle. Keys 1/2/3 select molotov/minigun/rockets."
+      "Opening: molotov first, two guards beneath the shaft, and the glowing minigun on clear floor to their left. Hold Shift to keep hanging; press Ctrl to light and drop a bottle. Keys 1/2/3 select molotov/minigun/rockets."
     );
   } catch (error) {
     report("FAIL: " + error.message);
@@ -529,7 +902,7 @@ async function featureChecks() {
       check(!state.enemies.some((enemy) => enemy.room === spawnRoom), "Mission " + number + " spawn room is clear");
       check(!state.kid.hasSword && !state.kid.sword.visible, "Mission " + number + " starts without a sword");
       check(state.kid.alive && state.minigun.pickup, "Minigun is available safely");
-      check(!!state.rocketLauncher === number >= 2, "Rocket launcher unlocks at mission two");
+      check(!!state.rocketLauncher === number >= 3, "Rocket launcher remains locked before mission three");
       check(state.kid.health === 10 && state.ui.playerHPActive === 10, "Mission starts with ten health points");
       if (number === 1) {
         state.kid.stabbed();
@@ -541,7 +914,7 @@ async function featureChecks() {
         check(state.kid.action === "stand" && !state.kid.swordDrawn, "The Prince recovers to ordinary movement");
       }
     }
-    const state = gameState();
+    let state = gameState();
     // Keep collision and animation real, but let this controlled fixture survive the crowd.
     state.kid.damageLife = () => {};
     placeKid(11, 70, 1, 1);
@@ -554,39 +927,37 @@ async function featureChecks() {
     check(!state.kid.swordDrawn && state.kid.action !== "strike", "Direct sword actions remain disabled");
 
     // Isolate terrain checks from enemy damage and projectile interception.
-    for (const enemy of state.enemies) {
-      enemy.setInactive();
-      enemy.setInvisible();
-    }
+    state = await loadMission(3);
+    quietEnemies(state);
     await collectWeapon(state.rocketLauncher);
     state.selectWeapon("rocketLauncher");
-    placeKid(18, 91, 2, 1);
-    check(state.level.getTileAt(8, 2, 18).element === 20, "Wall initially blocks the corridor");
+    placeKid(5, 35, 2, 1);
+    check(state.level.getTileAt(3, 2, 5).element === 20, "Wall initially blocks the corridor");
     await fireUntil(
-      () => state.level.getTileAt(8, 2, 18).element !== 20,
+      () => state.level.getTileAt(3, 2, 5).element !== 20,
       "A real rocket turns the wall into an opening"
     );
-    check(state.level.getTileAt(8, 2, 18).isWalkable(), "Destroyed wall retains a walkable floor");
-    await walkUntil(() => state.kid.charX > 117, "The Prince runs through the destroyed wall");
-    placeKid(11, 70, 1, 1);
-    placeKid(18, 91, 2, 1);
-    check(!state.level.getTileAt(8, 2, 18).isBarrier(), "Wall opening persists after a room change");
+    check(state.level.getTileAt(3, 2, 5).isWalkable(), "Destroyed wall retains a walkable floor");
+    await walkUntil(() => state.kid.charX > 49, "The Prince runs through the destroyed wall");
+    placeKid(13, 70, 2, 1);
+    placeKid(5, 35, 2, 1);
+    check(!state.level.getTileAt(3, 2, 5).isBarrier(), "Wall opening persists after a room change");
 
-    placeKid(13, 49, 1, 1);
-    check(state.level.getTileAt(5, 1, 13).element === 4, "Gate initially exists");
-    state.level.getTileAt(5, 1, 13).drop();
+    placeKid(2, 119, 0, 1);
+    check(state.level.getTileAt(9, 0, 2).element === 4, "Gate initially exists");
+    state.level.getTileAt(9, 0, 2).drop();
     await pause(600);
-    await fireUntil(() => state.level.getTileAt(5, 1, 13).element !== 4, "A real rocket destroys the gate");
-    await walkUntil(() => state.kid.charX > 87, "The Prince runs through the destroyed gate");
+    await fireUntil(() => state.level.getTileAt(9, 0, 2).element !== 4, "A real rocket destroys the gate");
+    await walkUntil(() => state.kid.charX > 133, "The Prince runs through the destroyed gate");
 
-    const exit = state.level.getTileAt(4, 1, 23);
-    placeKid(23, 28, 1, 1);
+    const exit = state.level.getTileAt(4, 2, 6);
+    placeKid(6, 42, 2, 1);
     check(!exit.open, "Level exit starts closed");
     await fireUntil(() => exit.open, "Rockets open the exit door while retaining the level exit");
 
     await collectWeapon(state.minigun);
     state.selectWeapon("minigun");
-    placeKid(11, 70, 1, 1);
+    placeKid(13, 70, 2, 1);
     const effects = state.minigun.effects;
     const muzzle = effects.getMuzzle();
     for (let i = 0; i < 300; i++) {
@@ -602,12 +973,12 @@ async function featureChecks() {
     const settled = effects.casings.filter((casing) => casing.settled);
     check(settled.length >= 850, "Ten-layer casings settle into persistent cached piles");
     const shellCount = effects.casings.length;
-    const settledCount = effects.casingRooms[11].settled.length;
-    placeKid(18, 70, 2, 1);
+    const settledCount = effects.casingRooms[13].settled.length;
+    placeKid(5, 35, 2, 1);
     await pause(200);
-    placeKid(11, 70, 1, 1);
+    placeKid(13, 70, 2, 1);
     check(effects.casings.length === shellCount, "No shells disappear when returning to the room");
-    check(effects.casingRooms[11].settled.length >= settledCount, "Every settled depth layer survives room travel");
+    check(effects.casingRooms[13].settled.length >= settledCount, "Every settled depth layer survives room travel");
     report("ALL HORDE AND DESTRUCTION CHECKS PASSED");
   } catch (error) {
     report("FAIL: " + error.message);
@@ -659,15 +1030,16 @@ function arrangeGoreTargets(state, room, row, positions, health = 1) {
 
 async function prepareGore(weapon, positions) {
   await ready();
-  const state = await freshLevel(weapon === "minigun" ? 1 : 2);
+  const state = await freshLevel(weapon === "minigun" ? 1 : 3);
   quietEnemies(state);
   state.kid.damageLife = () => {};
   await collectWeapon(state[weapon]);
   state.selectWeapon(weapon);
-  const room = weapon === "minigun" ? 2 : 11;
-  placeKid(room, 28, 1, 1);
+  const room = weapon === "minigun" ? 2 : 13;
+  const row = weapon === "minigun" ? 1 : 2;
+  placeKid(room, 28, row, 1);
   state.enemyDeathEffects.variantOffset = 0;
-  const targets = arrangeGoreTargets(state, room, 1, positions);
+  const targets = arrangeGoreTargets(state, room, row, positions);
   return { state, targets };
 }
 
@@ -1182,8 +1554,11 @@ async function actionChecks() {
     state.weaponCtrlKey.onDown.dispatch();
     await pause(100);
     check(
-      state.kid.specialAction && state.kid.specialAction.owner === state.molotov && !state.molotov.bottles.length,
-      "Holding Ctrl readies an unlit bottle while hanging"
+      state.kid.specialAction &&
+        state.kid.specialAction.owner === state.molotov &&
+        state.molotov.throwState.phase === "throwing" &&
+        !state.molotov.bottles.length,
+      "Pressing Ctrl immediately starts the original hanging throw"
     );
     state.weaponCtrlKey.isDown = false;
     state.weaponCtrlKey.onUp.dispatch();
@@ -1202,7 +1577,9 @@ async function actionChecks() {
     state.kid.keyS = prepared.keyS;
     savedKeys = null;
 
-    placeKid(1, 35, 1, 1);
+    state = await loadMission(12);
+    quietEnemies(state);
+    await collectJetpack(state);
     const startY = state.kid.charY;
     state.toggleJetpack();
     const keyU = state.kid.keyU;
@@ -1235,8 +1612,9 @@ async function actionChecks() {
     );
     const oldPack = state.jetpack;
     const oldBottle = state.molotov;
-    state = await freshLevel(1);
+    state = await freshLevel(12);
     check(oldPack.destroyed && oldBottle.destroyed, "Restart cleans up both new controllers");
+    state = await loadMission(1);
     check(!state.kid.hasMolotov && !state.kid.specialAction, "Restart restores pickup and controls");
     report("ALL NEW ACTION CHECKS PASSED");
   } catch (error) {
@@ -1385,6 +1763,8 @@ async function cameraChecks() {
     state = await freshLevel(1);
     quietEnemies(state);
     placeKid(2, 105, 1, 1);
+    // Grant a test pack to isolate camera physics from campaign inventory progression.
+    state.kid.hasJetpack = true;
     check(state.jetpack.toggle(), "Jetpack activates for the scrolling flight check");
     controls = cameraControls(state.kid);
     controls.right = true;
@@ -1487,6 +1867,31 @@ document.getElementById("features").addEventListener("click", featureChecks);
 document.getElementById("actions").addEventListener("click", actionChecks);
 document.getElementById("charged-molotov").addEventListener("click", chargedMolotovChecks);
 document.getElementById("world-updates").addEventListener("click", worldUpdateChecks);
+document.getElementById("campaign").addEventListener("click", campaignChecks);
+document.getElementById("jetpack-progression").addEventListener("click", jetpackProgressionChecks);
+document.getElementById("wall-fire").addEventListener("click", wallFireChecks);
+document.getElementById("exit-doors").addEventListener("click", exitDoorChecks);
+document.getElementById("exit-preview").addEventListener("click", async () => {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    const state = await loadMission(3);
+    quietEnemies(state);
+    await blastExit(state);
+    state.ui.showRemainingMinutes(true);
+    testGame.paused = true;
+    report(
+      "The next-level exit is shattered and remains usable. The arrival door is protected. Weapon keys: 1 molotov, 2 minigun, 3 rockets; 600-minute clock."
+    );
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    busy = false;
+  }
+});
 document.getElementById("opening").addEventListener("click", openingChecks);
 document.getElementById("opening-preview").addEventListener("click", openingPreview);
 document.getElementById("gore").addEventListener("click", goreChecks);
@@ -1519,9 +1924,9 @@ document.getElementById("molotov").addEventListener("click", async () => {
 
 document.getElementById("jetpack").addEventListener("click", async () => {
   await ready();
-  const state = await freshLevel(1);
+  const state = await loadMission(12);
   quietEnemies(state);
-  placeKid(1, 35, 1, 1);
+  await collectJetpack(state);
   state.toggleJetpack();
   const keyU = state.kid.keyU;
   state.kid.keyU = () => true;
@@ -1531,6 +1936,23 @@ document.getElementById("jetpack").addEventListener("click", async () => {
   testGame.paused = true;
   output.textContent =
     "Jetpack preview paused in flight. Resume game lets you fly with the arrows; J removes the pack.";
+});
+
+document.getElementById("jetpack-pickup").addEventListener("click", async () => {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  try {
+    const state = await loadMission(12);
+    quietEnemies(state);
+    state.ui.showRemainingMinutes(true);
+    testGame.paused = true;
+    output.textContent =
+      "Level 12: the steel jetpack with a J tag waits just right of the starting Prince. Walk over it, then J equips/removes it; arrows fly. From level 13 onward it is automatically owned.";
+  } finally {
+    busy = false;
+  }
 });
 
 document.getElementById("resume").addEventListener("click", () => {
@@ -1547,7 +1969,7 @@ document.getElementById("holster").addEventListener("click", async () => {
 });
 document.getElementById("rockets").addEventListener("click", async () => {
   await ready();
-  const state = await freshLevel(2);
+  const state = await freshLevel(3);
   if (!state.kid.hasRocketLauncher) {
     const pickup = state.rocketLauncher.pickup;
     const room = state.level.rooms[pickup.room];
@@ -1555,7 +1977,7 @@ document.getElementById("rockets").addEventListener("click", async () => {
     await pause(600);
   }
   quietEnemies(state);
-  placeKid(11, 98, 1, -1);
+  placeKid(13, 98, 2, -1);
   state.selectWeapon("rocketLauncher");
   state.weaponFireKey.isDown = true;
   for (let i = 0; i < 100 && !state.rocketLauncher.effects.shots; i++) {
@@ -1647,8 +2069,12 @@ document.getElementById("stop").addEventListener("click", () => {
   gameState().minigun.fireKey.isDown = false;
   gameState().weaponCtrlKey.isDown = false;
 });
-gameFrame.addEventListener("load", () =>
-  ready().then(() => {
-    output.textContent = "Ready to run browser checks.";
-  })
-);
+gameFrame.addEventListener("load", () => {
+  if (!busy) {
+    ready().then(() => {
+      if (!busy) {
+        output.textContent = "Ready to run browser checks.";
+      }
+    });
+  }
+});

@@ -34,9 +34,11 @@ function fixture(number = 1) {
   ]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "src", file + ".js"), "utf8"), context);
   }
-  const json = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "assets", "maps", `level${number}.json`)));
+  const json = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "..", "assets", "maps", number >= 90 ? "custom" : "", `level${number}.json`))
+  );
   const level = Object.create(PrinceJS.Level.prototype);
-  level.number = number;
+  level.number = json.number;
   level.rooms = {};
   level.dummyWall = { element: PrinceJS.Level.TILE_WALL, isSeeBarrier: () => true };
   const roomId = (x, y) =>
@@ -65,20 +67,23 @@ function fixture(number = 1) {
   return { PrinceJS, level, json };
 }
 
-for (const number of [1, 2]) {
+const campaignLevels = Array.from({ length: 14 }, (_, index) => index + 1);
+const allowedFloors = [1, 3, 8, 14, 19];
+const animations = Object.fromEntries(
+  ["fighter", "sword"].map((key) => [
+    key + "-anims",
+    JSON.parse(fs.readFileSync(path.join(__dirname, "..", "assets", "anims", key + ".json")))
+  ])
+);
+const game = {
+  add: { existing() {} },
+  make: { sprite: () => ({ scale: { x: 1 }, anchor: { set() {}, setTo() {} } }) },
+  cache: { getJSON: (key) => animations[key] }
+};
+
+for (const number of campaignLevels) {
   test(`mission ${number} standing animation keeps every reinforcement's feet on its intended floor`, () => {
     const { PrinceJS, level, json } = fixture(number);
-    const animations = Object.fromEntries(
-      ["fighter", "sword"].map((key) => [
-        key + "-anims",
-        JSON.parse(fs.readFileSync(path.join(__dirname, "..", "assets", "anims", key + ".json")))
-      ])
-    );
-    const game = {
-      add: { existing() {} },
-      make: { sprite: () => ({ scale: { x: 1 }, anchor: { set() {}, setTo() {} } }) },
-      cache: { getJSON: (key) => animations[key] }
-    };
     const guards = PrinceJS.HordeSpawns.create(level, json);
     for (const [index, guard] of guards.entries()) {
       const enemy = new PrinceJS.Enemy(
@@ -92,6 +97,7 @@ for (const number of [1, 2]) {
         guard.type,
         index + 1
       );
+      assert.ok(Number.isFinite(enemy.health) && enemy.health > 0, `mission ${number} enemy has usable health`);
       PrinceJS.HordeSpawns.place(enemy, guard.location);
       const column = guard.location % 10;
       const row = Math.floor(guard.location / 10);
@@ -114,20 +120,26 @@ for (const number of [1, 2]) {
   });
 }
 
-for (const number of [1, 2]) {
+for (const number of campaignLevels) {
   test(`mission ${number} has a dense army on safe permanent floors outside spawn`, () => {
     const { PrinceJS, level, json } = fixture(number);
     const guards = PrinceJS.HordeSpawns.create(level, json);
-    assert.ok(guards.length >= 150, `only ${guards.length} reinforcements`);
-    assert.equal(new Set(guards.map((guard) => guard.room)).size, Object.keys(level.rooms).length - 1);
+    const availableFloors = Object.entries(level.rooms)
+      .filter(([id]) => Number(id) !== json.prince.room)
+      .flatMap(([, room]) => room.tiles)
+      .filter((tile) => allowedFloors.includes(tile.element)).length;
+    assert.ok(
+      guards.length >= Math.ceil(availableFloors * 0.7),
+      `only ${guards.length} reinforcements for ${availableFloors} safe floors`
+    );
+    assert.ok(guards.length >= 20, `mission ${number} has only ${guards.length} reinforcements`);
     assert.equal(new Set(guards.map((guard) => `${guard.room}:${guard.location}`)).size, guards.length);
-    const allowed = [1, 3, 8, 14, 19];
     for (const guard of guards) {
       const column = guard.location % 10;
       const row = Math.floor(guard.location / 10);
       const room = level.rooms[guard.room];
       assert.notEqual(guard.room, json.prince.room);
-      assert.ok(allowed.includes(level.getTileAt(column, row, guard.room).element));
+      assert.ok(allowedFloors.includes(level.getTileAt(column, row, guard.room).element));
       assert.ok(guard.colors >= 1 && guard.colors <= 7);
       assert.equal(guard.type, "guard");
       assert.equal(guard.reinforcement, true);
@@ -154,20 +166,102 @@ for (const number of [1, 2]) {
   });
 }
 
-test("reinforcements are reproducible, preserve original guard data, and stop after mission two", () => {
+test("reinforcements are reproducible and append after every original story actor", () => {
+  for (const number of campaignLevels) {
+    const { PrinceJS, level, json } = fixture(number);
+    const before = JSON.stringify(json);
+    const first = PrinceJS.HordeSpawns.create(level, json);
+    assert.deepEqual(PrinceJS.HordeSpawns.create(level, json), first);
+    assert.equal(JSON.stringify(json), before);
+    assert.deepEqual(json.guards.concat(first).slice(0, json.guards.length), json.guards);
+  }
   const { PrinceJS, level, json } = fixture(2);
-  const before = JSON.stringify(json);
-  const first = PrinceJS.HordeSpawns.create(level, json);
-  assert.deepEqual(PrinceJS.HordeSpawns.create(level, json), first);
-  assert.equal(JSON.stringify(json), before);
+  assert.ok(PrinceJS.HordeSpawns.create(level, json).length > 0);
   assert.deepEqual(
     json.guards.map((guard) => guard.room),
     [24, 15, 7, 11, 4]
   );
-  for (const number of [3, 12, 13, 14, 100]) {
-    level.number = number;
-    assert.equal(PrinceJS.HordeSpawns.create(level, json).length, 0);
+});
+
+test("story scenes have clear floors while troops populate other floors around them", () => {
+  const scenes = {
+    3: ["1:1", "3:1", "8:2"],
+    4: ["4:0"],
+    5: ["11:0", "24:0"],
+    6: ["1:1"],
+    12: ["15:0", "15:1", "2:0"],
+    13: ["1:0"]
+  };
+  for (const [number, clearRows] of Object.entries(scenes)) {
+    const { PrinceJS, level, json } = fixture(Number(number));
+    const guards = PrinceJS.HordeSpawns.create(level, json);
+    assert.ok(guards.length >= 20);
+    assert.ok(!guards.some((guard) => clearRows.includes(`${guard.room}:${Math.floor(guard.location / 10)}`)));
+    if ([4, 5, 6, 12].includes(Number(number))) {
+      const sceneRooms = clearRows.map((row) => Number(row.split(":")[0]));
+      assert.ok(
+        guards.some((guard) => sceneRooms.includes(guard.room)),
+        `mission ${number} retains nearby troops`
+      );
+    }
+    if (Number(number) === 12) {
+      const leftLanding = level.rooms[2].links.left;
+      assert.ok(!guards.some((guard) => guard.room === leftLanding && guard.location >= 6 && guard.location <= 9));
+    }
   }
+});
+
+test("every bundled custom map has reinforcements with native campaign health and safe feet placement", () => {
+  const directory = path.join(__dirname, "../assets/maps/custom");
+  const files = fs.readdirSync(directory).filter((file) => /^level\d+\.json$/.test(file));
+  assert.ok(files.length > 200);
+  let totalGuards = 0;
+  let totalFloors = 0;
+  for (const file of files) {
+    const { PrinceJS, level, json } = fixture(Number(file.match(/\d+/)[0]));
+    const before = JSON.stringify(json);
+    assert.ok(json.id >= 90, file);
+    assert.ok(level.number >= 1 && level.number <= 14, `map id ${json.id} resolves to a native mission's strength`);
+    const guards = PrinceJS.HordeSpawns.create(level, json);
+    const availableFloors = Object.entries(level.rooms)
+      .filter(([id]) => Number(id) !== json.prince.room)
+      .flatMap(([, room]) => room.tiles)
+      .filter((tile) => allowedFloors.includes(tile.element)).length;
+    assert.ok(
+      guards.length >= Math.max(1, Math.ceil(availableFloors * 0.4)),
+      `${file} has only ${guards.length} reinforcements for ${availableFloors} safe floors`
+    );
+    totalGuards += guards.length;
+    totalFloors += availableFloors;
+    assert.deepEqual(PrinceJS.HordeSpawns.create(level, json), guards);
+    assert.equal(JSON.stringify(json), before);
+    const placements = new Set();
+    for (const [index, guard] of guards.entries()) {
+      const column = guard.location % 10;
+      const row = Math.floor(guard.location / 10);
+      const key = `${guard.room}:${guard.location}`;
+      assert.notEqual(guard.room, json.prince.room, file);
+      assert.ok(!placements.has(key), `${file} duplicates ${key}`);
+      placements.add(key);
+      assert.ok(allowedFloors.includes(level.getTileAt(column, row, guard.room).element), `${file} unsafe ${key}`);
+      const enemy = new PrinceJS.Enemy(
+        game,
+        level,
+        guard.location,
+        guard.direction,
+        guard.room,
+        guard.skill,
+        guard.colors,
+        guard.type,
+        index + 1
+      );
+      assert.ok(Number.isFinite(enemy.health) && enemy.health > 0, `${file} invalid enemy health`);
+      PrinceJS.HordeSpawns.place(enemy, guard.location);
+      assert.equal(enemy.charBlockX, column, `${file} ${key}`);
+      assert.equal(enemy.charBlockY, row, `${file} ${key}`);
+    }
+  }
+  assert.ok(totalGuards >= totalFloors * 0.7, "custom armies scale with the amount of permanent floor in their maps");
 });
 
 test("mission one opens with two molotov targets under the shaft and a clear approach to the minigun", () => {

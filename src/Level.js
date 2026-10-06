@@ -99,7 +99,7 @@ PrinceJS.Level.prototype = {
     this.trobs.push(trob);
   },
 
-  destroyBarrier: function (tile) {
+  destroyBarrier: function (tile, impact) {
     if (!tile || !this.rooms[tile.room] || this.getTileAt(tile.roomX, tile.roomY, tile.room) !== tile) {
       return false;
     }
@@ -107,10 +107,9 @@ PrinceJS.Level.prototype = {
       tile = this.getTileAt(tile.roomX + 1, tile.roomY, tile.room);
     }
     if (tile.element === PrinceJS.Level.TILE_EXIT_RIGHT) {
-      if (!tile.blastOpen || tile.destroyedByRocket) {
+      if (!tile.blastOpen || tile.destroyedByRocket || tile.doorRole === "entrance" || !tile.blastOpen(impact)) {
         return false;
       }
-      tile.blastOpen();
       this.exitDoorOpen = true;
       return true;
     }

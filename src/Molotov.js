@@ -12,6 +12,7 @@ PrinceJS.Molotov = function (delegate, direction) {
   this.fireKey = delegate.weaponFireKey;
   this.ctrlKey = delegate.weaponCtrlKey;
   this.bottles = [];
+  this.oils = [];
   this.fires = [];
   this.burnCooldowns = new Map();
   this.throwState = null;
@@ -189,6 +190,10 @@ PrinceJS.Molotov.prototype = {
     this.actionStage = "charging";
     kid.setSpecialActionFrame(hanging ? 91 : frame);
     this.effects.beginThrow(this.throwState);
+    // A ledge throw keeps the original one-hand lighter sequence and drops immediately.
+    if (hanging) {
+      this.releaseThrow();
+    }
     return true;
   },
 
@@ -203,7 +208,7 @@ PrinceJS.Molotov.prototype = {
     }
     state.phase = this.actionStage = "throwing";
     state.time = 0;
-    state.aimUp = typeof this.kid.keyU === "function" && this.kid.keyU();
+    state.aimUp = !state.hanging && typeof this.kid.keyU === "function" && this.kid.keyU();
     return true;
   },
 
@@ -312,8 +317,12 @@ PrinceJS.Molotov.prototype = {
   },
 
   ignite: function (bottle, column, row, floorY) {
-    this.effects.shatter(bottle.x, floorY - 3, true);
-    this.game.sound.play("LooseFloorLands", 0.4);
+    if (bottle.oil) {
+      this.effects.singe(bottle.x, floorY - 3);
+    } else {
+      this.effects.shatter(bottle.x, floorY - 3, true);
+      this.game.sound.play("LooseFloorLands", 0.4);
+    }
     if (this.fires.length >= 16) {
       this.fires.shift();
     }
@@ -325,17 +334,78 @@ PrinceJS.Molotov.prototype = {
       y: floorY,
       age: 0,
       life: PrinceJS.Molotov.FIRE_DURATION,
-      radius: 27
+      radius: bottle.oil ? 21 : 27
     });
   },
 
+  igniteWall: function (bottle, contact) {
+    let surface = contact.surface;
+    let normal = contact.normalX;
+    this.effects.shatter(bottle.x, bottle.y, true);
+    this.game.sound.play("LooseFloorLands", 0.4);
+    if (this.fires.length >= 16) {
+      this.fires.shift();
+    }
+    this.fires.push({
+      kind: "wall",
+      room: surface.room,
+      column: surface.tile.roomX,
+      row: surface.tile.roomY,
+      tile: surface.tile,
+      surfaceKind: surface.kind,
+      normalX: normal,
+      x: normal < 0 ? surface.left : surface.right,
+      y: Math.max(surface.top + 4, Math.min(surface.bottom - 1, bottle.y)),
+      impactY: bottle.y,
+      age: 0,
+      life: PrinceJS.Molotov.FIRE_DURATION * 0.8,
+      radius: 18
+    });
+    // Burning oil falls on the exposed side. It discovers the real floor beneath,
+    // including gaps and linked lower rooms, rather than placing fire through stone.
+    for (let i = 0; i < 3 && this.oils.length < 36; i++) {
+      this.oils.push({
+        room: bottle.room,
+        x: bottle.x + normal * i * 2,
+        y: bottle.y - i * 3,
+        vx: normal * i * 8,
+        vy: 45 + i * 12,
+        radius: 1.5,
+        oil: true,
+        age: 0,
+        life: 6
+      });
+    }
+  },
+
+  updateWallFire: function (fire, tile) {
+    if (tile !== fire.tile || !tile.isBarrier()) {
+      return false;
+    }
+    if (!this.bottlePhysics || this.bottlePhysics.level !== this.level) {
+      this.bottlePhysics = new PrinceJS.GorePhysics(this.level);
+    }
+    let surface = this.bottlePhysics
+      .surfaces({ room: fire.room, x: fire.x, y: fire.impactY, radius: 20 })
+      .find((item) => item.tile === tile && item.kind === fire.surfaceKind);
+    if (!surface || surface.bottom - surface.top < 6) {
+      return false;
+    }
+    fire.x = fire.normalX < 0 ? surface.left : surface.right;
+    fire.y = Math.max(surface.top + 4, Math.min(surface.bottom - 1, fire.impactY));
+    fire.top = surface.top;
+    fire.bottom = surface.bottom;
+    return true;
+  },
+
   fireCanReach: function (fire, x, y) {
-    let sourceY = fire.y - 12;
-    let distance = Math.hypot(x - fire.x, y - sourceY);
+    let sourceX = fire.kind === "wall" ? fire.x + fire.normalX * 5 : fire.x;
+    let sourceY = fire.kind === "wall" ? fire.y : fire.y - 12;
+    let distance = Math.hypot(x - sourceX, y - sourceY);
     let steps = Math.max(1, Math.ceil(distance / 2));
-    let point = { room: fire.room, x: fire.x, y: sourceY };
+    let point = { room: fire.room, x: sourceX, y: sourceY };
     for (let i = 0; i <= steps; i++) {
-      point.x = fire.x + ((x - fire.x) * i) / steps;
+      point.x = sourceX + ((x - sourceX) * i) / steps;
       point.y = sourceY + ((y - sourceY) * i) / steps;
       let room = this.resolveRoom(point);
       if (!room || PrinceJS.RangedWeapon.prototype.obstacleAt.call(this, point, room)) {
@@ -365,9 +435,12 @@ PrinceJS.Molotov.prototype = {
       fire.life -= delta;
       fire.age += delta;
       let tile = this.level.getTileAt(fire.column, fire.row, fire.room);
-      if (fire.life <= 0 || !tile || !tile.isWalkable()) {
+      let wall = fire.kind === "wall";
+      if (fire.life <= 0 || !tile || (wall ? !this.updateWallFire(fire, tile) : !tile.isWalkable())) {
         return false;
       }
+      let sourceX = wall ? fire.x + fire.normalX * 5 : fire.x;
+      let sourceY = wall ? fire.y : fire.y - 12;
       for (let enemy of this.delegate.enemies) {
         if (
           !enemy.alive ||
@@ -381,12 +454,12 @@ PrinceJS.Molotov.prototype = {
         let bounds = enemy.getCharBounds();
         let left = enemy.baseX + bounds.x;
         let top = enemy.baseY + bounds.y;
-        let targetX = Math.max(left, Math.min(fire.x, left + bounds.width));
-        let targetY = Math.max(top, Math.min(fire.y - 12, top + bounds.height));
+        let targetX = Math.max(left, Math.min(sourceX, left + bounds.width));
+        let targetY = Math.max(top, Math.min(sourceY, top + bounds.height));
         if (
-          Math.abs(targetX - fire.x) <= fire.radius &&
-          top <= fire.y + 1 &&
-          top + bounds.height >= fire.y - 22 &&
+          Math.abs(targetX - sourceX) <= fire.radius &&
+          top <= fire.y + (wall ? 18 : 1) &&
+          top + bounds.height >= fire.y - (wall ? 18 : 22) &&
           this.fireCanReach(fire, targetX, targetY)
         ) {
           PrinceJS.RangedWeapon.prototype.hitEnemy.call(this, enemy);
@@ -413,8 +486,9 @@ PrinceJS.Molotov.prototype = {
     this.triggerWasDown = requested;
     this.updateThrow(delta);
     this.bottles = this.bottles.filter((bottle) => this.advanceBottle(bottle, delta));
+    this.oils = this.oils.filter((oil) => this.advanceBottle(oil, delta));
     this.updateFires(delta);
-    this.effects.update(delta, this.throwState, this.bottles, this.fires);
+    this.effects.update(delta, this.throwState, this.bottles, this.fires, this.oils);
   },
 
   destroy: function () {
@@ -424,6 +498,7 @@ PrinceJS.Molotov.prototype = {
     this.finishThrow();
     this.destroyed = true;
     this.bottles.length = 0;
+    this.oils.length = 0;
     this.fires.length = 0;
     this.burnCooldowns.clear();
     this.effects.destroy();

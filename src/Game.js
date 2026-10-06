@@ -34,9 +34,7 @@ PrinceJS.Game.prototype = {
     this.pressButtonToNext = false;
 
     if (!PrinceJS.startTime) {
-      let date = new Date();
-      date.setMinutes(date.getMinutes() - (60 - PrinceJS.minutes));
-      PrinceJS.startTime = date;
+      PrinceJS.startTime = new Date(Date.now() - (PrinceJS.TIME_LIMIT - PrinceJS.minutes) * 60000);
     }
 
     let json = this.game.cache.getJSON("level");
@@ -143,18 +141,22 @@ PrinceJS.Game.prototype = {
     this.input.keyboard.addKey(Phaser.Keyboard.ONE).onDown.add(() => this.selectWeapon("molotov"), this);
     this.input.keyboard.addKey(Phaser.Keyboard.TWO).onDown.add(() => this.selectWeapon("minigun"), this);
     this.input.keyboard.addKey(Phaser.Keyboard.THREE).onDown.add(() => this.selectWeapon("rocketLauncher"), this);
+    this.kid.hasMolotov = this.kid.hasMinigun = PrinceJS.currentLevel >= 2;
+    this.kid.hasRocketLauncher = PrinceJS.currentLevel >= 3;
     this.minigun = new PrinceJS.Minigun(this, json.prince.direction * (json.prince.reverse || 1));
     this.rocketLauncher = null;
     this.weapons = [this.minigun];
-    if (PrinceJS.currentLevel >= 2) {
+    if (this.kid.hasRocketLauncher) {
       this.rocketLauncher = new PrinceJS.RocketLauncher(this, -json.prince.direction * (json.prince.reverse || 1));
       this.weapons.push(this.rocketLauncher);
     }
-    this.molotov = this.level.number === 1 ? new PrinceJS.Molotov(this, direction) : null;
-    if (this.molotov) {
-      this.weapons.unshift(this.molotov);
+    this.molotov = new PrinceJS.Molotov(this, direction);
+    this.weapons.unshift(this.molotov);
+    if (this.kid.hasMinigun) {
+      this.minigun.equip();
     }
-    this.jetpack = new PrinceJS.Jetpack(this);
+    this.kid.hasJetpack = PrinceJS.currentLevel >= 13;
+    this.jetpack = new PrinceJS.Jetpack(this, json.prince.direction * (json.prince.reverse || 1));
     this.input.keyboard.addKey(Phaser.Keyboard.J).onDown.add(this.toggleJetpack, this);
 
     this.bloodEffects = new PrinceJS.BloodEffects(this);
@@ -322,10 +324,13 @@ PrinceJS.Game.prototype = {
     }
     let weapon = (this.weapons || []).find((item) => item.spec.id === id);
     if (weapon && this.kid[weapon.spec.owned] && weapon.equip()) {
-      this.ui.showText(
-        weapon.spec.label + (id === "molotov" ? " - HOLD CTRL/F, RELEASE" : " - HOLD CTRL / F TO FIRE"),
-        "weapon"
-      );
+      let instruction = " - HOLD CTRL / F TO FIRE";
+      if (id === "molotov") {
+        instruction = ["hang", "hangstraight"].includes(this.kid.action)
+          ? " - CTRL/F TO DROP"
+          : " - HOLD CTRL/F, RELEASE";
+      }
+      this.ui.showText(weapon.spec.label + instruction, "weapon");
       this.ui.hideTextTimer = 40;
     }
   },
@@ -368,16 +373,17 @@ PrinceJS.Game.prototype = {
         break;
 
       case 3:
-        skeleton = this.kid.opponent && this.kid.opponent.charName === "skeleton" ? this.kid.opponent : null;
+        skeleton = this.enemies.find((enemy) => !enemy.reinforcement && enemy.charName === "skeleton");
         if (skeleton) {
           if (
             this.level.exitDoorOpen &&
             this.kid.room === skeleton.room &&
-            Math.abs(this.kid.opponentDistance()) < 999
+            this.kid.charBlockY === skeleton.charBlockY
           ) {
             let tile = this.level.getTileAt(skeleton.charBlockX, skeleton.charBlockY, skeleton.room);
             if (tile.element === PrinceJS.Level.TILE_SKELETON) {
               tile.removeObject();
+              skeleton.opponent = this.kid;
               skeleton.setActive();
               this.game.sound.play("BonesLeapToLife");
             }
@@ -567,7 +573,7 @@ PrinceJS.Game.prototype = {
           }
           if (
             !this.shadow.active &&
-            this.kid.opponent &&
+            this.kid.opponent === this.shadow &&
             Math.abs(this.kid.opponentDistance()) <= (this.kid.action.includes("jump") ? 15 : 7) &&
             !this.level.shadowMerge
           ) {
@@ -623,7 +629,7 @@ PrinceJS.Game.prototype = {
             }
           }
         });
-        jaffar = this.kid.opponent && this.kid.opponent.baseCharName === "jaffar" ? this.kid.opponent : null;
+        jaffar = this.enemies.find((enemy) => !enemy.reinforcement && enemy.baseCharName === "jaffar");
         if (jaffar) {
           if (!jaffar.alive && !PrinceJS.endTime) {
             PrinceJS.endTime = new Date();
@@ -788,7 +794,7 @@ PrinceJS.Game.prototype = {
     }
 
     if (PrinceJS.currentLevel >= 100 && this.level.number === 14) {
-      PrinceJS.Utils.resetRemainingMinutesTo60();
+      PrinceJS.Utils.resetRemainingMinutesTo600();
     }
 
     this.reset();
@@ -1033,6 +1039,9 @@ PrinceJS.Game.prototype = {
         enemy.startFight = canReact;
       }
       if (canReact) {
+        if (enemy.baseCharName === "jaffar" && !enemy.meet) {
+          this.game.sound.play("Jaffar2");
+        }
         enemy.meet = true;
         this.hordeEngaged = true;
       } else {
@@ -1054,6 +1063,12 @@ PrinceJS.Game.prototype = {
       }
     }
 
+    // The synchronized shadow is part of the level puzzle even after surrendering.
+    // Other guards still pursue independently while this interaction owns the HUD.
+    if (this.kid.opponentSync && this.shadow && this.shadow.alive && this.shadow.visible && !this.level.shadowMerge) {
+      currentEnemy = this.shadow;
+      this.shadow.opponent = this.kid;
+    }
     if (this.kid.opponent !== currentEnemy) {
       this.kid.opponent = currentEnemy;
       this.kid.flee = false;

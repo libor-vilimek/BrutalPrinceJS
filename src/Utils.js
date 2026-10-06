@@ -302,16 +302,14 @@ PrinceJS.Utils = {
 
   setRemainingMinutesTo15() {
     if (PrinceJS.Utils.getRemainingMinutes() > 15) {
-      PrinceJS.Utils.minutes = 15;
-      let date = new Date();
-      date.setMinutes(date.getMinutes() - (60 - PrinceJS.Utils.minutes));
-      PrinceJS.startTime = date;
+      PrinceJS.minutes = 15;
+      PrinceJS.startTime = new Date(Date.now() - (PrinceJS.TIME_LIMIT - PrinceJS.minutes) * 60000);
       PrinceJS.Utils.updateQuery();
     }
   },
 
-  resetRemainingMinutesTo60() {
-    PrinceJS.Utils.minutes = 60;
+  resetRemainingMinutesTo600() {
+    PrinceJS.minutes = PrinceJS.TIME_LIMIT;
     PrinceJS.startTime = undefined;
     PrinceJS.endTime = undefined;
     PrinceJS.Utils.updateQuery();
@@ -332,7 +330,7 @@ PrinceJS.Utils = {
 
   getRemainingMinutes: function () {
     let deltaTime = PrinceJS.Utils.getDeltaTime();
-    return Math.min(60, Math.max(0, 60 - deltaTime.minutes));
+    return Math.min(PrinceJS.TIME_LIMIT, Math.max(0, PrinceJS.TIME_LIMIT - deltaTime.minutes));
   },
 
   getRemainingSeconds: function () {
@@ -358,7 +356,7 @@ PrinceJS.Utils = {
     // Health is fixed at ten in this version; older saved health/h values must not reduce it.
     if (query.get("time") || query.get("t")) {
       let queryTime = parseInt(query.get("time") || query.get("t"), 10);
-      if (!isNaN(queryTime) && queryTime >= 1 && queryTime <= 60) {
+      if (!isNaN(queryTime) && queryTime >= 1 && queryTime <= PrinceJS.TIME_LIMIT) {
         PrinceJS.minutes = queryTime;
       }
     }
@@ -410,9 +408,7 @@ PrinceJS.Utils = {
 
   restoreQuery: function () {
     if (PrinceJS.Utils.getRemainingMinutes() < PrinceJS.minutes) {
-      let date = new Date();
-      date.setMinutes(date.getMinutes() - (60 - PrinceJS.minutes));
-      PrinceJS.startTime = date;
+      PrinceJS.startTime = new Date(Date.now() - (PrinceJS.TIME_LIMIT - PrinceJS.minutes) * 60000);
     }
   },
 

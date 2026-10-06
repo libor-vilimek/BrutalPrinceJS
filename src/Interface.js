@@ -227,7 +227,7 @@ PrinceJS.Interface.prototype = {
       this.showRemainingSeconds();
     } else if (
       force ||
-      (PrinceJS.Utils.getRemainingMinutes() < 60 &&
+      (PrinceJS.Utils.getRemainingMinutes() < PrinceJS.TIME_LIMIT &&
         PrinceJS.Utils.getRemainingMinutes() % 5 === 0 &&
         PrinceJS.Utils.getDeltaTime().seconds === 0)
     ) {

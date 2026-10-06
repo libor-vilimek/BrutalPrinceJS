@@ -47,12 +47,17 @@ function fixture() {
   addRoom(1, 0, 0);
   const shatters = [];
   const fires = [];
+  const wallContacts = [];
   const controller = {
     level,
     kid: { room: 1 },
     effects: { shatter: (x, y, burning) => shatters.push({ x, y, burning }) },
     resolveRoom: PrinceJS.GorePhysics.prototype.resolveRoom,
-    ignite: (bottle, column, row, y) => fires.push({ room: bottle.room, x: bottle.x, y, column, row })
+    ignite: (bottle, column, row, y) => fires.push({ room: bottle.room, x: bottle.x, y, column, row }),
+    igniteWall: (bottle, contact) => {
+      wallContacts.push(contact);
+      shatters.push({ x: bottle.x, y: bottle.y, burning: true });
+    }
   };
   const ballistics = PrinceJS.MolotovBallistics;
   const create = (state = {}, point = { x: 20, y: 160 }) =>
@@ -68,7 +73,20 @@ function fixture() {
     }
     return { bottle, alive, highest, rooms };
   };
-  return { PrinceJS, ballistics, controller, level, setTile, addRoom, floor, shatters, fires, create, flight };
+  return {
+    PrinceJS,
+    ballistics,
+    controller,
+    level,
+    setTile,
+    addRoom,
+    floor,
+    shatters,
+    fires,
+    wallContacts,
+    create,
+    flight
+  };
 }
 
 test("charge controls launch speed and exact 30/70-degree aim in both directions", () => {
@@ -145,6 +163,9 @@ test("sweeps stop fast bottles at walls and thin closed gates but pass beneath a
     Object.assign(bottle, { vx: 1000, vy: 0 });
     assert.equal(f.ballistics.advanceBottle(f.controller, bottle, 0.12), false);
     assert.equal(f.shatters.length, 1);
+    assert.equal(f.shatters[0].burning, true);
+    assert.equal(f.wallContacts.length, 1);
+    assert.equal(f.wallContacts[0].normalX, -1);
     assert.equal(f.fires.length, 0);
     assert.ok(bottle.x <= (element === 4 ? 131 : 91) + 0.00001);
   }
@@ -190,17 +211,18 @@ test("thrown bottles cross horizontal links in either direction and ignite the n
   }
 });
 
-test("a tap from a hanging ledge still drops beneath the shaft, while charging and Up produce arcs", () => {
+test("hanging throws always drop beneath the shaft, independent of charge, Up, or facing", () => {
   const f = fixture();
-  const dropped = f.create({ hanging: true, charge: 0.08 });
-  assert.equal(dropped.vx, 0);
-  assert.equal(dropped.vy, 65);
-  const charged = f.create({ hanging: true, charge: 0.3 });
-  assert.ok(charged.vx > 0);
-  assert.ok(charged.vy < 0);
-  const high = f.create({ hanging: true, charge: 0, aimUp: true });
-  assert.ok(high.vx > 0);
-  assert.ok(high.vy < 0);
+  for (const direction of [-1, 1]) {
+    for (const charge of [0, 0.3, 1.5]) {
+      for (const aimUp of [false, true]) {
+        const dropped = f.create({ hanging: true, charge, direction, aimUp });
+        assert.equal(dropped.vx, 0);
+        assert.equal(dropped.vy, 65);
+        assert.equal(dropped.aimUp, false);
+      }
+    }
+  }
 });
 
 test("a hanging bottle passes down a linked shaft and lands only on a real supporting floor", () => {

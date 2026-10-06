@@ -6,8 +6,8 @@ const path = require("node:path");
 const vm = require("node:vm");
 const { test } = require("node:test");
 
-function fixture() {
-  const PrinceJS = { ROOM_WIDTH: 320, ROOM_HEIGHT: 189, BLOCK_WIDTH: 32, BLOCK_HEIGHT: 63 };
+function fixture(number = 13, map = null) {
+  const PrinceJS = { ROOM_WIDTH: 320, ROOM_HEIGHT: 189, BLOCK_WIDTH: 32, BLOCK_HEIGHT: 63, currentLevel: number };
   const context = vm.createContext({
     PrinceJS,
     Phaser: {
@@ -84,6 +84,7 @@ function fixture() {
     sound: { play() {} }
   };
   const level = Object.create(PrinceJS.Level.prototype);
+  level.number = map ? map.number : number;
   level.rooms = [];
   level.dummyWall = Object.assign(Object.create(PrinceJS.Tile.Base.prototype), { element: 20 });
   level.unMaskTile = () => {};
@@ -119,6 +120,25 @@ function fixture() {
   for (let column = 0; column < 10; column++) {
     setTile(1, column, 1, 1);
   }
+  if (map) {
+    level.rooms = [];
+    const roomId = (x, y) =>
+      x >= 0 && x < map.size.width && y >= 0 && y < map.size.height ? map.room[y * map.size.width + x].id : -1;
+    map.room.forEach((room, index) => {
+      if (room.id < 1) {
+        return;
+      }
+      const x = index % map.size.width;
+      const y = Math.floor(index / map.size.width);
+      level.rooms[room.id] = {
+        x,
+        y,
+        links: { left: roomId(x - 1, y), right: roomId(x + 1, y), up: roomId(x, y - 1), down: roomId(x, y + 1) },
+        tiles: []
+      };
+      room.tile.forEach((tile, location) => setTile(room.id, location % 10, Math.floor(location / 10), tile.element));
+    });
+  }
   const pressed = { left: false, right: false, up: false, down: false };
   const roomsChanged = [];
   const kid = Object.assign(Object.create(PrinceJS.Kid.prototype), {
@@ -145,6 +165,8 @@ function fixture() {
     active: true,
     visible: true,
     health: 10,
+    hasJetpack: number >= 13,
+    jetpackEquipped: false,
     alpha: 1,
     scale: { x: -1 },
     sword: { visible: false, scale: { x: -1 } },
@@ -167,16 +189,148 @@ function fixture() {
       this.action = "impale";
     }
   });
+  if (map) {
+    const prince = map.prince;
+    const row = Math.floor(prince.location / 10);
+    const room = level.rooms[prince.room];
+    Object.assign(kid, {
+      room: prince.room,
+      baseX: room.x * 320,
+      baseY: room.y * 189 + 3,
+      charX:
+        PrinceJS.Utils.convertBlockXtoX(prince.location % 10) + (prince.turn !== false ? 7 : 0) + (prince.offset || 0),
+      charY: PrinceJS.Utils.convertBlockYtoY(row),
+      charFace: prince.direction * (prince.reverse || 1),
+      charBlockX: prince.location % 10,
+      charBlockY: row
+    });
+  }
   kid.updateCharFrame();
-  const ui = { showText() {} };
-  const jetpack = new PrinceJS.Jetpack({ game, kid, level, ui });
+  const messages = [];
+  const ui = { showText: (text) => messages.push(text) };
+  const jetpack = new PrinceJS.Jetpack({ game, kid, level, ui }, map ? map.prince.direction : 1);
   const advance = (ticks, dt = 0.05) => {
     for (let i = 0; i < ticks; i++) {
       jetpack.update(dt);
     }
   };
-  return { PrinceJS, kid, level, jetpack, pressed, graphics, sprites, setTile, advance, roomsChanged };
+  return { PrinceJS, kid, level, jetpack, pressed, graphics, sprites, setTile, advance, roomsChanged, messages };
 }
+
+function nativeMap(number) {
+  const mapPath = number < 90 ? `level${number}.json` : `custom/level${number}.json`;
+  return JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/maps", mapPath), "utf8"));
+}
+
+test("levels before 12 cannot equip a jetpack and contain no pickup", () => {
+  for (const number of [1, 2, 3, 11]) {
+    const f = fixture(number, nativeMap(number));
+    assert.equal(f.kid.hasJetpack, false);
+    assert.equal(f.jetpack.pickup, null);
+    assert.equal(f.jetpack.toggle(), false);
+    assert.equal(f.kid.specialAction, null);
+    assert.equal(f.kid.jetpackEquipped, false);
+    f.advance(20);
+    assert.ok(f.graphics.every((graphic) => !graphic.visible));
+  }
+});
+
+test("level 12 places matching pickup art on reachable clear floor beside the real entrance", () => {
+  const f = fixture(12, nativeMap(12));
+  const pickup = f.jetpack.pickup;
+  const room = f.level.rooms[3];
+  assert.equal(f.kid.hasJetpack, false);
+  assert.equal(f.jetpack.toggle(), false);
+  assert.equal(pickup.room, 3);
+  assert.equal(pickup.worldX - room.x * 320, 208);
+  assert.equal(pickup.worldY - room.y * 189, 182);
+  assert.equal(f.level.getTileAt(6, 2, 3).element, f.PrinceJS.Level.TILE_FLOOR);
+  assert.equal(pickup.collected, false);
+  assert.equal(f.jetpack.effects.pickupGraphic.visible, true);
+  assert.ok(f.jetpack.effects.pickupGraphic.shapes.some((shape) => shape.color === 0x97adb0));
+  assert.ok(f.jetpack.effects.pickupGraphic.shapes.some((shape) => shape.color === 0x92d9df));
+  f.advance(30);
+  assert.equal(f.kid.hasJetpack, false, "the starting pose does not silently collect it");
+  f.kid.charX = ((pickup.worldX - f.kid.baseX) * 140) / 320;
+  f.kid.charBlockX = 6;
+  f.advance(1);
+  assert.equal(f.kid.hasJetpack, true);
+  assert.equal(pickup.collected, true);
+  assert.equal(f.jetpack.effects.pickupGraphic.visible, false);
+  assert.equal(f.kid.jetpackEquipped, false, "collecting it does not automatically start flying");
+  assert.equal(f.kid.specialAction, null);
+  assert.equal(f.messages.filter((text) => text.includes("COLLECTED")).length, 1);
+  f.advance(10);
+  assert.equal(f.messages.filter((text) => text.includes("COLLECTED")).length, 1);
+  assert.equal(f.jetpack.toggle(), true);
+  f.pressed.up = true;
+  f.advance(12);
+  assert.equal(f.jetpack.phase, "flying");
+  assert.ok(f.kid.charY < 179);
+});
+
+test("jumping, falling, hanging or locked actors must land before collecting the level 12 pack", () => {
+  const f = fixture(12, nativeMap(12));
+  f.kid.charX = ((f.jetpack.pickup.worldX - f.kid.baseX) * 140) / 320;
+  for (const action of ["hang", "runningjump", "freefall", "climbup"]) {
+    f.kid.action = action;
+    assert.equal(f.jetpack.checkPickup(), false);
+    assert.equal(f.kid.hasJetpack, false);
+  }
+  f.kid.action = "stand";
+  for (const flag of ["inFallDown", "inJumpUp"]) {
+    f.kid[flag] = true;
+    assert.equal(f.jetpack.checkPickup(), false);
+    f.kid[flag] = false;
+  }
+  for (const flag of ["alive", "active", "visible"]) {
+    f.kid[flag] = false;
+    assert.equal(f.jetpack.checkPickup(), false);
+    f.kid[flag] = true;
+  }
+  f.kid.specialAction = { owner: {}, type: "weapon" };
+  assert.equal(f.jetpack.checkPickup(), false);
+  f.kid.specialAction = null;
+  assert.equal(f.jetpack.checkPickup(), true);
+});
+
+test("the manual level 12 pickup avoids hazards, uncollected weapons and floors beyond a gap", () => {
+  const f = fixture(12, nativeMap(12));
+  f.setTile(3, 6, 2, f.PrinceJS.Level.TILE_SPIKES);
+  let pickup = f.jetpack.findPickup(1);
+  assert.equal(pickup.worldX - f.kid.baseX, 80, "the unsafe right approach chooses clear floor on the left");
+  f.setTile(3, 6, 2, f.PrinceJS.Level.TILE_SPACE);
+  pickup = f.jetpack.findPickup(1);
+  assert.equal(pickup.worldX - f.kid.baseX, 80, "a pack is never stranded beyond the hole");
+  f.jetpack.delegate.weapons = [
+    { pickup: { room: 3, worldX: f.kid.baseX + 80, worldY: f.jetpack.pickup.worldY, collected: false } }
+  ];
+  f.setTile(3, 1, 2, f.PrinceJS.Level.TILE_SPIKES);
+  assert.equal(f.jetpack.findPickup(1), null, "no reachable unoccupied pickup position is preferable to a hazard");
+});
+
+test("direct level 13 and later starts keep owned packs unequipped, including custom map numbers", () => {
+  for (const number of [13, 14, 99]) {
+    const f = fixture(number, nativeMap(number));
+    assert.equal(f.kid.hasJetpack, true);
+    assert.equal(f.kid.jetpackEquipped, false);
+    assert.equal(f.jetpack.pickup, null);
+    assert.equal(f.jetpack.effects.pickupGraphic.visible, false);
+    assert.equal(f.jetpack.toggle(), true);
+    assert.equal(f.kid.jetpackEquipped, true);
+    assert.equal(f.jetpack.phase, "equipping");
+    f.jetpack.destroy();
+    assert.ok(f.graphics.every((graphic) => graphic.destroyed));
+    const restarted = fixture(number, nativeMap(number));
+    assert.equal(restarted.kid.hasJetpack, true);
+    assert.equal(restarted.kid.jetpackEquipped, false);
+    assert.equal(restarted.jetpack.pickup, null);
+    assert.equal(restarted.jetpack.toggle(), true);
+  }
+  const twelve = fixture(12, nativeMap(12));
+  assert.equal(twelve.kid.hasJetpack, false);
+  assert.equal(twelve.jetpack.pickup.collected, false);
+});
 
 test("J equips in a short locked sequence, then arrows lift the Prince and idle hovers", () => {
   const f = fixture();

@@ -220,9 +220,11 @@ PrinceJS.MolotovEffects.prototype = {
             [10, -15, 28]
           ]
         : [
-            [0, -15, 28],
-            [0.08, -2, 26],
-            [0.24, -2, 26],
+            [0, -13, 32],
+            [0.06, -14, 32],
+            [0.12, -2, 16],
+            [0.2, -14, 32],
+            [0.28, -2, 26],
             [0.32, -9, 33],
             [0.42, -8, 45],
             [0.6, -1, 1]
@@ -261,16 +263,20 @@ PrinceJS.MolotovEffects.prototype = {
     this.rect(graphics, 0xc98b58, hand[0] - 1, hand[1] - 1, 4, 4);
     this.rect(graphics, 0xffce95, hand[0], hand[1] - 1, 3, 3);
 
-    // Keep the ledge hand planted and use the mouth-held lighter for the free-hand bottle.
-    if (!charging && time >= 0.08 && time < 0.45) {
+    // Pull the lighter from the belt, then keep it in the mouth while the free hand takes the bottle.
+    if (!charging && time >= 0.04 && time < 0.12) {
+      this.rect(graphics, 0x626970, hand[0], hand[1] - 5, 3, 5);
+      this.rect(graphics, 0xd6d3b7, hand[0], hand[1] - 5, 3, 1);
+    }
+    if (!charging && time >= 0.12 && time < 0.45) {
       this.rect(graphics, 0x626970, -3 + sway, 16, 5, 2);
       this.rect(graphics, 0xd6d3b7, 1 + sway, 16, 1, 1);
       if (state.lighterLit) {
         this.flame(graphics, 2 + sway, 16, 5, this.elapsed * 29, 1);
       }
     }
-    if (charging || time < PrinceJS.Molotov.RELEASE_TIME) {
-      this.drawBottle(graphics, hand[0] + 2, hand[1] + 1, !charging && time >= 0.24, this.elapsed * 28);
+    if (charging || (time >= 0.2 && time < PrinceJS.Molotov.RELEASE_TIME)) {
+      this.drawBottle(graphics, hand[0] + 2, hand[1] + 1, !charging && time >= 0.28, this.elapsed * 28);
     }
     if (!charging && time >= 0.12 && time < 0.45) {
       this.rect(graphics, 0xffc84c, -10 + sway, 13, 7, 7, 0.18 + Math.sin(this.elapsed * 37) * 0.05);
@@ -418,6 +424,10 @@ PrinceJS.MolotovEffects.prototype = {
     this.light.clear();
     for (let fire of fires) {
       let fade = Math.min(1, fire.age / 0.12, fire.life / 0.65);
+      if (fire.kind === "wall") {
+        this.drawWallFire(fire, fade, delta);
+        continue;
+      }
       let width = fire.radius * Math.min(1, 0.45 + fire.age * 3);
       for (let i = -4; i <= 4; i++) {
         let x = fire.x + (i / 4) * width;
@@ -445,7 +455,26 @@ PrinceJS.MolotovEffects.prototype = {
     }
   },
 
-  update: function (delta, state, bottles, fires) {
+  drawWallFire: function (fire, fade, delta) {
+    let top = Math.max(fire.top, fire.y - 13);
+    let bottom = Math.min(fire.bottom - 1, fire.y + 21);
+    let normal = fire.normalX;
+    let smearX = fire.x + (normal < 0 ? -1 : -2);
+    this.rect(this.fire, 0x351c15, smearX, top, 3, Math.max(1, bottom - top), fade * 0.7);
+    this.rect(this.fire, 0xa13e18, fire.x + normal - 1, fire.y - 4, 3, Math.min(16, bottom - fire.y + 4), fade * 0.65);
+    for (let i = 0; i < 5; i++) {
+      let y = Math.min(bottom, top + 7 + i * 6);
+      this.flame(this.fire, fire.x + normal * (2 + (i % 2)), y, 5 + (i % 3) * 2, this.elapsed * 18 + i * 1.7, fade);
+    }
+    this.light.beginFill(0xffb628, 0.09 * fade);
+    this.light.drawCircle(fire.x + normal * 5, fire.y, 48);
+    this.light.endFill();
+    if (Math.random() < delta * 10) {
+      this.emit(fire.x + normal * 5, fire.y - 13, normal * 3, -15, 0.6, 0x76614d, true);
+    }
+  },
+
+  update: function (delta, state, bottles, fires, oils = []) {
     if (this.destroyed) {
       return;
     }
@@ -463,6 +492,11 @@ PrinceJS.MolotovEffects.prototype = {
     this.bottles.clear();
     for (let bottle of bottles) {
       this.drawBottle(this.bottles, bottle.x, bottle.y, true, this.elapsed * 26 + bottle.age);
+    }
+    for (let oil of oils) {
+      this.rect(this.bottles, 0xd54e1c, oil.x - 1, oil.y - 7, 2, 8, 0.85);
+      this.flame(this.bottles, oil.x, oil.y, 4, this.elapsed * 23 + oil.age, 1);
+      this.rect(this.bottles, 0xffed9c, oil.x, oil.y, 1, 2);
     }
     this.drawFires(fires, delta);
     this.debris.clear();

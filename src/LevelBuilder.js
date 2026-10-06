@@ -81,6 +81,7 @@ PrinceJS.LevelBuilder.prototype = {
     }
 
     this.level.events = json.events;
+    this.linkExitDoors();
 
     return this.level;
   },
@@ -90,6 +91,25 @@ PrinceJS.LevelBuilder.prototype = {
       for (let x = 0; x < 10; x++) {
         let tile = this.buildTile(x, y, id, startId, startLocation);
         this.level.addTile(x, y, id, tile);
+      }
+    }
+  },
+
+  linkExitDoors: function () {
+    this.level.exitDoors = [];
+    this.level.entranceDoors = [];
+    for (let room of this.level.rooms.filter(Boolean)) {
+      for (let door of room.tiles) {
+        if (door.element !== PrinceJS.Level.TILE_EXIT_RIGHT) {
+          continue;
+        }
+        let left = this.level.getTileAt(door.roomX - 1, door.roomY, door.room);
+        if (left.element === PrinceJS.Level.TILE_EXIT_LEFT) {
+          left.doorRole = door.doorRole;
+          left.exitDoor = door;
+          door.leftTile = left;
+        }
+        this.level[door.doorRole === "entrance" ? "entranceDoors" : "exitDoors"].push(door);
       }
     }
   },
@@ -194,7 +214,7 @@ PrinceJS.LevelBuilder.prototype = {
 
       case PrinceJS.Level.TILE_EXIT_RIGHT:
         open = id === startId && Math.abs(tileNumber - startLocation) <= 1;
-        tile = new PrinceJS.Tile.ExitDoor(this.game, t.modifier, this.type, open);
+        tile = new PrinceJS.Tile.ExitDoor(this.game, t.modifier, this.type, open, open ? "entrance" : "exit");
         this.level.addTrob(tile);
         if (open) {
           PrinceJS.Utils.delayed(() => {

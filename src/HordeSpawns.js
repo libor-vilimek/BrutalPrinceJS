@@ -14,18 +14,37 @@ PrinceJS.HordeSpawns = {
     enemy.updateCharPosition();
   },
 
-  create: function (level, json) {
-    if (![1, 2].includes(level.number)) {
-      return [];
+  storyRows: function (level, json) {
+    // Converted custom maps use their own actors and disable campaign scripts.
+    if (json.id !== undefined || json.prince.specialEvents === false) {
+      return new Set();
     }
+    let rows = new Set(
+      json.guards
+        .filter((guard) => !["guard", "fatguard"].includes(guard.type))
+        .map((guard) => `${guard.room}:${Math.floor((guard.location + (guard.bias || 0)) / 10)}`)
+    );
+    // These actors move to other floors during skeleton, potion and merge scenes.
+    let choreography = {
+      3: ["3:1", "8:2"],
+      5: ["24:0"],
+      12: ["15:0", "15:1", "2:0"]
+    };
+    for (let row of choreography[level.number] || []) {
+      rows.add(row);
+    }
+    return rows;
+  },
 
+  create: function (level, json) {
     let spawnRoom = level.rooms[json.prince.room];
     if (!spawnRoom) {
       return [];
     }
     let spawnColumn = (json.prince.location + (json.prince.bias || 0)) % 10;
     let spawnX = spawnRoom.x * PrinceJS.ROOM_WIDTH + spawnColumn * PrinceJS.BLOCK_WIDTH + 16;
-    let introRoom = level.number === 1 ? spawnRoom.links.down : null;
+    let introRoom = level.number === 1 && json.id === undefined ? spawnRoom.links.down : null;
+    let storyRows = this.storyRows(level, json);
     let guards = [];
     let occupied = json.guards.map((guard) => {
       let room = level.rooms[guard.room];
@@ -53,7 +72,22 @@ PrinceJS.HordeSpawns = {
         continue;
       }
       for (let row = 0; row < 3; row++) {
+        if (storyRows.has(`${roomId}:${row}`)) {
+          continue;
+        }
         for (let column = 0; column < 10; column++) {
+          // The upper-left landing joins the invisible leap-of-faith bridge.
+          if (
+            json.id === undefined &&
+            json.prince.specialEvents !== false &&
+            level.number === 12 &&
+            level.rooms[2] &&
+            roomId === level.rooms[2].links.left &&
+            row === 0 &&
+            column >= 6
+          ) {
+            continue;
+          }
           // A small first encounter directly beneath the loose-floor shaft gives
           // the hanging molotov a purpose before the minigun pickup on the left.
           if (roomId === introRoom && (row !== 1 || ![6, 7].includes(column))) {

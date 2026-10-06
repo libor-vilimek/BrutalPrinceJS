@@ -84,7 +84,7 @@ PrinceJS.RocketLauncher.prototype.impact = function (rocket, directHit, obstacle
   }
   // Evaluate splash against the intact wall, then leave an opening for the next shot and the Prince.
   if (obstacle) {
-    this.level.destroyBarrier(obstacle);
+    this.level.destroyBarrier(obstacle, rocket);
   }
 };
 
@@ -99,8 +99,13 @@ PrinceJS.RocketLauncher.prototype.obstacleAt = function (rocket, room) {
   if (tile.element === PrinceJS.Level.TILE_EXIT_LEFT) {
     tile = this.level.getTileAt(column + 1, row, rocket.room);
   }
-  // Exit stairs face the camera, but their closed panels can still be blasted open.
-  return tile.element === PrinceJS.Level.TILE_EXIT_RIGHT && !tile.open ? tile : null;
+  // Even an opened exit has a facade to shatter. Entrance panels stop a shot
+  // while closed, but Level.destroyBarrier keeps the arrival door intact.
+  return tile.element === PrinceJS.Level.TILE_EXIT_RIGHT &&
+    !tile.destroyedByRocket &&
+    (!tile.open || tile.doorRole === "exit")
+    ? tile
+    : null;
 };
 
 PrinceJS.RocketLauncher.prototype.blastCanReach = function (rocket, x, y) {

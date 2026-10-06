@@ -7,6 +7,7 @@ PrinceJS.RangedWeapon = function (delegate, direction, spec) {
   this.level = delegate.level;
   this.kid = delegate.kid;
   this.pickup = this.findPickup(direction);
+  this.pickup.collected = !!this.kid[this.spec.owned];
   this.effects = new spec.effects(this.game, this.kid, this.pickup);
   this.fireKey = delegate.weaponFireKey;
   this.ctrlKey = delegate.weaponCtrlKey;
