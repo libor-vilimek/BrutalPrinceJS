@@ -49,7 +49,7 @@ function makeKid(direction, frame = 15) {
     active: true,
     room: 1,
     hasTwinTorches: true,
-    whipEquipped: true
+    hasWhip: true
   });
   kid.z = 20;
   kid.getCharBounds = () => {

@@ -141,8 +141,8 @@ async function meleeFireChecks() {
     );
     await walkUntil(() => state.kid.hasWhip, "Walking right from the level-two start collects the whip");
     check(
-      state.kid.activeWeapon === "whip" && !state.whip.effects.ground.visible,
-      "Pickup equips the whip and hides its floor art"
+      state.kid.activeWeapon === "twinTorches" && !state.whip.effects.ground.visible,
+      "Pickup unlocks the X whip and hides its floor art while keeping torches selected"
     );
     state = await loadMission(3);
     quietEnemies(state);
@@ -212,17 +212,20 @@ async function whipChecks() {
     let target;
     for (let directlyBelow of [false, true]) {
       ({ state, target } = await prepareWhipLedge(directlyBelow));
+      const selected = state.kid.activeWeapon;
+      check(!state.weapons.includes(state.whip), "The whip is separate from the numbered weapon inventory");
       let damage = 0;
       target.onDamageLife.add((amount) => (damage += amount));
-      state.weaponCtrlKey.isDown = true;
+      state.whipKey.isDown = true;
+      state.whipKey.onDown.dispatch();
       for (let i = 0; i < 60 && !target.whipState; i++) {
         await pause(25);
       }
       check(
         target.whipState && state.whip.pulledEnemies.has(target),
-        "A real whip crack catches the upper guard's ankle"
+        "X catches the upper guard's ankle without selecting another weapon"
       );
-      state.weaponCtrlKey.isDown = false;
+      state.whipKey.isDown = false;
       for (let i = 0; i < 80 && target.alive && target.whipState && target.whipState.phase !== "recovering"; i++) {
         await pause(25);
       }
@@ -240,24 +243,29 @@ async function whipChecks() {
         !target.whipState && target.alive && target.health === 3,
         "Recovery releases the guard without repeating fall damage"
       );
+      check(state.kid.activeWeapon === selected, "Using X preserves the previously selected main weapon");
     }
     quietEnemies(state);
     placeKid(7, 35, 1, 1);
-    state.selectWeapon("whip");
+    state.selectWeapon("minigun");
     const ordinary = state.enemies.find((enemy) => enemy.alive && enemy !== target && enemy.baseCharName === "guard");
     placeGuard(ordinary, 7, 13, -1);
     ordinary.health = 4;
-    state.weaponCtrlKey.isDown = true;
+    state.whipKey.onDown.dispatch();
     for (let i = 0; i < 100 && ordinary.health === 4; i++) {
       await pause(20);
     }
-    state.weaponCtrlKey.isDown = false;
-    check(ordinary.health === 3 && !ordinary.whipState, "Ordinary same-floor whip strikes deal normal weapon damage");
+    check(ordinary.health === 3 && !ordinary.whipState, "A quick X tap deals one ordinary same-floor whip strike");
     await pause(300);
+    check(
+      state.kid.activeWeapon === "minigun" && !state.kid.specialAction && !state.kid.cropRect,
+      "The tap finishes stowing and restores movement with the minigun still selected"
+    );
     report("ALL WHIP ATTACK AND LEDGE PULL CHECKS PASSED");
   } catch (error) {
     report("FAIL: " + error.message);
   } finally {
+    gameState().whipKey.isDown = false;
     gameState().weaponFireKey.isDown = gameState().weaponCtrlKey.isDown = false;
     busy = false;
   }
@@ -289,7 +297,7 @@ async function torchPreview() {
     await pause(350);
     testGame.paused = true;
     report(
-      "Torches and burning guards. Resume to see the five-second panic run. Hold Ctrl/F to spin; release to stow. 1 torches, 2 molotov, 3 minigun, 4 rockets, 5 whip."
+      "Torches and burning guards. Resume to see the five-second panic run. Hold Ctrl/F to spin; release to stow. 1 torches, 2 molotov, 3 minigun, 4 rockets; X whip."
     );
   } catch (error) {
     report("FAIL: " + error.message);
@@ -306,14 +314,15 @@ async function whipPreview() {
   output.textContent = "";
   try {
     const { state, target } = await prepareWhipLedge(true);
-    state.weaponCtrlKey.isDown = true;
+    state.whipKey.isDown = true;
+    state.whipKey.onDown.dispatch();
     for (let i = 0; i < 80 && !target.whipState; i++) {
       await pause(20);
     }
     check(target.whipState, "The whip catches the guard above the actual gap");
     await pause(70);
     testGame.paused = true;
-    state.weaponCtrlKey.isDown = false;
+    state.whipKey.isDown = false;
     report(
       "Whip around the guard's ankle. Resume to pull him into the gap, lose one life on the short fall and recover before fighting again."
     );
@@ -374,6 +383,10 @@ function placeKid(room, x, row, direction) {
   const kid = state.kid;
   state.weaponFireKey.isDown = false;
   state.weaponCtrlKey.isDown = false;
+  state.whipKey.isDown = false;
+  if (state.whip) {
+    state.whip.cancelAction();
+  }
   for (const weapon of state.weapons) {
     weapon.cancelAction();
   }
@@ -670,16 +683,30 @@ async function campaignChecks() {
       [keys.ONE, "twinTorches"],
       [keys.TWO, "molotov"],
       [keys.THREE, "minigun"],
-      [keys.FOUR, "rocketLauncher"],
-      [keys.FIVE, "whip"]
+      [keys.FOUR, "rocketLauncher"]
     ]) {
       testGame.input.keyboard.addKey(code).onDown.dispatch();
       check(state.kid.activeWeapon === id, "Key " + String.fromCharCode(code) + " selects the owned " + id);
     }
+    testGame.input.keyboard.addKey(keys.FIVE).onDown.dispatch();
+    check(state.kid.activeWeapon === "rocketLauncher", "Key 5 no longer selects a whip");
+    state.whipKey.onDown.dispatch();
+    check(
+      state.whip.actionStage === "drawing" && state.kid.activeWeapon === "rocketLauncher",
+      "A quick X key event starts the whip without changing the selected launcher"
+    );
+    for (let i = 0; i < 80 && state.kid.specialAction; i++) {
+      await pause(25);
+    }
+    check(state.whip.actionStage === "hidden", "The X tap completes one swing and stows the whip");
+    const oldWhip = state.whip;
     const oldWeapons = [...state.weapons];
     await freshLevel(4);
     check(
       oldWeapons.every((weapon) => weapon.destroyed) &&
+        oldWhip.destroyed &&
+        gameState().whip !== oldWhip &&
+        gameState().kid.hasWhip &&
         gameState().weapons.every((weapon) => !weapon.pickup || weapon.pickup.collected),
       "Restart cleans up controllers and restores all level-four weapons"
     );
@@ -998,7 +1025,10 @@ async function collectWeapon(weapon) {
   const row = Math.floor((weapon.pickup.worldY - room.y * 189) / 63);
   placeKid(weapon.pickup.room, x, row, 1);
   await pause(650);
-  check(gameState().kid[weapon.spec.owned], "Walking over the " + weapon.spec.id + " equips it");
+  check(
+    gameState().kid[weapon.spec.owned],
+    "Walking over the " + weapon.spec.id + (weapon.spec.id === "whip" ? " unlocks X" : " equips it")
+  );
 }
 
 async function collectJetpack(state) {
@@ -1198,7 +1228,7 @@ async function openingPreview() {
     await watchCamera(prepared.state, () => !prepared.state.roomCamera.transition);
     testGame.paused = true;
     report(
-      "Opening: two torches are collected automatically, the molotov stays upstairs, and the glowing minigun waits beside two guards below. Hold Shift to keep hanging, select 2 and press Ctrl to drop a bottle. Keys 1/2/3/4/5 select torches/molotov/minigun/rockets/whip."
+      "Opening: two torches are collected automatically, the molotov stays upstairs, and the glowing minigun waits beside two guards below. Hold Shift to keep hanging, select 2 and press Ctrl to drop a bottle. Keys 1/2/3/4 select torches/molotov/minigun/rockets; X uses the whip."
     );
   } catch (error) {
     report("FAIL: " + error.message);
@@ -2250,7 +2280,7 @@ document.getElementById("exit-preview").addEventListener("click", async () => {
     state.ui.showRemainingMinutes(true);
     testGame.paused = true;
     report(
-      "The next-level exit is shattered and remains usable. The arrival door is protected. Weapon keys: 1 torches, 2 molotov, 3 minigun, 4 rockets, 5 whip; 600-minute clock."
+      "The next-level exit is shattered and remains usable. The arrival door is protected. Weapon keys: 1 torches, 2 molotov, 3 minigun, 4 rockets; X whip; 600-minute clock."
     );
   } catch (error) {
     report("FAIL: " + error.message);
@@ -2285,7 +2315,7 @@ document.getElementById("molotov").addEventListener("click", async () => {
   await pause(1600);
   testGame.paused = true;
   output.textContent =
-    "Molotov fully charged and unlit. Resume game, then Hold / release Ctrl to light and throw. Up selects a 70-degree arc; otherwise 30 degrees. Weapon keys: 1 torches, 2 molotov, 3 minigun, 4 rockets, 5 whip.";
+    "Molotov fully charged and unlit. Resume game, then Hold / release Ctrl to light and throw. Up selects a 70-degree arc; otherwise 30 degrees. Weapon keys: 1 torches, 2 molotov, 3 minigun, 4 rockets; X whip.";
 });
 
 document.getElementById("jetpack").addEventListener("click", async () => {

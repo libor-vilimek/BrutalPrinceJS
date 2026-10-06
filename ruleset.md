@@ -31,12 +31,13 @@ Tento dokument zachycuje aktuální přání z celé této konverzace. Změny zd
 ## Ovládání a inventář
 
 - **INPUT-01:** `SHIFT` zůstává pro pomalou chůzi, držení a chytání hran. Nesmí automaticky vytahovat minigun ani jinou novou zbraň.
-- **INPUT-02:** Nové zbraně používají `CTRL`; `F` zůstává rovnocenná alternativa. Držení a uvolnění se řídí pravidly konkrétní zbraně.
+- **INPUT-02:** Pochodně, molotov, minigun a raketomet používají `CTRL`; `F` zůstává rovnocenná alternativa. Držení a uvolnění se řídí pravidly konkrétní zbraně. Samostatný bič má vlastní klávesu `X` podle INPUT-06.
 - **INPUT-03:** Pochodně jsou první a základní zbraň, molotov druhá. Obě musí být dostupné výběrem v inventáři; molotov je na `2` a pochodně na `1`.
 - **INPUT-04:** `J` zapne/nasadí jetpack a dalším stiskem ho zase sundá. Létání používá šipky.
 - **INPUT-05:** Již získané zbraně zůstávají dostupné pro přepínání. Automatické vybavení v pozdějších levelech nesmí vyžadovat opakovaný sběr.
+- **INPUT-06:** Bič je samostatná akce na klávese `X`, mimo výběr zbraní. `5` ho už nevybírá a `CTRL`/`F` ho nespouští. Sebrání ani použití biče nemění právě vybranou zbraň.
 
-Navazující implementační rozhodnutí: kompletní pořadí kláves je `1` pochodně, `2` molotov, `3` minigun, `4` raketomet, `5` bič. Pochodně jsou výchozí volba při vstupu do levelu. Bič zůstává automaticky dostupný od levelu 3. Tato doplnění navazují na současné ovládání a postup inventáře; uživatel výslovně určil pořadí pochodní a molotovu.
+Navazující implementační rozhodnutí: pořadí zbraní je `1` pochodně, `2` molotov, `3` minigun, `4` raketomet. Pochodně jsou výchozí volba při vstupu do levelu. Bič zůstává automaticky dostupný od levelu 3, samostatně na `X`. Tato doplnění navazují na současné ovládání a postup inventáře; uživatel výslovně určil pořadí pochodní a molotovu a následně vyjmutí biče z výběru zbraní.
 
 ## Levely a získávání vybavení
 
@@ -101,6 +102,8 @@ Navazující implementační rozhodnutí: kompletní pořadí kláves je `1` poc
 - **WHIP-04:** I při krátkém pádu dopadne na obličej a ztratí jeden život. Velký pád ho zabije podle původních pravidel pádu.
 - **WHIP-05:** Přeživší nepřítel se musí chvíli sbírat ze země, než začne znovu útočit. Samotné zotavování neodebírá opakovaně další životy.
 
+Navazující implementační rozhodnutí: krátký stisk `X` dokončí jeden švih, držení švihy opakuje. Po uvolnění princ bič schová a teprve pak se obnoví pohyb a přepínání zbraní. Bič nepřerušuje jinou právě probíhající akci ani schovávání střelné zbraně.
+
 ## Jetpack
 
 - **JET-01:** Jetpack se aktivuje a sundává klávesou `J`, nosí se na zádech a umožňuje létat.
@@ -164,6 +167,7 @@ Tento přehled brání návratu ke starším požadavkům. Nejde o aktivní alte
 | Minigun vpravo od dopadu                                | Poslední umístění je v levé části místnosti.                                        |
 | Nejprve pouze molotov jako první zbraň / molotov na `1` | Základní zbraň jsou dvě pochodně na `1`; molotov na `2` zůstává na svém místě.      |
 | SHIFT vytahuje zbraň                                    | SHIFT slouží pohybu a hranám; zbraně jsou na CTRL/F.                                |
+| Bič jako pátá zbraň na `5`, útok na `CTRL`/`F`          | Samostatný bič na `X`, mimo výběr zbraní; použití ponechá vybranou zbraň.           |
 | Raketomet zatím bez nové grafiky                        | Má mít odpovídající grafiku a animace jako minigun.                                 |
 | Raketomet automaticky od levelu 3                       | Level 3: sebrat na začátku; od levelu 4 automaticky. Výslovně potvrzeno uživatelem. |
 | Jetpack dostupný dříve                                  | Poprvé u startu levelu 12, automaticky od levelu 13.                                |

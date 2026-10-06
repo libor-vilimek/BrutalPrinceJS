@@ -13,9 +13,10 @@ Project decisions and contribution guidance: [ruleset.md](ruleset.md) and [AGENT
     - `Up key`: Jump, Climb Up
     - `Down key`: Crouch, Crawl, Climb Down
   - `SHIFT`: Walk slowly, Drink Potion, Grab Edge
-  - `CTRL / F`: Hold to spin torches, lash a whip, draw and fire a gun, or charge a molotov and release to throw
+  - `CTRL / F`: Hold to spin torches, draw and fire a gun, or charge a molotov and release to throw
   - `CTRL / F` with molotov selected while hanging: Immediately light and drop it below
-  - `1 / 2 / 3 / 4 / 5`: Select torches / molotov / minigun / rocket launcher / whip when owned
+  - `1 / 2 / 3 / 4`: Select torches / molotov / minigun / rocket launcher when owned
+  - `X`: Use the whip directly when owned; tap for one strike or hold for repeated lashes
   - `J`: Equip/activate the jetpack, or remove it; fly with the cursor keys
   - `SPACE`: Show Remaining Time
   - `ENTER`: Continue Game
@@ -47,7 +48,7 @@ All equipment poses retain the original Prince's pale clothes, bare arms, small 
 
 Select `1` and hold `CTRL` or `F` to draw both torches and spin in place. The sweep reaches farther than enemy swords and ignites every reachable nearby guard. The compact arm motion retains the same wide fire trail and attack reach. Sword hits can remove a life during the opening or draw animation without interrupting a surviving Prince; spinning blocks sword hits. Releasing the trigger stows both torches before movement resumes. A burning enemy immediately stops fighting and counts as dead, then runs frantically for five seconds through real rooms, gaps and traps before leaving a persistent charred body.
 
-Select `5` after collecting the whip. Holding `CTRL` or `F` repeatedly lashes nearby enemies for ordinary weapon damage. A guard standing just above the Prince near an open ledge can instead be caught by the ankle and dragged into the gap, including when the Prince stands directly underneath facing either way. The cord automatically wraps around the floor's open edge within its reach; solid floors, walls and closed gates still block it. Even a short fall removes one life and leaves the guard face down before a slow recovery; longer falls and traps retain their native fatal behavior.
+After collecting the whip, press `X` for one strike or hold it to lash repeatedly. The whip is a separate action outside the numbered weapon inventory: collecting or using it keeps the selected main weapon. It deals ordinary weapon damage to nearby enemies. A guard standing just above the Prince near an open ledge can instead be caught by the ankle and dragged into the gap, including when the Prince stands directly underneath facing either way. The cord automatically wraps around the floor's open edge within its reach; solid floors, walls and closed gates still block it. Even a short fall removes one life and leaves the guard face down before a slow recovery; longer falls and traps retain their native fatal behavior.
 
 Hold `CTRL` or `F` to fire in the direction the Prince faces. Press `2` for molotov, `3` for minigun or `4` for rocket launcher when owned; all stay in your inventory. Guns are hidden while idle. The minigun starts with a quick reach behind the back and draw animation, then the Prince braces it with both hands. Drawing, firing and stowing lock movement. Releasing fire stops shots immediately, then the Prince puts the minigun behind his back and lowers his hands in a 0.32-second animation before movement resumes. A new trigger press waits for stowing to finish and draws again; weapon selection cannot skip it. Releasing an incomplete draw reverses that shorter part of the motion. Its head and ochre hair use the original Prince sprite at native size, with a small clenched smile. Muzzle flashes light his face and clothes yellow. The Prince's sword is disabled, including automatic sword combat near enemies. `SHIFT` keeps ordinary slow walking, potion pickups and ledge grabs without drawing a gun. The touch action area and controller action buttons can also fire; potion pickups keep priority on those inputs. Both guns have unlimited ammunition; firing stops during jumps, climbing, item animations, and jetpack flight.
 
