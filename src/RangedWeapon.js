@@ -80,8 +80,10 @@ PrinceJS.RangedWeapon.prototype = {
     this.cooldown = Math.max(0, this.cooldown - delta);
     this.equipTime = Math.max(0, this.equipTime - delta);
     this.checkPickup();
+    this.firing = this.canFire() && this.triggerDown();
+    this.effects.firing = this.firing;
     let muzzle = this.effects.getMuzzle();
-    this.firing = this.canFire() && muzzle.visible !== false && this.triggerDown();
+    this.firing = this.firing && muzzle.visible !== false;
     this.advanceBullets(delta);
     if (this.firing && this.cooldown === 0) {
       this.fire(muzzle);
@@ -92,6 +94,7 @@ PrinceJS.RangedWeapon.prototype = {
   },
 
   updateEffects: function (delta) {
+    this.effects.firing = this.firing;
     this.effects.update(delta, this.firing);
   },
 
@@ -100,6 +103,7 @@ PrinceJS.RangedWeapon.prototype = {
       this.pickup.collected ||
       !this.kid.alive ||
       !this.kid.visible ||
+      this.kid.specialAction ||
       this.kid.inFallDown ||
       this.kid.inJumpUp ||
       /hang|climb|jump|fall/.test(this.kid.action)
@@ -123,30 +127,31 @@ PrinceJS.RangedWeapon.prototype = {
   },
 
   toggleEquipped: function () {
-    if (!this.kid[this.spec.owned] || !this.kid.alive) {
+    if (!this.kid[this.spec.owned] || !this.kid.alive || !this.canSelect()) {
       return;
     }
     if (this.kid[this.spec.equipped]) {
       this.kid[this.spec.equipped] = false;
+      this.cancelAction();
     } else {
       this.equip();
     }
     this.firing = false;
     this.equipTime = Math.max(this.equipTime, 0.2);
     this.delegate.ui.showText(
-      this.spec.label + (this.kid[this.spec.equipped] ? " READY - CTRL TO HIDE" : " HIDDEN - CTRL TO EQUIP"),
+      this.spec.label + (this.kid[this.spec.equipped] ? " READY - F TO FIRE" : " HIDDEN - CTRL TO EQUIP"),
       "weapon"
     );
     this.delegate.ui.hideTextTimer = 40;
   },
 
   equip: function () {
-    if (!this.kid[this.spec.owned] || !this.kid.alive) {
-      return;
+    if (!this.kid[this.spec.owned] || !this.kid.alive || !this.canSelect()) {
+      return false;
     }
     for (let weapon of this.delegate.weapons || [this]) {
+      weapon.cancelAction();
       this.kid[weapon.spec.equipped] = false;
-      weapon.firing = false;
     }
     this.kid[this.spec.equipped] = true;
     this.kid.activeWeapon = this.spec.id;
@@ -156,6 +161,17 @@ PrinceJS.RangedWeapon.prototype = {
       this.kid.action = "stand";
     }
     this.kid.sword.visible = false;
+    return true;
+  },
+
+  canSelect: function () {
+    let action = this.kid.specialAction;
+    return !action || action.owner === this || (this.delegate.weapons || [this]).includes(action.owner);
+  },
+
+  cancelAction: function () {
+    this.firing = false;
+    this.effects.firing = false;
   },
 
   canFire: function () {
@@ -165,6 +181,7 @@ PrinceJS.RangedWeapon.prototype = {
       this.kid.alive &&
       this.kid.visible &&
       this.kid.active &&
+      (!this.kid.specialAction || this.kid.specialAction.owner === this) &&
       this.equipTime === 0 &&
       !this.kid.inFallDown &&
       !this.kid.inJumpUp &&
@@ -342,8 +359,8 @@ PrinceJS.RangedWeapon.prototype = {
   playShotSound: function () {},
 
   destroy: function () {
+    this.cancelAction();
     this.destroyed = true;
-    this.firing = false;
     this.bullets.length = 0;
     this.effects.destroy();
     this.tracers.destroy();

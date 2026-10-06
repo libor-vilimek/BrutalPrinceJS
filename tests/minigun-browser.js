@@ -44,6 +44,13 @@ async function ready() {
 function placeKid(room, x, row, direction) {
   const state = gameState();
   const kid = state.kid;
+  state.weaponFireKey.isDown = false;
+  for (const weapon of state.weapons) {
+    weapon.cancelAction();
+  }
+  if (state.jetpack && kid.specialAction && kid.specialAction.owner === state.jetpack) {
+    state.jetpack.toggle();
+  }
   kid.room = room;
   kid.charX = x;
   kid.charY = (row + 1) * 63 - 10;
@@ -98,7 +105,7 @@ async function combatChecks() {
         testGame.paused +
         ")"
     );
-    check(state.minigun.effects.getMuzzle().visible, "Pickup animation equips the weapon");
+    check(!state.minigun.effects.weapon.visible, "Collected minigun stays hidden until fire is held");
     placeKid(21, 42, 0, 1);
     const guard = state.enemies.find((enemy) => enemy.room === 21);
     check(guard.alive && guard.health > 0, "Target guard starts alive");
@@ -119,12 +126,12 @@ async function combatChecks() {
     );
     check(state.minigun.effects.shots === shots, "Holstered minigun cannot fire");
     state.weaponToggleKey.onDown.dispatch();
-    await pause(600);
+    await pause(900);
     check(state.kid.minigunEquipped && state.minigun.effects.shots > shots, "Ctrl re-equips and firing resumes");
     state.minigun.fireKey.isDown = false;
     placeKid(21, 63, 0, -1);
     state.minigun.fireKey.isDown = true;
-    await pause(400);
+    await pause(800);
     check(
       state.minigun.bullets.some((bullet) => bullet.direction === -1),
       "Left-facing fire sends bullets left"
@@ -169,6 +176,19 @@ async function combatChecks() {
     await pause(1500);
     state.weaponFireKey.isDown = false;
     check(!rocketGuard.alive && rocketGuard.health === 0, "A real rocket impact kills the target");
+    await pause(120);
+    check(!state.rocketLauncher.effects.weapon.visible, "The launcher is hidden after fire is released");
+    state.toggleJetpack();
+    await pause(350);
+    state.weaponFireKey.isDown = true;
+    const rocketShots = state.rocketLauncher.effects.shots;
+    await pause(200);
+    check(
+      !state.rocketLauncher.effects.weapon.visible && state.rocketLauncher.effects.shots === rocketShots,
+      "The selected launcher stays hidden and cannot fire while the Prince holds jetpack straps"
+    );
+    state.weaponFireKey.isDown = false;
+    state.toggleJetpack();
     await collectWeapon(state.minigun);
     state.selectWeapon("minigun");
     check(
@@ -192,7 +212,8 @@ async function combatChecks() {
 
 async function preview() {
   await ready();
-  const state = gameState().level.number === 1 ? gameState() : await freshLevel(1);
+  const state = await freshLevel(1);
+  quietEnemies(state);
   if (!state.kid.hasMinigun) {
     placeKid(state.minigun.pickup.room, ((state.minigun.pickup.worldX - state.kid.baseX) * 140) / 320, 1, 1);
     await pause(600);
@@ -203,6 +224,7 @@ async function preview() {
   }
   state.minigun.fireKey.isDown = true;
   state.weaponAudio.unlock();
+  await pause(650);
   output.textContent = "Sustained fire preview. Ctrl toggles holster; Stop firing releases the trigger.";
 }
 
@@ -379,8 +401,179 @@ async function featureChecks() {
   }
 }
 
+function quietEnemies(state) {
+  for (const enemy of state.enemies) {
+    enemy.setInactive();
+    enemy.setInvisible();
+  }
+}
+
+async function prepareMolotov() {
+  const state = await freshLevel(1);
+  quietEnemies(state);
+  const pickup = state.molotov.pickup;
+  const room = state.level.rooms[pickup.room];
+  const row = Math.floor((pickup.worldY - room.y * 189) / 63);
+  placeKid(pickup.room, ((pickup.worldX - room.x * 320) * 140) / 320, row, 1);
+  await pause(500);
+  check(state.kid.hasMolotov, "The bottle on the first starting screen can be collected");
+  placeKid(1, 49, 1, -1);
+  const keyS = state.kid.keyS;
+  state.kid.keyS = () => true;
+  state.kid.climbdown();
+  for (let i = 0; i < 30 && !["hang", "hangstraight"].includes(state.kid.action); i++) {
+    await pause(80);
+  }
+  check(["hang", "hangstraight"].includes(state.kid.action), "A real climb-down reaches the hanging pose");
+  return { state, keyS };
+}
+
+async function actionChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  let savedKeys = null;
+  try {
+    await ready();
+    let state = await freshLevel(1);
+    quietEnemies(state);
+    await collectWeapon(state.minigun);
+    check(!state.minigun.effects.weapon.visible, "The selected minigun is hidden while idle");
+    const kid = state.kid;
+    const keyR = kid.keyR;
+    state.weaponFireKey.isDown = true;
+    await pause(130);
+    const x = kid.charX;
+    const shots = state.minigun.effects.shots;
+    kid.keyR = () => true;
+    savedKeys = { kid, keyR };
+    await pause(170);
+    check(kid.specialAction && kid.specialAction.owner === state.minigun, "Drawing the minigun locks the Prince");
+    check(kid.charX === x && state.minigun.effects.shots === shots, "Moving cannot interrupt the draw or fire early");
+    await pause(500);
+    check(
+      state.minigun.effects.shots > shots && kid.charX === x,
+      "Two-handed sustained fire holds the Prince in place"
+    );
+    state.weaponFireKey.isDown = false;
+    kid.keyR = keyR;
+    savedKeys = null;
+    await pause(120);
+    check(
+      !kid.specialAction && !state.minigun.effects.weapon.visible,
+      "Releasing fire hides the gun and unlocks movement"
+    );
+
+    const prepared = await prepareMolotov();
+    state = prepared.state;
+    savedKeys = { kid: state.kid, keyS: prepared.keyS };
+    const hangX = state.kid.charX;
+    const hangY = state.kid.charY;
+    state.weaponToggleKey.onDown.dispatch();
+    await pause(150);
+    check(state.kid.specialAction && state.kid.specialAction.owner === state.molotov, "Ctrl starts the hanging throw");
+    await pause(430);
+    check(
+      state.kid.charX === hangX && state.kid.charY === hangY,
+      "The Prince stays attached during the lighter and bottle sequence"
+    );
+    await pause(550);
+    check(!state.kid.specialAction && state.kid.alpha === 1, "The quick throw restores the ordinary Prince sprite");
+    check(
+      state.molotov.bottles.length + state.molotov.fires.length > 0,
+      "The thrown bottle falls and creates real ground fire"
+    );
+    check(["hang", "hangstraight"].includes(state.kid.action), "The Prince keeps his ledge after throwing");
+    state.kid.keyS = prepared.keyS;
+    savedKeys = null;
+
+    placeKid(1, 35, 1, 1);
+    const startY = state.kid.charY;
+    state.toggleJetpack();
+    const keyU = state.kid.keyU;
+    state.kid.keyU = () => true;
+    savedKeys = { kid: state.kid, keyU };
+    await pause(650);
+    check(state.kid.specialAction && state.kid.specialAction.owner === state.jetpack, "J activates the jetpack");
+    check(state.kid.charY < startY - 8, "Up flies above the original floor");
+    check(
+      state.kid.cropRect && state.jetpack.effects.head.visible,
+      "Flight replaces the original arms with two strap grips"
+    );
+    state.kid.keyU = keyU;
+    savedKeys = null;
+    await pause(200);
+    const hoverY = state.kid.charY;
+    await pause(200);
+    check(Math.abs(state.kid.charY - hoverY) < 5, "Releasing the arrows keeps a stable hover");
+    state.weaponFireKey.isDown = true;
+    const flightShots = state.minigun.effects.shots;
+    await pause(200);
+    check(state.minigun.effects.shots === flightShots, "Holding the straps prevents firing during flight");
+    state.weaponFireKey.isDown = false;
+    state.toggleJetpack();
+    await pause(700);
+    check(!state.kid.specialAction && state.kid.alive, "J removes the pack and restores ordinary landing safely");
+    check(
+      !state.kid.cropRect && !state.jetpack.effects.head.visible,
+      "Removing the pack restores the complete native sprite"
+    );
+    const oldPack = state.jetpack;
+    const oldBottle = state.molotov;
+    state = await freshLevel(1);
+    check(oldPack.destroyed && oldBottle.destroyed, "Restart cleans up both new controllers");
+    check(!state.kid.hasMolotov && !state.kid.specialAction, "Restart restores pickup and controls");
+    report("ALL NEW ACTION CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    if (savedKeys) {
+      for (const name of ["keyR", "keyS", "keyU"]) {
+        if (savedKeys[name]) {
+          savedKeys.kid[name] = savedKeys[name];
+        }
+      }
+    }
+    gameState().weaponFireKey.isDown = false;
+    busy = false;
+  }
+}
+
 document.getElementById("run").addEventListener("click", combatChecks);
 document.getElementById("features").addEventListener("click", featureChecks);
+document.getElementById("actions").addEventListener("click", actionChecks);
+
+document.getElementById("molotov").addEventListener("click", async () => {
+  await ready();
+  const { state, keyS } = await prepareMolotov();
+  state.weaponToggleKey.onDown.dispatch();
+  await pause(630);
+  testGame.paused = true;
+  state.kid.keyS = keyS;
+  output.textContent = "Molotov preview paused at ignition. Resume game continues the quick drop below the ledge.";
+});
+
+document.getElementById("jetpack").addEventListener("click", async () => {
+  await ready();
+  const state = await freshLevel(1);
+  quietEnemies(state);
+  placeKid(1, 35, 1, 1);
+  state.toggleJetpack();
+  const keyU = state.kid.keyU;
+  state.kid.keyU = () => true;
+  await pause(600);
+  state.kid.keyU = keyU;
+  await pause(200);
+  testGame.paused = true;
+  output.textContent =
+    "Jetpack preview paused in flight. Resume game lets you fly with the arrows; J removes the pack.";
+});
+
+document.getElementById("resume").addEventListener("click", () => {
+  testGame.paused = false;
+});
 document.getElementById("preview").addEventListener("click", preview);
 document.getElementById("rockets").addEventListener("click", async () => {
   await ready();

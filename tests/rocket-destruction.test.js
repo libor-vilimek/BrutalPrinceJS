@@ -126,12 +126,20 @@ function fixture() {
   });
   PrinceJS.RocketLauncherEffects = function () {
     this.impacts = 0;
+    this.shot = () => {};
     this.explode = () => this.impacts++;
   };
   const delegate = { game, level, kid, enemies: [], weaponFireKey: { isDown: false }, ui: { setOpponentLive() {} } };
   level.delegate = delegate;
   const launcher = new PrinceJS.RocketLauncher(delegate, -1);
-  const rocket = (x = 60, direction = 1, room = 1) => ({ x, y: 95, room, direction, life: 3 });
+  const rocket = (x = 60, direction = 1, room = 1) => ({
+    x,
+    y: 95,
+    room,
+    direction,
+    life: launcher.spec.lifetime,
+    age: 0
+  });
   const enemy = (x) => {
     const target = {
       room: 1,
@@ -152,6 +160,18 @@ function fixture() {
     return target;
   };
   return { PrinceJS, level, kid, launcher, rocket, enemy, setTile };
+}
+
+function fireFrom(f, x, direction, room) {
+  f.kid.room = room;
+  f.kid.baseX = f.level.rooms[room].x * f.PrinceJS.ROOM_WIDTH;
+  f.kid.charX = ((x - f.kid.baseX) * 140) / 320;
+  f.launcher.fire({ x: x + 18 * direction, y: 95, direction });
+  assert.equal(f.launcher.bullets.length, 1);
+  for (let i = 0; i <= Math.ceil(f.launcher.spec.lifetime / 0.05) && f.launcher.bullets.length; i++) {
+    f.launcher.advanceBullets(0.05);
+  }
+  assert.equal(f.launcher.bullets.length, 0);
 }
 
 test("a rocket replaces a stone wall with permanent rubble that the Prince can walk through", () => {
@@ -217,6 +237,59 @@ test("a breach across a room seam modifies the impacted room and updates neighbo
   assert.equal(right.front.frameName, "SWS_13");
   assert.equal(right.back.frameName, "dungeon_wall_0");
   assert.equal(f.level.destroyBarrier(f.level.dummyWall), false);
+});
+
+test("rockets from the far room edge progressively breach every column of a solid adjacent room", () => {
+  for (const direction of [1, -1]) {
+    const f = fixture();
+    const sourceRoom = direction === 1 ? 1 : 2;
+    const targetRoom = direction === 1 ? 2 : 1;
+    const launchX = direction === 1 ? 8 : 632;
+    for (let column = 0; column < 10; column++) {
+      f.setTile(targetRoom, column, 1, f.PrinceJS.Level.TILE_WALL);
+    }
+    for (let shot = 0; shot < 10; shot++) {
+      const column = direction === 1 ? shot : 9 - shot;
+      fireFrom(f, launchX, direction, sourceRoom);
+      assert.equal(f.level.getTileAt(column, 1, targetRoom).isSafeWalkable(), true);
+      assert.equal(f.level.getTileAt(column, 1, targetRoom).isBarrier(), false);
+      if (shot < 9) {
+        assert.equal(f.level.getTileAt(column + direction, 1, targetRoom).isBarrier(), true);
+      }
+    }
+    assert.equal(f.launcher.effects.impacts, 10);
+  }
+});
+
+test("a rocket reaches the far wall of the adjacent room without an existing opening at that wall", () => {
+  const f = fixture();
+  f.setTile(2, 9, 1, f.PrinceJS.Level.TILE_WALL);
+  fireFrom(f, 8, 1, 1);
+  assert.equal(f.level.getTileAt(9, 1, 2).isSafeWalkable(), true);
+  assert.equal(f.launcher.effects.impacts, 1);
+});
+
+test("rockets cannot enter a geometrically neighboring room without its level link", () => {
+  const f = fixture();
+  const wall = f.setTile(2, 0, 1, f.PrinceJS.Level.TILE_WALL);
+  f.level.rooms[1].links.right = -1;
+  fireFrom(f, 8, 1, 1);
+  assert.equal(f.level.getTileAt(0, 1, 2), wall);
+  assert.equal(wall.isBarrier(), true);
+  assert.equal(f.launcher.effects.impacts, 1);
+});
+
+test("a rocket sweeps its final partial frame and breaches the wall before its fuse expires", () => {
+  const f = fixture();
+  f.setTile(1, 2, 1, f.PrinceJS.Level.TILE_WALL);
+  const rocket = f.rocket(60);
+  rocket.life = 0.025;
+  f.launcher.bullets.push(rocket);
+  f.launcher.advanceBullets(0.05);
+  assert.equal(f.launcher.bullets.length, 0);
+  assert.equal(f.level.getTileAt(2, 1, 1).isSafeWalkable(), true);
+  assert.equal(rocket.age, 0.025);
+  assert.equal(f.launcher.effects.impacts, 1);
 });
 
 test("neighboring walls expose the new opening instead of retaining solid-wall edge art", () => {

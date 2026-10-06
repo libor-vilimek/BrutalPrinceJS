@@ -14,19 +14,27 @@ PrinceJS.MinigunEffects = function (game, kid, pickup) {
   this.spinSpeed = 0;
   this.shots = 0;
   this.destroyed = false;
+  this.actionStage = "hidden";
+  this.drawProgress = 0;
+  this.firing = false;
+  this.originalTint = null;
 
   this.ground = game.add.graphics(0, 0);
   this.light = game.add.graphics(0, 0);
+  this.body = game.add.graphics(0, 0);
   this.weapon = game.add.graphics(0, 0);
+  this.hands = game.add.graphics(0, 0);
   this.casingLayer = game.add.graphics(0, 0);
   this.debris = game.add.graphics(0, 0);
   this.flash = game.add.graphics(0, 0);
   this.ground.z = 22;
   this.light.z = 23;
-  this.weapon.z = 24;
-  this.casingLayer.z = 26;
-  this.debris.z = 27;
-  this.flash.z = 28;
+  this.body.z = 24;
+  this.weapon.z = 25;
+  this.hands.z = 26;
+  this.casingLayer.z = 27;
+  this.debris.z = 28;
+  this.flash.z = 29;
 
   // Brass lasts for the whole level. Only moving casings take part in frame physics.
   this.casings = [];
@@ -59,26 +67,40 @@ PrinceJS.MinigunEffects = function (game, kid, pickup) {
   this.update(0, false);
 };
 
+PrinceJS.MinigunEffects.prototype.setAction = function (stage, progress) {
+  this.actionStage = stage;
+  this.drawProgress = Math.max(0, Math.min(1, progress || 0));
+  if (stage === "hidden") {
+    this.firing = false;
+    this.flashTime = this.recoil = 0;
+    this.weapon.visible = this.body.visible = this.hands.visible = false;
+    this.light.clear();
+    this.flash.clear();
+    this.restoreTint();
+  }
+};
+
 PrinceJS.MinigunEffects.prototype.getPose = function () {
   let kid = this.kid;
   let action = kid.action || "stand";
   let direction = kid.charFace === -1 ? -1 : 1;
   let crouched = /stoop|crawl|land|standup/.test(action);
-  let running = /run|step|advance|retreat/.test(action);
-  let bob = running ? Math.round(Math.sin((kid.charFrame || 0) * 1.8)) : 0;
   let floorY = kid.baseY + kid.charY;
   let visible =
     kid.alive !== false &&
     kid.active !== false &&
     kid.visible !== false &&
     kid.exists !== false &&
-    kid.minigunEquipped !== false &&
+    kid.minigunEquipped === true &&
+    this.actionStage !== "hidden" &&
+    (!kid.specialAction || kid.specialAction.type === "minigun") &&
     !/hang|climb|drink|pickupsword|rdiveroll|stabkill|dropdead|impale|halve|falldead/.test(action);
 
   return {
     x: kid.baseX + PrinceJS.Utils.convertX(kid.charX),
-    y: floorY - (crouched ? 13 : 24) + bob,
+    y: floorY - (crouched ? 13 : 24),
     floorY: floorY,
+    crouched: crouched,
     direction: direction,
     visible: visible
   };
@@ -90,7 +112,7 @@ PrinceJS.MinigunEffects.prototype.getMuzzle = function () {
     x: Math.round(pose.x + (18 - Math.round(this.recoil)) * pose.direction),
     y: Math.round(pose.y),
     direction: pose.direction,
-    visible: this.collected && this.collectTime === 0 && pose.visible
+    visible: this.collected && this.actionStage === "firing" && pose.visible
   };
 };
 
@@ -121,7 +143,7 @@ PrinceJS.MinigunEffects.prototype.shot = function (worldX, worldY, direction) {
     return;
   }
   this.flashTime = 0.075;
-  this.recoil = 1;
+  this.recoil = 2.2;
   this.spinSpeed = Math.max(this.spinSpeed, 23);
   this.shots++;
   let pose = this.getPose();
@@ -553,7 +575,117 @@ PrinceJS.MinigunEffects.prototype.rect = function (graphics, color, x, y, width,
   graphics.endFill();
 };
 
-PrinceJS.MinigunEffects.prototype.drawWeapon = function (graphics, held) {
+PrinceJS.MinigunEffects.prototype.litColor = function (color, amount) {
+  amount = amount === undefined ? Math.min(1, this.flashTime / 0.04) * 0.65 : amount;
+  let target = 0xffd35d;
+  let red = Math.round(((color >> 16) & 255) * (1 - amount) + ((target >> 16) & 255) * amount);
+  let green = Math.round(((color >> 8) & 255) * (1 - amount) + ((target >> 8) & 255) * amount);
+  let blue = Math.round((color & 255) * (1 - amount) + (target & 255) * amount);
+  return (red << 16) | (green << 8) | blue;
+};
+
+PrinceJS.MinigunEffects.prototype.restoreTint = function () {
+  if (this.originalTint !== null) {
+    this.kid.tint = this.originalTint;
+    this.originalTint = null;
+  }
+};
+
+PrinceJS.MinigunEffects.prototype.updatePrinceLight = function (pose) {
+  if (!pose.visible || this.flashTime <= 0) {
+    this.restoreTint();
+    return;
+  }
+  if (this.originalTint === null) {
+    this.originalTint = typeof this.kid.tint === "number" ? this.kid.tint : 0xffffff;
+  }
+  this.kid.tint = this.litColor(this.originalTint);
+};
+
+PrinceJS.MinigunEffects.prototype.drawLimb = function (graphics, from, to, color, width) {
+  let steps = Math.max(Math.abs(to[0] - from[0]), Math.abs(to[1] - from[1]), 1);
+  // A stepped pixel silhouette matches the Prince's atlas, including the moving elbow.
+  for (let i = 0; i <= steps; i++) {
+    let progress = i / steps;
+    this.rect(
+      graphics,
+      color,
+      from[0] + (to[0] - from[0]) * progress - Math.floor(width / 2),
+      from[1] + (to[1] - from[1]) * progress - Math.floor(width / 2),
+      width,
+      width
+    );
+  }
+};
+
+PrinceJS.MinigunEffects.prototype.drawPrince = function (pose) {
+  let body = this.body;
+  let hands = this.hands;
+  body.clear();
+  hands.clear();
+  body.visible = hands.visible = this.collected && pose.visible;
+  if (!body.visible) {
+    return;
+  }
+  let recoil = this.actionStage === "firing" ? Math.round(this.recoil * 0.65) : 0;
+  body.x = hands.x = Math.round(pose.x - recoil * pose.direction);
+  body.y = hands.y = Math.round(pose.floorY);
+  body.scale.x = hands.scale.x = pose.direction;
+
+  let progress = this.actionStage === "drawing" ? this.drawProgress : 1;
+  let reaching = this.actionStage === "drawing" && progress < 0.4;
+  let headY = pose.crouched ? -20 : -41;
+  let shoulderY = pose.crouched ? -12 : -31;
+  let waistY = pose.crouched ? -5 : -19;
+  let gripY = pose.y - pose.floorY + 3;
+  let sleeve = this.litColor(0xfff3ce);
+  let sleeveShade = this.litColor(0xd1c49d);
+  let skin = this.litColor(0xffcd92);
+  let skinShade = this.litColor(0xcb8755);
+  let twist = reaching ? -Math.round(Math.sin((progress / 0.4) * Math.PI) * 2) : 0;
+
+  // Replace the atlas torso and relaxed arm, leaving its legs planted on the floor.
+  this.rect(body, sleeveShade, -11 + twist, shoulderY, 9, waistY - shoulderY + 1);
+  this.rect(body, sleeve, -9 + twist, shoulderY, 8, waistY - shoulderY);
+  this.rect(body, this.litColor(0xffffe8), -6 + twist, shoulderY + 1, 4, waistY - shoulderY - 1);
+  this.rect(body, sleeveShade, -10, waistY, 9, 2);
+  this.rect(body, skinShade, -8 + twist, headY + 7, 4, 3);
+  this.rect(body, skin, -9 + twist, headY + 1, 7, 7);
+  this.rect(body, skin, -3 + twist, headY + 4, 3, 2);
+  this.rect(body, this.litColor(0x72412c, 0.18 * Math.min(1, this.flashTime / 0.04)), -10 + twist, headY, 8, 3);
+  this.rect(body, this.litColor(0x995832, 0.25 * Math.min(1, this.flashTime / 0.04)), -10 + twist, headY + 2, 2, 4);
+  this.rect(body, 0x3f2c24, -4 + twist, headY + 3, 2, 1);
+  this.rect(body, skinShade, -6 + twist, headY + 2, 4, 1);
+  if (this.actionStage === "firing") {
+    // A clenched, slightly changing jaw sells the effort behind each recoil.
+    this.rect(body, 0x75402a, -6, headY + 6, 5, 2);
+    this.rect(body, this.litColor(0xffffef, 0.2 * Math.min(1, this.flashTime / 0.04)), -5, headY + 6, 3, 1);
+    this.rect(body, skinShade, -6, headY + 8, 4, 1);
+  }
+
+  let blend = Math.max(0, Math.min(1, (progress - 0.35) / 0.65));
+  let backHand = [-14 + twist, waistY - 4];
+  let triggerHand = [0, gripY];
+  let nearHand = [
+    backHand[0] + (triggerHand[0] - backHand[0]) * blend,
+    backHand[1] + (triggerHand[1] - backHand[1]) * blend
+  ];
+  let nearElbow = [reaching ? -15 + twist : -8, reaching ? shoulderY + 5 : waistY + 1];
+  this.drawLimb(body, [-8 + twist, shoulderY + 2], nearElbow, sleeveShade, 4);
+  this.drawLimb(body, nearElbow, nearHand, sleeve, 3);
+  this.rect(hands, skinShade, nearHand[0] - 1, nearHand[1] - 1, 4, 4);
+  this.rect(hands, skin, nearHand[0] - 1, nearHand[1] - 1, 3, 3);
+
+  let support = Math.max(0, Math.min(1, (progress - 0.55) / 0.45));
+  let supportHand = [-3 + 12 * support, waistY + (gripY - waistY) * support];
+  let supportElbow = [-4 + 5 * support, waistY];
+  this.drawLimb(body, [-3 + twist, shoulderY + 3], supportElbow, sleeveShade, 3);
+  this.drawLimb(body, supportElbow, supportHand, sleeve, 3);
+  this.rect(hands, skinShade, supportHand[0] - 1, supportHand[1] - 1, 4, 4);
+  this.rect(hands, skin, supportHand[0] - 1, supportHand[1] - 1, 3, 3);
+};
+
+PrinceJS.MinigunEffects.prototype.drawWeapon = function (graphics) {
   // Round the smaller geometry itself so every edge remains on the pixel grid.
   let rect = (color, x, y, width, height) => {
     let left = Math.round(x * 0.68);
@@ -613,18 +745,6 @@ PrinceJS.MinigunEffects.prototype.drawWeapon = function (graphics, held) {
   }
   rect(0xd8a33b, -5, -1, 2, 2);
   rect(0xc86e36, -3, 2, 2, 1);
-
-  if (held) {
-    // Sleeves and hands bridge the original Prince sprite into a two-handed grip.
-    rect(0xc7c7a1, -13, 0, 4, 6);
-    rect(0xf3efc6, -12, 0, 3, 4);
-    rect(0xf4f2cc, -10, 5, 10, 3);
-    rect(0xffca91, -1, 4, 4, 4);
-    rect(0xd99169, -1, 7, 4, 1);
-    rect(0xe2ddb6, 3, 7, 10, 2);
-    rect(0xffce98, 11, 4, 4, 4);
-    rect(0xe5a170, 13, 4, 2, 2);
-  }
 };
 
 PrinceJS.MinigunEffects.prototype.drawGround = function () {
@@ -639,7 +759,7 @@ PrinceJS.MinigunEffects.prototype.drawGround = function () {
   let pulse = 0.65 + Math.sin(this.elapsed * 3.5) * 0.2;
   this.rect(graphics, 0x000000, -11, 8, 30, 2, 0.6);
   this.rect(graphics, 0xdba931, -8, 7, 25, 2, pulse * 0.35);
-  this.drawWeapon(graphics, false);
+  this.drawWeapon(graphics);
   let glintY = -10 + Math.round(Math.sin(this.elapsed * 3));
   this.rect(graphics, 0xffce47, 2, glintY - 2, 1, 7, pulse);
   this.rect(graphics, 0xffce47, -1, glintY + 1, 7, 1, pulse);
@@ -755,7 +875,7 @@ PrinceJS.MinigunEffects.prototype.update = function (deltaSeconds, firing) {
   this.elapsed += dt;
   this.flashTime = Math.max(0, this.flashTime - dt);
   this.collectTime = Math.max(0, this.collectTime - dt);
-  this.recoil = Math.max(0, this.recoil - dt * 35);
+  this.recoil = Math.max(0, this.recoil - dt * 22);
   let pose = this.getPose();
   firing = firing && this.collected && pose.visible;
   if (!pose.visible) {
@@ -764,22 +884,25 @@ PrinceJS.MinigunEffects.prototype.update = function (deltaSeconds, firing) {
   this.spinSpeed += ((firing ? 30 : 0) - this.spinSpeed) * Math.min(1, dt * (firing ? 14 : 4));
   this.spin += this.spinSpeed * dt;
   this.drawGround();
+  this.updatePrinceLight(pose);
+  this.drawPrince(pose);
 
   this.weapon.clear();
-  this.weapon.visible = this.collected && pose.visible;
+  this.weapon.visible = this.collected && pose.visible && (this.actionStage === "firing" || this.drawProgress >= 0.26);
   if (this.weapon.visible) {
     let x = pose.x - Math.round(this.recoil) * pose.direction;
     let y = pose.y;
-    if (this.collectTime > 0) {
-      let progress = 1 - this.collectTime / 0.42;
-      let ease = 1 - Math.pow(1 - progress, 3);
-      x = this.pickup.worldX + (x - this.pickup.worldX) * ease;
-      y = this.pickup.worldY - 9 + (y - this.pickup.worldY + 9) * ease - Math.sin(progress * Math.PI) * 13;
+    let draw = this.actionStage === "drawing" ? Math.min(1, (this.drawProgress - 0.26) / 0.74) : 1;
+    let ease = 1 - Math.pow(1 - draw, 2);
+    if (this.actionStage === "drawing") {
+      x -= 12 * (1 - ease) * pose.direction;
+      y -= 9 * (1 - ease);
     }
     this.weapon.x = Math.round(x);
     this.weapon.y = Math.round(y);
     this.weapon.scale.x = pose.direction;
-    this.drawWeapon(this.weapon, this.collectTime < 0.12);
+    this.weapon.rotation = this.actionStage === "drawing" ? -1.15 * (1 - ease) * pose.direction : 0;
+    this.drawWeapon(this.weapon);
   }
 
   this.drawFlash(this.getMuzzle());
@@ -791,9 +914,10 @@ PrinceJS.MinigunEffects.prototype.destroy = function () {
   if (this.destroyed) {
     return;
   }
+  this.restoreTint();
   this.destroyed = true;
-  [this.ground, this.light, this.weapon, this.casingLayer, this.debris, this.flash].forEach((graphics) =>
-    graphics.destroy()
+  [this.ground, this.light, this.body, this.weapon, this.hands, this.casingLayer, this.debris, this.flash].forEach(
+    (graphics) => graphics.destroy()
   );
   this.particles.length = 0;
   this.casings.length = 0;

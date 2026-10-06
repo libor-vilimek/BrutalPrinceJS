@@ -10,7 +10,8 @@ PrinceJS.RocketLauncher = function (delegate, direction) {
     pickupRadius: 10,
     interval: 0.7,
     speed: 180,
-    lifetime: 3,
+    // Cover the launch room and the entire next room, even when firing from the far edge.
+    lifetime: 4,
     maxProjectiles: 8
   });
 };
@@ -26,13 +27,18 @@ PrinceJS.RocketLauncher.prototype.drawBullets = function () {};
 
 PrinceJS.RocketLauncher.prototype.advanceBullets = function (delta) {
   this.bullets = this.bullets.filter((rocket) => {
-    rocket.life -= delta;
-    rocket.age += delta;
-    if (rocket.life <= 0) {
+    let flightTime = Math.min(delta, Math.max(0, rocket.life));
+    rocket.life = Math.max(0, rocket.life - delta);
+    rocket.age += flightTime;
+    // Sweep the final partial frame too, so a wall at the end of the range is still breached.
+    if (!this.advanceBullet(rocket, this.spec.speed * flightTime)) {
+      return false;
+    }
+    if (rocket.life === 0) {
       this.impact(rocket);
       return false;
     }
-    return this.advanceBullet(rocket, this.spec.speed * delta);
+    return true;
   });
 };
 

@@ -137,6 +137,9 @@ PrinceJS.Game.prototype = {
       this.rocketLauncher = new PrinceJS.RocketLauncher(this, -json.prince.direction * (json.prince.reverse || 1));
       this.weapons.push(this.rocketLauncher);
     }
+    this.molotov = this.level.number === 1 ? new PrinceJS.Molotov(this, direction) : null;
+    this.jetpack = new PrinceJS.Jetpack(this);
+    this.input.keyboard.addKey(Phaser.Keyboard.J).onDown.add(this.toggleJetpack, this);
 
     this.world.sort("z");
     this.world.alpha = 1;
@@ -163,8 +166,15 @@ PrinceJS.Game.prototype = {
   },
 
   update: function () {
+    const delta = this.game.time.elapsedMS / 1000;
+    if (this.molotov) {
+      this.molotov.update(delta);
+    }
+    if (this.jetpack) {
+      this.jetpack.update(delta);
+    }
     for (let weapon of this.weapons || []) {
-      weapon.update(this.game.time.elapsedMS / 1000);
+      weapon.update(delta);
     }
     if (PrinceJS.Utils.continueGame(this.game)) {
       this.buttonPressed();
@@ -220,6 +230,12 @@ PrinceJS.Game.prototype = {
   },
 
   shutdown: function () {
+    for (let controller of [this.molotov, this.jetpack]) {
+      if (controller) {
+        controller.destroy();
+      }
+    }
+    this.molotov = this.jetpack = null;
     for (let weapon of this.weapons || []) {
       weapon.destroy();
     }
@@ -229,7 +245,13 @@ PrinceJS.Game.prototype = {
       this.weaponAudio.destroy();
       this.weaponAudio = null;
     }
-    for (let key of [Phaser.Keyboard.F, Phaser.Keyboard.CONTROL, Phaser.Keyboard.ONE, Phaser.Keyboard.TWO]) {
+    for (let key of [
+      Phaser.Keyboard.F,
+      Phaser.Keyboard.CONTROL,
+      Phaser.Keyboard.ONE,
+      Phaser.Keyboard.TWO,
+      Phaser.Keyboard.J
+    ]) {
       this.input.keyboard.removeKey(key);
     }
     this.game.onPause.remove(this.onPause, this);
@@ -237,13 +259,28 @@ PrinceJS.Game.prototype = {
   },
 
   toggleWeapon: function () {
+    if (["hang", "hangstraight"].includes(this.kid.action)) {
+      if (this.molotov) {
+        this.molotov.throwFromHang();
+      }
+      return;
+    }
     let weapon = (this.weapons || []).find((item) => item.spec.id === this.kid.activeWeapon);
     if (weapon) {
       weapon.toggleEquipped();
     }
   },
 
+  toggleJetpack: function () {
+    if (this.jetpack) {
+      this.jetpack.toggle();
+    }
+  },
+
   selectWeapon: function (id) {
+    if (this.kid.specialAction && !(this.weapons || []).includes(this.kid.specialAction.owner)) {
+      return;
+    }
     let weapon = (this.weapons || []).find((item) => item.spec.id === id);
     if (weapon && this.kid[weapon.spec.owned]) {
       weapon.equip();

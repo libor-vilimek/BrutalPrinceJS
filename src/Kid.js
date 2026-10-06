@@ -18,6 +18,8 @@ PrinceJS.Kid = function (game, level, location, direction, room) {
   this.hasRocketLauncher = false;
   this.rocketLauncherEquipped = false;
   this.activeWeapon = null;
+  this.hasMolotov = false;
+  this.specialAction = null;
 
   this.allowCrawl = true;
   this.charRepeat = false;
@@ -156,6 +158,20 @@ PrinceJS.Kid.prototype.hideShadowOverlay = function () {
 PrinceJS.Kid.prototype.updateActor = function () {
   this.updateTimer();
   this.updateSplash();
+  if (this.specialAction && this.alive && this.active && this.visible) {
+    // These controllers animate at render speed and own the Prince's movement.
+    this.checkFight();
+    this.checkSpikes();
+    this.checkChoppers();
+    if (this.specialAction.type !== "jetpack") {
+      this.checkButton();
+      this.checkFloor();
+    }
+    this.updateCharPosition();
+    this.updateSwordPosition();
+    this.maskAndCrop();
+    return;
+  }
   this.updateBehaviour();
   this.processCommand();
   this.updateAcceleration();
@@ -170,6 +186,31 @@ PrinceJS.Kid.prototype.updateActor = function () {
   this.updateCharPosition();
   this.updateSwordPosition();
   this.maskAndCrop();
+};
+
+PrinceJS.Kid.prototype.beginSpecialAction = function (owner, type) {
+  if (this.specialAction || !this.alive || !this.active || !this.visible || this.pickupPotion || this.pickupSword) {
+    return false;
+  }
+  this.specialAction = { owner, type };
+  this.charXVel = this.charYVel = 0;
+  this.swordDrawn = false;
+  this.sword.visible = false;
+  return true;
+};
+
+PrinceJS.Kid.prototype.endSpecialAction = function (owner) {
+  if (!this.specialAction || this.specialAction.owner !== owner) {
+    return false;
+  }
+  this.specialAction = null;
+  return true;
+};
+
+PrinceJS.Kid.prototype.setSpecialActionFrame = function (frame) {
+  this.charFrame = frame;
+  this.updateCharFrame();
+  this.updateCharPosition();
 };
 
 PrinceJS.Kid.prototype.updateSwordFrame = function () {

@@ -12,8 +12,9 @@ Prince of Persia reimplementation written in HTML5 / JavaScript (MS-DOS version)
     - `Down key`: Crouch, Crawl, Climb Down
   - `SHIFT`: Drink Potion, Grab Edge, Fire Equipped Weapon
   - `F`: Hold to fire the selected weapon
-  - `CTRL`: Hide or equip the selected weapon
+  - `CTRL`: Enable/disable the selected gun; while hanging, throw a collected molotov below
   - `1 / 2`: Select the collected minigun / rocket launcher
+  - `J`: Equip/activate the jetpack, or remove it; fly with the cursor keys
   - `SPACE`: Show Remaining Time
   - `ENTER`: Continue Game
 - Mouse
@@ -36,11 +37,15 @@ The Prince starts with 10 health points. Each enemy sword hit removes one point,
 
 A minigun lies on safe ground beside the starting area of each level. The rocket launcher becomes available from level 2 onward. Walk over a weapon to pick it up. On level 1, the minigun is just to the right of the ledge where the Prince lands.
 
-Hold `F` to fire in the direction the Prince faces. Press `1` for the minigun or `2` for the rocket launcher once collected. Press `CTRL` to hide the selected weapon or take it out again; both stay in your inventory. The Prince's sword is disabled, including automatic sword combat near enemies. `SHIFT`, the touch action area, and controller action buttons also fire while a weapon is equipped; potion pickups and ledge grabs keep their normal controls. Both weapons have unlimited ammunition and can fire while standing, running, or crouching; firing stops during jumps, climbing, and item animations.
+Hold `F` to fire in the direction the Prince faces. Press `1` for the minigun or `2` for the rocket launcher once collected. Press `CTRL` to enable or disable the selected gun; both stay in your inventory. Guns are hidden while idle. The minigun starts with a quick reach behind the back and draw animation, then the Prince braces it with both hands. Drawing and firing lock movement; releasing fire hides the minigun and restores movement. Muzzle flashes light his face and clothes yellow. The Prince's sword is disabled, including automatic sword combat near enemies. `SHIFT`, the touch action area, and controller action buttons also fire while a weapon is enabled; potion pickups and ledge grabs keep their normal controls. Both guns have unlimited ammunition; firing stops during jumps, climbing, item animations, and jetpack flight.
+
+A molotov pickup sits beside the minigun on the first level's starting screen. Collect it, hold a ledge with `SHIFT`, then press `CTRL`: the Prince keeps one hand on the ledge while quickly taking out a lighter, holding its flame in his mouth, lighting the bottle and dropping it straight below. The sequence takes about a second. The bottle breaks into a patch of fire that burns enemies; collected molotovs have unlimited ammunition.
+
+Press `J` to equip and activate the jetpack. The Prince holds both straps and flies with the cursor keys; releasing the keys lets him hover. Walls, gates, floors and ceilings still block him, and he can fly through connected room openings. Press `J` again to remove the pack and resume ordinary movement or falling.
 
 The minigun fires rapid bullets with a bright yellow muzzle flash, heavy firing audio, and brass casings. Spent casings stay for the entire level, bounce on floors, and stack into growing piles across ten depth layers on the floor. Each layer piles independently, and every pile remains when you leave and revisit rooms. Restarting the level clears its piles and restores the pickups.
 
-Rockets leave fiery smoke trails and explode on impact, dealing damage to nearby enemies. Each rocket can blast a wall or gate into walkable rubble. Exit doors stay open when blasted, preserving the level exit. Openings persist when revisiting rooms. Intact walls shield enemies from the first blast; later shots can pass through the breach. Bullets and blasts trigger guards' normal deaths, and special enemies retain their original rules.
+Rockets leave fiery smoke trails and explode on impact, dealing damage to nearby enemies. Their 720-pixel range covers the launch room and the entire next room. Each rocket can blast a wall or gate into walkable rubble, and repeated shots can tunnel through a solid adjacent room. Exit doors stay open when blasted, preserving the level exit. Openings persist when revisiting rooms. Intact walls shield enemies from the first blast; later shots can pass through the breach. Bullets and blasts trigger guards' normal deaths, and special enemies retain their original rules.
 
 The first two missions have 167 and 189 additional soldiers respectively, spread across every room outside the spawn room. Starting rooms and their approaches leave space to collect the weapons. Nearby soldiers react independently; the enemy health display follows the nearest relevant opponent.
 

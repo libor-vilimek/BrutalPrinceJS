@@ -60,6 +60,8 @@ PrinceJS.RocketLauncherEffects.prototype.getPose = function () {
       kid.exists !== false &&
       kid.hasRocketLauncher !== false &&
       kid.rocketLauncherEquipped === true &&
+      !kid.specialAction &&
+      this.firing === true &&
       !/hang|climb|drink|pickupsword|rdiveroll|stabkill|dropdead|impale|halve|falldead/.test(action)
   };
 };

@@ -70,6 +70,23 @@ function fixture() {
     visible: true,
     active: true,
     action: "stand",
+    specialAction: null,
+    beginSpecialAction(owner, type) {
+      if (this.specialAction || !this.alive || !this.active || !this.visible) {
+        return false;
+      }
+      this.specialAction = { owner, type };
+      this.charXVel = this.charYVel = 0;
+      return true;
+    },
+    endSpecialAction(owner) {
+      if (this.specialAction && this.specialAction.owner === owner) {
+        this.specialAction = null;
+      }
+    },
+    setSpecialActionFrame(frame) {
+      this.charFrame = frame;
+    },
     sword: {},
     keyS: () => false
   };
@@ -78,6 +95,10 @@ function fixture() {
     this.impacts = 0;
     this.update = () => {};
     this.collect = () => {};
+    this.setAction = (stage, progress) => {
+      this.actionStage = stage;
+      this.drawProgress = progress;
+    };
     this.destroy = () => {};
     this.shot = () => this.shots++;
     this.impact = () => this.impacts++;
@@ -219,7 +240,7 @@ test("a barrel protruding through a wall cannot spawn a bullet beyond the wall",
   assert.equal(guard.health, 3);
 });
 
-test("holding fire is automatic and releasing, climbing, dying, or lacking the pickup stops new shots", () => {
+test("held minigun fire draws first, locks a planted stance, then fires until released or interrupted", () => {
   const f = fixture();
   f.key.isDown = true;
   f.gun.update(1 / 60);
@@ -227,13 +248,28 @@ test("holding fire is automatic and releasing, climbing, dying, or lacking the p
   f.kid.hasMinigun = true;
   f.kid.minigunEquipped = true;
   f.gun.pickup.collected = true;
-  for (let i = 0; i < 60; i++) {
+  f.kid.action = "running";
+  f.kid.charXVel = 5;
+  f.gun.update(1 / 60);
+  assert.equal(f.gun.actionStage, "drawing");
+  assert.equal(f.kid.specialAction.owner, f.gun);
+  assert.equal(f.kid.specialAction.type, "minigun");
+  assert.equal(f.kid.action, "stand");
+  assert.equal(f.kid.charXVel, 0);
+  for (let i = 0; i < 24; i++) {
     f.gun.update(1 / 60);
   }
-  assert.ok(f.gun.effects.shots >= 14 && f.gun.effects.shots <= 16);
+  assert.equal(f.gun.effects.shots, 0, "the barrel cannot fire during the draw sequence");
+  for (let i = 0; i < 35; i++) {
+    f.gun.update(1 / 60);
+  }
+  assert.equal(f.gun.actionStage, "firing");
+  assert.ok(f.gun.effects.shots >= 8 && f.gun.effects.shots <= 10);
   const shots = f.gun.effects.shots;
   f.key.isDown = false;
   f.gun.update(0.05);
+  assert.equal(f.kid.specialAction, null);
+  assert.equal(f.gun.actionStage, "hidden");
   f.key.isDown = true;
   f.kid.action = "climbup";
   f.gun.update(0.05);
@@ -241,6 +277,77 @@ test("holding fire is automatic and releasing, climbing, dying, or lacking the p
   f.kid.alive = false;
   f.gun.update(0.05);
   assert.equal(f.gun.effects.shots, shots);
+});
+
+test("letting go during the draw cancels without a shot, and a new press draws again", () => {
+  const f = fixture();
+  f.kid.hasMinigun = f.kid.minigunEquipped = f.gun.pickup.collected = true;
+  f.key.isDown = true;
+  for (let i = 0; i < 5; i++) {
+    f.gun.update(0.05);
+  }
+  f.key.isDown = false;
+  f.gun.update(0.05);
+  assert.equal(f.gun.effects.shots, 0);
+  assert.equal(f.gun.actionStage, "hidden");
+  assert.equal(f.kid.specialAction, null);
+  f.key.isDown = true;
+  f.gun.update(0.05);
+  assert.equal(f.gun.actionStage, "drawing");
+  assert.equal(f.gun.drawElapsed, 0.05);
+});
+
+test("switches, damage, death, and destruction release the minigun movement lock", () => {
+  for (const interrupt of ["switch", "hurt", "death", "destroy"]) {
+    const f = fixture();
+    f.kid.hasMinigun = f.kid.minigunEquipped = f.gun.pickup.collected = true;
+    f.key.isDown = true;
+    f.gun.update(0.05);
+    assert.equal(f.kid.specialAction.owner, f.gun);
+    if (interrupt === "switch") {
+      const rocket = new f.PrinceJS.RocketLauncher(f.delegate, -1);
+      f.delegate.weapons = [f.gun, rocket];
+      f.kid.hasRocketLauncher = true;
+      rocket.equip();
+      assert.equal(f.kid.rocketLauncherEquipped, true);
+      assert.equal(f.kid.minigunEquipped, false);
+    } else if (interrupt === "hurt") {
+      f.kid.action = "stabbed";
+      f.gun.update(0.05);
+      assert.equal(f.kid.action, "stabbed");
+    } else if (interrupt === "death") {
+      f.kid.alive = false;
+      f.kid.action = "dropdead";
+      f.gun.update(0.05);
+      assert.equal(f.kid.action, "dropdead");
+    } else {
+      f.gun.destroy();
+    }
+    assert.equal(f.kid.specialAction, null, interrupt);
+    assert.equal(f.gun.actionStage, "hidden", interrupt);
+    assert.equal(f.gun.firing, false, interrupt);
+  }
+});
+
+test("other special actions block shooting, Ctrl, pickups, and weapon selection", () => {
+  const f = fixture();
+  f.kid.hasMinigun = f.kid.minigunEquipped = true;
+  const owner = {};
+  f.kid.specialAction = { owner, type: "jetpack" };
+  f.key.isDown = true;
+  f.gun.update(0.05);
+  assert.equal(f.gun.canFire(), false);
+  assert.equal(f.gun.actionStage, "hidden");
+  f.gun.toggleEquipped();
+  assert.equal(f.kid.minigunEquipped, true);
+  f.kid.minigunEquipped = false;
+  assert.equal(f.gun.equip(), false);
+  assert.equal(f.kid.minigunEquipped, false);
+  assert.equal(f.kid.specialAction.owner, owner);
+  f.gun.pickup.worldX = f.PrinceJS.Utils.convertX(f.kid.charX);
+  f.gun.pickup.worldY = f.kid.baseY + f.kid.charY;
+  f.gun.checkPickup();
+  assert.equal(f.gun.pickup.collected, false);
 });
 
 test("action fire preserves potion interactions, and hidden/inactive guards are not hit", () => {
