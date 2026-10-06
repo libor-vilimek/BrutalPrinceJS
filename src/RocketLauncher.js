@@ -22,6 +22,21 @@ PrinceJS.RocketLauncher = function (delegate, direction) {
 PrinceJS.RocketLauncher.prototype = Object.create(PrinceJS.RocketLauncherAction.prototype);
 PrinceJS.RocketLauncher.prototype.constructor = PrinceJS.RocketLauncher;
 
+PrinceJS.RocketLauncher.prototype.findPickup = function (direction) {
+  let pickup = PrinceJS.RangedWeapon.prototype.findPickup.call(this, direction);
+  if (PrinceJS.currentLevel === 3 && this.level.number === 3 && this.kid.room === 9) {
+    let room = this.level.rooms[9];
+    let tile = this.level.getTileAt(8, 2, 9);
+    if (tile.element === PrinceJS.Level.TILE_FLOOR) {
+      // The introductory turn starts inside the arrival doorway. Leave the tube
+      // in clear view on the plain floor beyond its pillars and wall torch.
+      pickup.worldX = room.x * PrinceJS.ROOM_WIDTH + 8 * PrinceJS.BLOCK_WIDTH + 16;
+      pickup.worldY = room.y * PrinceJS.ROOM_HEIGHT + PrinceJS.Utils.convertBlockYtoY(2) + 3;
+    }
+  }
+  return pickup;
+};
+
 PrinceJS.RocketLauncher.prototype.updateEffects = function (delta) {
   this.effects.update(delta, this.bullets);
 };

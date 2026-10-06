@@ -479,6 +479,103 @@ test("walls block a bottle, and an unlinked bottom edge cannot reach another roo
   assert.equal(f.molotov.fires.length, 0);
 });
 
+test("ceiling impacts drop burning oil below a native slab or solid wall and ignite only the floor beneath", () => {
+  for (const element of [1, 20]) {
+    const f = fixture();
+    f.setTile(1, 3, 1, element);
+    for (let column = 0; column < 10; column++) {
+      f.setTile(1, column, 2, 1);
+    }
+    const impacts = [];
+    f.molotov.effects.shatter = (x, y, burning) => impacts.push({ x, y, burning });
+    const bottle = Object.assign(f.bottle(112, 155), { vx: 0, vy: -400 });
+    assert.equal(f.molotov.advanceBottle(bottle, 0.1), false);
+    assert.ok(Math.abs(bottle.y - 131) < 0.00001);
+    assert.equal(impacts.length, 1);
+    assert.equal(impacts[0].burning, true);
+    assert.equal(f.molotov.fires.length, 0, "the surface above the impact never catches fire");
+    assert.equal(f.molotov.oils.length, 3);
+    assert.ok(f.molotov.oils.every((oil) => oil.oil && oil.room === 1 && oil.y - oil.radius > 126 && oil.vy > 0));
+    f.advance(0.7);
+    assert.equal(f.molotov.oils.length, 0);
+    assert.equal(f.molotov.fires.length, 3);
+    assert.ok(f.molotov.fires.every((fire) => fire.room === 1 && fire.row === 2 && fire.y === 182));
+    assert.equal(impacts.length, 1, "oil landing does not replay the glass impact");
+  }
+});
+
+test("a fully charged Up throw in native level one's lower room burns the floor below its stone ceiling", () => {
+  const f = fixture();
+  const map = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/maps/level1.json"), "utf8"));
+  for (const id of [1, 2]) {
+    const index = map.room.findIndex((room) => room.id === id);
+    f.level.rooms[id].x = index % map.size.width;
+    f.level.rooms[id].y = Math.floor(index / map.size.width);
+    map.room[index].tile.forEach((tile, i) => f.setTile(id, i % 10, Math.floor(i / 10), tile.element));
+  }
+  f.kid.room = 2;
+  const room = f.level.rooms[2];
+  const originX = room.x * f.PrinceJS.ROOM_WIDTH;
+  const originY = room.y * f.PrinceJS.ROOM_HEIGHT;
+  const point = { x: originX + f.PrinceJS.Utils.convertX(49) + 14, y: originY + 119 - 33 };
+  const bottle = f.PrinceJS.MolotovBallistics.createBottle(
+    f.molotov,
+    { charge: 1.5, aimUp: true, direction: 1 },
+    point
+  );
+  f.molotov.bottles.push(bottle);
+  f.advance(0.1);
+  assert.equal(f.molotov.bottles.length, 0);
+  assert.ok(Math.abs(bottle.y - (originY + 68)) < 0.00001);
+  assert.equal(f.molotov.oils.length, 3);
+  assert.equal(f.molotov.fires.length, 0);
+  f.advance(0.7);
+  assert.equal(f.molotov.oils.length, 0);
+  assert.equal(f.molotov.fires.length, 3);
+  assert.ok(f.molotov.fires.every((fire) => fire.room === 2 && fire.row === 1 && fire.y === originY + 119));
+});
+
+test("oil from a ceiling in an upper linked room stays in the exposed lower room and stops at its first floor", () => {
+  const f = fixture();
+  f.setTile(1, 3, 2, 1);
+  const bottle = Object.assign(f.bottle(112, 220, 2), { vx: 0, vy: -400 });
+  assert.equal(f.molotov.advanceBottle(bottle, 0.1), false);
+  assert.ok(Math.abs(bottle.y - 194) < 0.00001);
+  assert.equal(f.molotov.fires.length, 0);
+  assert.equal(f.molotov.oils.length, 3);
+  assert.ok(f.molotov.oils.every((oil) => oil.room === 2 && oil.y - oil.radius > 189));
+  f.advance(1);
+  assert.equal(f.molotov.oils.length, 0);
+  assert.equal(f.molotov.fires.length, 3);
+  assert.ok(f.molotov.fires.every((fire) => fire.room === 2 && fire.row === 1 && fire.y === 308));
+});
+
+test("ceiling oil falls through real gaps and lower links without crossing a closed map boundary", () => {
+  for (const linked of [true, false]) {
+    const f = fixture();
+    for (let column = 0; column < 10; column++) {
+      f.setTile(1, column, 1, 0);
+    }
+    f.setTile(1, 3, 0, 1);
+    if (!linked) {
+      f.level.rooms[1].links.down = -1;
+    }
+    const bottle = Object.assign(f.bottle(112, 100), { vx: 0, vy: -400 });
+    assert.equal(f.molotov.advanceBottle(bottle, 0.12), false);
+    assert.equal(f.molotov.oils.length, 3);
+    f.advance(1.6);
+    assert.equal(f.molotov.oils.length, 0);
+    assert.equal(f.molotov.fires.length, linked ? 3 : 0);
+    assert.ok(f.molotov.fires.every((fire) => fire.room === 2 && fire.y === 308));
+  }
+  const f = fixture();
+  f.level.rooms[2].links.up = -1;
+  const bottle = Object.assign(f.bottle(112, 220, 2), { vx: 0, vy: -400 });
+  assert.equal(f.molotov.advanceBottle(bottle, 0.12), false);
+  assert.equal(f.molotov.oils.length, 0, "a sealed missing upper room has no native ceiling tile to ignite");
+  assert.equal(f.molotov.fires.length, 0);
+});
+
 test("wall impacts burn the struck face and drop burning oil onto the actual floor below in both directions", () => {
   for (const direction of [1, -1]) {
     const f = fixture();

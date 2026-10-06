@@ -50,6 +50,14 @@ PrinceJS.Enemy.prototype = Object.create(PrinceJS.Fighter.prototype);
 PrinceJS.Enemy.prototype.constructor = PrinceJS.Enemy;
 
 PrinceJS.Enemy.prototype.updateActor = function () {
+  if (this.burningDeath) {
+    // A guard is already dead in combat; its fire performance owns motion and
+    // has dispatched the native death command exactly once.
+    return;
+  }
+  if (this.whipState && this.whipState.owner.updateEnemyActor(this)) {
+    return;
+  }
   this.updateSplash();
   this.updateBehaviour();
   this.processCommand();

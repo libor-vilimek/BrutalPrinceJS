@@ -12,6 +12,7 @@ PrinceJS.BloodEffects = function (delegate) {
   this.depthCounts = Array(10).fill(0);
   this.depthCursor = 0;
   this.foregroundStainCount = 0;
+  this.backgroundStainCount = 0;
   this.masonryCounts = { pillar: 0, above: 0, below: 0 };
   this.drawnPixelCount = 0;
   this.textureMasks = new WeakMap();
@@ -113,8 +114,10 @@ PrinceJS.BloodEffects.prototype = {
       stainCount: 0,
       depthCounts: Array(10).fill(0),
       floorDepths: new Map(),
+      background: null,
       pixelOwners: new Map(),
       foregroundStainCount: 0,
+      backgroundStainCount: 0,
       drawnPixelCount: 0,
       revision: 0
     };
@@ -123,6 +126,26 @@ PrinceJS.BloodEffects.prototype = {
       this.game.world.sort("z");
     }
     return layer;
+  },
+
+  backgroundDecals: function (layer) {
+    if (!layer.background) {
+      let bitmap = this.game.add.bitmapData(layer.bitmap.width, layer.bitmap.height);
+      bitmap.smoothed = false;
+      let sprite = this.game.add.sprite(layer.x, layer.y, bitmap);
+      sprite.smoothed = false;
+      sprite.z = 19.4;
+      if (this.level.back && this.level.back.add) {
+        // Door facades stand behind actors. Parenting the ink to the scenery
+        // keeps that relationship even when Phaser renumbers the world z values.
+        this.level.back.add(sprite);
+      }
+      layer.background = { bitmap, sprite, revision: 0, drawnPixelCount: 0, pixelOwners: new Map() };
+      if (!this.level.back && this.game.world && this.game.world.sort) {
+        this.game.world.sort("z");
+      }
+    }
+    return layer.background;
   },
 
   floorDepth: function (layer, depth) {
@@ -264,6 +287,17 @@ PrinceJS.BloodEffects.prototype = {
     return surface && surface.material;
   },
 
+  isDoorFacade: function (tile, y) {
+    if (![PrinceJS.Level.TILE_EXIT_LEFT, PrinceJS.Level.TILE_EXIT_RIGHT].includes(tile.element)) {
+      return false;
+    }
+    let room = this.level.rooms[tile.room];
+    let floorY = room.y * PrinceJS.ROOM_HEIGHT + (tile.roomY + 1) * PrinceJS.BLOCK_HEIGHT - 7;
+    // The diagonal floor plane begins six pixels above the collision surface.
+    // Its ten blood lanes and foreground lip keep their existing depth.
+    return y < floorY - 6;
+  },
+
   surfaceAt: function (terrain, x, y) {
     let background = null;
     for (let sprite of terrain.sprites) {
@@ -276,10 +310,13 @@ PrinceJS.BloodEffects.prototype = {
         localY < sprite.mask.height &&
         sprite.mask.alpha[localY * sprite.mask.width + localX] > 32
       ) {
-        if (sprite.foreground) {
+        if (this.isDoorFacade(sprite.tile, y)) {
+          background = background || { material: "door", tile: sprite.tile };
+        } else if (sprite.foreground) {
           return { material: "foreground", tile: sprite.tile };
+        } else {
+          background = background || { material: "background", tile: sprite.tile };
         }
-        background = background || sprite.tile;
       }
     }
     for (let entry of terrain.fallback) {
@@ -289,6 +326,11 @@ PrinceJS.BloodEffects.prototype = {
           return { material: "foreground", tile };
         }
       } else {
+        if (tile.element === PrinceJS.Level.TILE_EXIT_RIGHT && !tile.destroyedByRocket && !tile.open) {
+          if (x >= entry.x + 10 && x < entry.x + 22 && y >= entry.y + 3 && y < entry.y + 53) {
+            background = background || { material: "door", tile };
+          }
+        }
         if (tile.isBarrier() && tile.getBounds) {
           let bounds = tile.getBounds();
           let room = this.level.rooms[tile.room];
@@ -305,12 +347,12 @@ PrinceJS.BloodEffects.prototype = {
           }
           let left = entry.x - (y - floorY) * 2;
           if (y >= floorY - 6 && y < floorY + 7 && x >= left && x < left + 32) {
-            background = background || tile;
+            background = background || { material: "background", tile };
           }
         }
       }
     }
-    return background ? { material: "background", tile: background } : null;
+    return background;
   },
 
   recordSurfacePixels: function (cache, tile, x, y, width) {
@@ -377,9 +419,12 @@ PrinceJS.BloodEffects.prototype = {
       cache.bitmap.dirty = true;
       cache.revision++;
     }
-    // A floor lane can change without touching its room's foreground cache.
+    // A background cache can change without touching the foreground cache.
     for (let layer of this.decalRooms.values()) {
-      if (!surfaces.has(layer) && [...layer.floorDepths.values()].some((floor) => surfaces.has(floor))) {
+      if (
+        !surfaces.has(layer) &&
+        (surfaces.has(layer.background) || [...layer.floorDepths.values()].some((floor) => surfaces.has(floor)))
+      ) {
         layer.revision++;
       }
     }
@@ -387,7 +432,7 @@ PrinceJS.BloodEffects.prototype = {
   },
 
   paint: function (layer, terrain, x, y, width, height, color, depth, foregroundOnly) {
-    let counts = { floor: 0, foreground: 0 };
+    let counts = { floor: 0, foreground: 0, background: 0 };
     for (let row = Math.floor(y); row < Math.floor(y) + height; row++) {
       let start = Math.floor(x);
       let end = start + width;
@@ -407,7 +452,8 @@ PrinceJS.BloodEffects.prototype = {
           run++;
         }
         let floor = material === "background" && depth !== undefined ? this.floorDepth(layer, depth) : null;
-        let cache = floor || layer;
+        let backdrop = material === "door" ? this.backgroundDecals(layer) : null;
+        let cache = backdrop || floor || layer;
         let bitmap = cache.bitmap;
         bitmap.ctx.fillStyle = color;
         bitmap.ctx.fillRect(column - layer.x, row - layer.y, run - column, 1);
@@ -417,6 +463,9 @@ PrinceJS.BloodEffects.prototype = {
         if (floor) {
           floor.drawnPixelCount += pixels;
           counts.floor += pixels;
+        } else if (backdrop) {
+          backdrop.drawnPixelCount += pixels;
+          counts.background += pixels;
         } else {
           counts.foreground += pixels;
         }
@@ -551,7 +600,7 @@ PrinceJS.BloodEffects.prototype = {
     let terrain = this.terrain(contact);
     let depth = particle.depthLayer === undefined ? this.depthCursor : particle.depthLayer;
     depth = Math.max(0, Math.min(9, depth));
-    let counts = { floor: 0, foreground: 0 };
+    let counts = { floor: 0, foreground: 0, background: 0 };
     let draw = (dx, dy, width, height, color, floorDepth, foregroundOnly) => {
       let painted = this.paint(
         layer,
@@ -566,6 +615,7 @@ PrinceJS.BloodEffects.prototype = {
       );
       counts.floor += painted.floor;
       counts.foreground += painted.foreground;
+      counts.background += painted.background;
     };
     if (contact.normalX) {
       let inside = -contact.normalX;
@@ -598,13 +648,13 @@ PrinceJS.BloodEffects.prototype = {
       draw(-3, -2, 6, 2, "#ad2330");
       draw(-1, -1, 2, 1, "#dd393b");
     }
-    if (!counts.floor && !counts.foreground) {
+    if (!counts.floor && !counts.foreground && !counts.background) {
       return;
     }
     layer.stainCount++;
     layer.revision++;
-    layer.drawnPixelCount += counts.floor + counts.foreground;
-    this.drawnPixelCount += counts.floor + counts.foreground;
+    layer.drawnPixelCount += counts.floor + counts.foreground + counts.background;
+    this.drawnPixelCount += counts.floor + counts.foreground + counts.background;
     if (contact.normalY === -1) {
       layer.depthCounts[depth]++;
       this.depthCounts[depth]++;
@@ -616,6 +666,11 @@ PrinceJS.BloodEffects.prototype = {
     if (counts.foreground) {
       layer.foregroundStainCount++;
       this.foregroundStainCount++;
+    }
+    if (counts.background) {
+      layer.backgroundStainCount++;
+      this.backgroundStainCount++;
+      layer.background.revision++;
     }
     this.stainCount++;
   },
@@ -653,6 +708,12 @@ PrinceJS.BloodEffects.prototype = {
     this.destroyed = true;
     this.particles.length = 0;
     for (let layer of this.decalRooms.values()) {
+      if (layer.background) {
+        layer.background.pixelOwners.clear();
+        layer.background.sprite.destroy();
+        layer.background.bitmap.destroy();
+        layer.background = null;
+      }
       for (let floor of layer.floorDepths.values()) {
         floor.pixelOwners.clear();
         floor.sprite.destroy();
@@ -667,7 +728,7 @@ PrinceJS.BloodEffects.prototype = {
     this.surfacePixels.clear();
     this.stainCount = 0;
     this.depthCounts.fill(0);
-    this.foregroundStainCount = this.drawnPixelCount = 0;
+    this.foregroundStainCount = this.backgroundStainCount = this.drawnPixelCount = 0;
     this.masonryCounts = { pillar: 0, above: 0, below: 0 };
     this.textureMasks = new WeakMap();
     if (this.maskBitmap) {

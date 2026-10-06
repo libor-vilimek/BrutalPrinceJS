@@ -116,6 +116,14 @@ PrinceJS.MolotovBallistics = {
           // Keep the oil on its supporting tile when the bottle clips a ledge corner.
           bottle.x = Math.max(surface.left + 0.01, Math.min(surface.right - 0.01, bottle.x));
           controller.ignite(bottle, surface.tile.roomX, surface.tile.roomY, surface.top);
+        } else if (
+          !bottle.oil &&
+          contact.normalY > 0 &&
+          surface.tile &&
+          Number.isInteger(surface.tile.roomX) &&
+          Number.isInteger(surface.tile.roomY)
+        ) {
+          controller.igniteCeiling(bottle, contact);
         } else if (bottle.oil && contact.normalX) {
           // A falling oil drop runs down the newly struck face instead of bursting again.
           bottle.x += contact.normalX * 0.02;

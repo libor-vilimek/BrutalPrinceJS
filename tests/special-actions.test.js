@@ -160,7 +160,7 @@ test("weapon selection respects throw and stow locks, preserves flight ownership
     ui: { showText: (text) => messages.push(text) }
   });
   kid.hasMolotov = true;
-  for (const stage of ["throwing", "holstering"]) {
+  for (const stage of ["intro", "throwing", "holstering"]) {
     molotov.actionStage = stage;
     kid.specialAction = { owner: molotov };
     state.selectWeapon("molotov");

@@ -20,7 +20,7 @@ function fixture() {
       }
     }
   });
-  for (const file of ["Level", "tiles/Base", "tiles/Gate", "GorePhysics", "BloodEffects"]) {
+  for (const file of ["Level", "tiles/Base", "tiles/Gate", "tiles/ExitDoor", "GorePhysics", "BloodEffects"]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "src", file + ".js"), "utf8"), context);
   }
   const bitmaps = [];
@@ -135,10 +135,10 @@ function fixture() {
   return { PrinceJS, level, game, blood, physics, setTile, advance, bitmaps, sprites, graphics, delegate };
 }
 
-let dungeonImage;
-function nativeTerrain(f) {
-  if (!dungeonImage) {
-    const png = fs.readFileSync(path.join(__dirname, "../assets/gfx/dungeon.png"));
+const atlasImages = new Map();
+function nativeTerrain(f, key = "dungeon") {
+  if (!atlasImages.has(key)) {
+    const png = fs.readFileSync(path.join(__dirname, "../assets/gfx/" + key + ".png"));
     const chunks = [];
     let width;
     let height;
@@ -181,19 +181,33 @@ function nativeTerrain(f) {
         pixels[index] = (raw[cursor++] + predictor) & 255;
       }
     }
-    dungeonImage = { width, height, pixels };
+    atlasImages.set(key, { width, height, pixels });
   }
-  const source = dungeonImage;
-  const frames = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/gfx/dungeon.json"), "utf8")).frames;
+  const source = atlasImages.get(key);
+  const frames = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/gfx/" + key + ".json"), "utf8")).frames;
   const scratch = [];
-  const sprite = (key, x = 0, y = 0) => {
-    const frame = frames[key].frame;
+  const sprite = (frameName, x = 0, y = 0) => {
+    const frame = frames[frameName].frame;
     return {
       x,
       y,
+      width: frame.w,
+      height: frame.h,
       scale: { x: 1, y: 1 },
       anchor: { x: 0, y: 0 },
       children: [],
+      addChild(child) {
+        this.children.push(child);
+        child.parent = this;
+      },
+      crop(rectangle) {
+        this.texture.crop = {
+          x: frame.x + rectangle.x,
+          y: frame.y + rectangle.y,
+          width: rectangle.width,
+          height: rectangle.height
+        };
+      },
       texture: {
         baseTexture: { source },
         crop: { x: frame.x, y: frame.y, width: frame.w, height: frame.h }
@@ -203,6 +217,21 @@ function nativeTerrain(f) {
   f.game.make = {
     sprite(x, y, key, frame) {
       return sprite(frame, x, y);
+    },
+    graphics(x, y) {
+      return {
+        x,
+        y,
+        children: [],
+        addChild(child) {
+          this.children.push(child);
+          child.parent = this;
+        },
+        beginFill() {},
+        drawRect() {},
+        endFill() {},
+        clear() {}
+      };
     },
     bitmapData(width, height) {
       const bitmap = {
@@ -244,20 +273,33 @@ function nativeTerrain(f) {
       if (tile.element === 0) {
         continue;
       }
-      tile.back = sprite(tile.element === 20 ? "dungeon_wall_0" : "dungeon_" + tile.element);
-      tile.front = sprite(tile.element === 20 ? "SWS_1" : "dungeon_" + tile.element + "_fg");
+      tile.back = sprite(tile.element === 20 ? key + "_wall_0" : key + "_" + tile.element);
+      tile.front = sprite(tile.element === 20 && key === "dungeon" ? "SWS_1" : key + "_" + tile.element + "_fg");
       if (tile.element === 4) {
-        tile.back.children.push(sprite("dungeon_gate"));
-        tile.front.children.push(sprite("dungeon_gate_fg", 32, 16));
+        tile.back.children.push(sprite(key + "_gate"));
+        tile.front.children.push(sprite(key + "_gate_fg", 32, 16));
+      }
+      if (tile.element === f.PrinceJS.Level.TILE_EXIT_RIGHT) {
+        Object.setPrototypeOf(tile, f.PrinceJS.Tile.ExitDoor.prototype);
+        Object.assign(tile, { game: f.game, key, type: key === "palace" ? 1 : 0, doorRole: "exit", open: false });
+        tile.tileChildBack = sprite(key + "_door", key === "palace" ? 7 : 10, 12);
+        tile.back.addChild(tile.tileChildBack);
+        tile.tileChildFront = sprite(key + "_door_fg");
+        tile.tileChildFront.visible = false;
+        tile.front.addChild(tile.tileChildFront);
       }
     }
   }
   const opaque = (x, y, frontOnly) => {
     const contains = (entry, left, top) => {
-      const crop = entry.texture.crop;
+      if (entry.visible === false || entry.exists === false) {
+        return false;
+      }
+      const crop = entry.texture && entry.texture.crop;
       const column = x - left;
       const row = y - top;
       if (
+        crop &&
         column >= 0 &&
         row >= 0 &&
         column < crop.width &&
@@ -285,7 +327,11 @@ function nativeTerrain(f) {
 }
 
 function assertNativePaint(layer, native) {
-  for (const bitmap of [layer.bitmap, ...[...layer.floorDepths.values()].map((floor) => floor.bitmap)]) {
+  for (const bitmap of [
+    layer.bitmap,
+    ...(layer.background ? [layer.background.bitmap] : []),
+    ...[...layer.floorDepths.values()].map((floor) => floor.bitmap)
+  ]) {
     for (const draw of bitmap.draws) {
       for (let x = draw.x; x < draw.x + draw.width; x++) {
         for (let y = draw.y; y < draw.y + draw.height; y++) {
@@ -297,6 +343,60 @@ function assertNativePaint(layer, native) {
       }
     }
   }
+}
+
+function terrainGroups(f) {
+  const group = () => ({
+    children: [],
+    reindex() {
+      this.children.forEach((child, index) => (child.z = index));
+    },
+    add(child) {
+      if (child.parent) {
+        child.parent.children.splice(child.parent.children.indexOf(child), 1);
+        child.parent.reindex();
+      }
+      child.parent = this;
+      this.children.push(child);
+      this.reindex();
+    },
+    setChildIndex(child, index) {
+      this.children.splice(this.children.indexOf(child), 1);
+      this.children.splice(index, 0, child);
+      this.reindex();
+    }
+  });
+  f.level.back = group();
+  f.level.front = group();
+  const world = group();
+  world.sort = function () {
+    this.children.sort((a, b) => a.z - b.z);
+    this.reindex();
+  };
+  world.add(f.level.back);
+  f.level.back.z = 10;
+  for (let i = 0; i < 60; i++) {
+    const actor = {};
+    world.add(actor);
+    actor.z = 20;
+  }
+  world.add(f.level.front);
+  f.level.front.z = 30;
+  world.sort();
+  for (const room of f.level.rooms.filter(Boolean)) {
+    for (const tile of room.tiles.filter((tile) => tile.back)) {
+      f.level.back.add(tile.back);
+      f.level.front.add(tile.front);
+    }
+  }
+  f.game.world = world;
+  const createSprite = f.game.add.sprite;
+  f.game.add.sprite = (x, y, bitmap) => {
+    const created = createSprite(x, y, bitmap);
+    world.add(created);
+    return created;
+  };
+  return world;
 }
 
 test("native floor blood occupies ten shaded depth lanes and spills onto actual foreground stone", () => {
@@ -459,6 +559,136 @@ test("native wall and gate splashes stay above their opaque fronts and leave bla
   }
 });
 
+test("dungeon and palace exit blood stays behind actors while its ten floor lanes and floor lip keep their depth", () => {
+  for (const key of ["dungeon", "palace"]) {
+    const f = fixture();
+    f.setTile(1, 3, 1, f.PrinceJS.Level.TILE_EXIT_LEFT);
+    const door = f.setTile(1, 4, 1, f.PrinceJS.Level.TILE_EXIT_RIGHT);
+    const native = nativeTerrain(f, key);
+    const world = terrainGroups(f);
+    const prince = world.children[1];
+    f.blood.burst(132, 85, 1, { count: 3, vx: 220, vy: 0 });
+    f.advance(0.12);
+    const layer = f.blood.decalRooms.get(1);
+    assert.equal(layer.backgroundStainCount, 3);
+    assert.equal(f.blood.backgroundStainCount, 3);
+    assert.ok(layer.background.bitmap.pixels.size > 0, "the actual closed door catches the blood");
+    assert.equal(layer.bitmap.pixels.size, 0, "door-panel ink never enters the layer above the Prince");
+    assert.equal(layer.background.sprite.parent, f.level.back);
+    assert.equal(layer.sprite.parent, f.level.front);
+    door.mask();
+    f.blood.stain({ room: 1, tile: door, x: 181, y: 85, normalX: -1, normalY: 0 }, { size: 2, depthLayer: 0, vx: 100 });
+    assert.equal(layer.bitmap.pixels.size, 0, "the temporary door mask also paints behind the Prince");
+    for (let depthLayer = 0; depthLayer < 10; depthLayer++) {
+      f.blood.stain({ room: 1, tile: door, x: 156, y: 119, normalX: 0, normalY: -1 }, { size: 2, depthLayer, vx: 50 });
+    }
+    assert.equal(layer.floorDepths.size, 10, "the doorway's floor still supports every depth lane");
+    assert.ok(layer.bitmap.pixels.size > 0, "the floor lip remains foreground stone");
+    assertNativePaint(layer, native);
+    world.add({ z: 21 });
+    world.sort();
+    assert.ok(world.children.indexOf(f.level.back) < world.children.indexOf(prince));
+    assert.ok(world.children.indexOf(f.level.front) > world.children.indexOf(prince));
+    assert.ok(!world.children.includes(layer.background.sprite), "world sorting cannot move door ink over actors");
+  }
+});
+
+test("exit blood keeps identical cached pixels through room travel and real rocket damage", () => {
+  const f = fixture();
+  f.setTile(1, 3, 1, f.PrinceJS.Level.TILE_EXIT_LEFT);
+  const door = f.setTile(1, 4, 1, f.PrinceJS.Level.TILE_EXIT_RIGHT);
+  const native = nativeTerrain(f);
+  terrainGroups(f);
+  f.blood.burst(132, 85, 1, { count: 3, vx: 220, vy: 0 });
+  f.advance(0.2);
+  const layer = f.blood.decalRooms.get(1);
+  const cache = layer.background;
+  const pixels = [...cache.bitmap.pixels];
+  const revision = cache.revision;
+  assertNativePaint(layer, native);
+  assert.equal(door.blastOpen({ direction: 1 }), true);
+  for (let tick = 0; tick < 25; tick++) {
+    door.update();
+  }
+  assert.ok(door.destroyedByRocket && door.open);
+  assert.ok(door.damagedFacade.children.length > 0);
+  f.delegate.currentRoom = 2;
+  f.advance(5);
+  f.delegate.currentRoom = 1;
+  f.advance(5);
+  assert.equal(layer.background, cache);
+  assert.equal(cache.sprite.parent, f.level.back);
+  assert.deepEqual([...cache.bitmap.pixels], pixels, "damage and camera travel never repaint or recolor settled ink");
+  assert.equal(cache.revision, revision);
+  assert.equal(layer.bitmap.pixels.size, 0);
+  const terrain = f.blood.terrain({ room: 1, x: 143, y: 65 });
+  const facade = {
+    sprites: terrain.sprites.filter((entry) => entry.tile === door && !entry.foreground && entry.mask.width < 30),
+    fallback: []
+  };
+  const count = f.blood.paint(layer, facade, 120, 45, 76, 55, "#7a1420");
+  assert.ok(count.background > 0, "new splashes on native broken jambs also use the background cache");
+  assert.equal(count.foreground, 0);
+});
+
+test("door splashes at a linked room seam use the neighboring room's background cache", () => {
+  const f = fixture();
+  f.setTile(1, 9, 1, f.PrinceJS.Level.TILE_EXIT_LEFT);
+  f.setTile(2, 0, 1, f.PrinceJS.Level.TILE_EXIT_RIGHT);
+  const native = nativeTerrain(f);
+  terrainGroups(f);
+  f.blood.burst(315, 85, 1, { count: 2, vx: 220, vy: 0 });
+  f.advance(0.15);
+  const layer = f.blood.decalRooms.get(2);
+  assert.ok(layer.background.bitmap.pixels.size > 0);
+  assert.equal(layer.background.sprite.parent, f.level.back);
+  assert.equal(layer.background.sprite.x, 288);
+  assert.equal(layer.bitmap.pixels.size, 0);
+  assert.equal(f.blood.decalRooms.has(1), false);
+  assertNativePaint(layer, native);
+});
+
+test("removing a stained doorway clears its background pixels and preserves nearby foreground masonry", () => {
+  const f = fixture();
+  const door = f.setTile(1, 4, 1, f.PrinceJS.Level.TILE_EXIT_RIGHT);
+  f.setTile(1, 6, 1, f.PrinceJS.Level.TILE_PILLAR);
+  nativeTerrain(f);
+  terrainGroups(f);
+  f.blood.burst(132, 85, 1, { count: 3, vx: 220, vy: 0 });
+  f.advance(0.2);
+  f.blood.hit({ room: 1, charBlockY: 1, charName: "guard-2" }, { x: 194, y: 90, direction: 1, weapon: "minigun" });
+  const layer = f.blood.decalRooms.get(1);
+  const background = layer.background;
+  const masonry = [...layer.bitmap.pixels];
+  const revision = layer.revision;
+  assert.ok(masonry.length > 0);
+  assert.ok(background.bitmap.pixels.size > 0);
+  f.blood.removeSurface(door);
+  assert.equal(background.bitmap.pixels.size, 0);
+  assert.equal(background.pixelOwners.size, 0);
+  assert.equal(f.blood.surfacePixels.has(door), false);
+  assert.deepEqual([...layer.bitmap.pixels], masonry);
+  assert.ok(layer.revision > revision);
+  f.blood.destroy();
+  f.blood.destroy();
+  assert.equal(background.bitmap.destroyed, 1);
+  assert.equal(background.sprite.destroyed, 1);
+  assert.equal(layer.background, null);
+  assert.equal(f.blood.backgroundStainCount, 0);
+});
+
+test("editor levels without a texture atlas put closed-exit blood behind actors too", () => {
+  const f = fixture();
+  f.setTile(1, 4, 1, f.PrinceJS.Level.TILE_EXIT_RIGHT);
+  f.blood.burst(132, 85, 1, { count: 2, vx: 220, vy: 0 });
+  f.advance(0.15);
+  const layer = f.blood.decalRooms.get(1);
+  assert.equal(layer.backgroundStainCount, 2);
+  assert.ok(layer.background.sprite.z < 20);
+  assert.equal(layer.bitmap.pixels.size, 0);
+  assert.ok(layer.background.bitmap.pixels.size > 0);
+});
+
 test("enemy hits splatter native pillars and masonry above and below the walking floor", () => {
   const f = fixture();
   const pillar = f.setTile(1, 4, 1, 3);
@@ -577,57 +807,8 @@ test("stone ink stays above native fronts and floor ink below actors when Phaser
   f.setTile(1, 4, 0, 20);
   f.setTile(1, 4, 2, 20);
   nativeTerrain(f);
-  const group = () => ({
-    children: [],
-    reindex() {
-      this.children.forEach((child, index) => (child.z = index));
-    },
-    add(child) {
-      if (child.parent) {
-        child.parent.children.splice(child.parent.children.indexOf(child), 1);
-        child.parent.reindex();
-      }
-      child.parent = this;
-      this.children.push(child);
-      this.reindex();
-    },
-    setChildIndex(child, index) {
-      this.children.splice(this.children.indexOf(child), 1);
-      this.children.splice(index, 0, child);
-      this.reindex();
-    }
-  });
-  f.level.back = group();
-  f.level.front = group();
-  const world = group();
-  world.sort = function () {
-    this.children.sort((a, b) => a.z - b.z);
-    this.reindex();
-  };
-  world.add(f.level.back);
-  f.level.back.z = 10;
-  for (let i = 0; i < 60; i++) {
-    const actor = {};
-    world.add(actor);
-    actor.z = 20;
-  }
-  world.add(f.level.front);
-  f.level.front.z = 30;
-  world.sort();
+  const world = terrainGroups(f);
   assert.ok(f.level.front.z > 30.5, "crowded rooms overwrite the initial foreground z value");
-  for (const room of f.level.rooms.filter(Boolean)) {
-    for (const tile of room.tiles.filter((tile) => tile.back)) {
-      f.level.back.add(tile.back);
-      f.level.front.add(tile.front);
-    }
-  }
-  f.game.world = world;
-  const createSprite = f.game.add.sprite;
-  f.game.add.sprite = (x, y, bitmap) => {
-    const sprite = createSprite(x, y, bitmap);
-    world.add(sprite);
-    return sprite;
-  };
   f.blood.hit({ room: 1, charBlockY: 1, charName: "guard-2" }, { x: 118, y: 90, direction: 1, weapon: "minigun" });
   f.advance(3);
   const layer = f.blood.decalRooms.get(1);

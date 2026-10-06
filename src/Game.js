@@ -138,29 +138,38 @@ PrinceJS.Game.prototype = {
     this.weaponFireKey.onDown.add(this.handleWeaponControl, this);
     this.weaponCtrlKey.onUp.add(this.handleWeaponRelease, this);
     this.weaponFireKey.onUp.add(this.handleWeaponRelease, this);
-    this.input.keyboard.addKey(Phaser.Keyboard.ONE).onDown.add(() => this.selectWeapon("molotov"), this);
-    this.input.keyboard.addKey(Phaser.Keyboard.TWO).onDown.add(() => this.selectWeapon("minigun"), this);
-    this.input.keyboard.addKey(Phaser.Keyboard.THREE).onDown.add(() => this.selectWeapon("rocketLauncher"), this);
+    this.input.keyboard.addKey(Phaser.Keyboard.ONE).onDown.add(() => this.selectWeapon("twinTorches"), this);
+    this.input.keyboard.addKey(Phaser.Keyboard.TWO).onDown.add(() => this.selectWeapon("molotov"), this);
+    this.input.keyboard.addKey(Phaser.Keyboard.THREE).onDown.add(() => this.selectWeapon("minigun"), this);
+    this.input.keyboard.addKey(Phaser.Keyboard.FOUR).onDown.add(() => this.selectWeapon("rocketLauncher"), this);
+    this.input.keyboard.addKey(Phaser.Keyboard.FIVE).onDown.add(() => this.selectWeapon("whip"), this);
+    this.kid.hasTwinTorches = true;
     this.kid.hasMolotov = this.kid.hasMinigun = PrinceJS.currentLevel >= 2;
-    this.kid.hasRocketLauncher = PrinceJS.currentLevel >= 3;
+    this.kid.hasRocketLauncher = PrinceJS.currentLevel >= 4;
+    this.kid.hasWhip = PrinceJS.currentLevel >= 3;
+    this.twinTorches = new PrinceJS.TwinTorches(this);
     this.minigun = new PrinceJS.Minigun(this, json.prince.direction * (json.prince.reverse || 1));
     this.rocketLauncher = null;
-    this.weapons = [this.minigun];
-    if (this.kid.hasRocketLauncher) {
+    this.weapons = [this.twinTorches, this.minigun];
+    if (PrinceJS.currentLevel >= 3) {
       this.rocketLauncher = new PrinceJS.RocketLauncher(this, -json.prince.direction * (json.prince.reverse || 1));
       this.weapons.push(this.rocketLauncher);
     }
     this.molotov = new PrinceJS.Molotov(this, direction);
-    this.weapons.unshift(this.molotov);
-    if (this.kid.hasMinigun) {
-      this.minigun.equip();
+    this.weapons.splice(1, 0, this.molotov);
+    this.whip = null;
+    if (PrinceJS.currentLevel >= 2) {
+      this.whip = new PrinceJS.Whip(this, direction);
+      this.weapons.push(this.whip);
     }
+    this.twinTorches.equip();
     this.kid.hasJetpack = PrinceJS.currentLevel >= 13;
     this.jetpack = new PrinceJS.Jetpack(this, json.prince.direction * (json.prince.reverse || 1));
     this.input.keyboard.addKey(Phaser.Keyboard.J).onDown.add(this.toggleJetpack, this);
 
     this.bloodEffects = new PrinceJS.BloodEffects(this);
     this.enemyDeathEffects = new PrinceJS.EnemyDeathEffects(this);
+    this.burningEnemyEffects = new PrinceJS.BurningEnemyEffects(this);
 
     this.world.sort("z");
     this.world.alpha = 1;
@@ -184,6 +193,7 @@ PrinceJS.Game.prototype = {
     }
     PrinceJS.Utils.resetFlipScreen();
     PrinceJS.Utils.updateQuery();
+    this.twinTorches.startIntro();
   },
 
   update: function () {
@@ -196,6 +206,9 @@ PrinceJS.Game.prototype = {
     }
     if (this.enemyDeathEffects) {
       this.enemyDeathEffects.update(delta);
+    }
+    if (this.burningEnemyEffects) {
+      this.burningEnemyEffects.update(delta);
     }
     if (this.bloodEffects) {
       this.bloodEffects.update(delta);
@@ -263,13 +276,13 @@ PrinceJS.Game.prototype = {
       weapon.destroy();
     }
     this.weapons = [];
-    this.molotov = this.minigun = this.rocketLauncher = null;
-    for (let effects of [this.enemyDeathEffects, this.bloodEffects]) {
+    this.twinTorches = this.molotov = this.minigun = this.rocketLauncher = this.whip = null;
+    for (let effects of [this.burningEnemyEffects, this.enemyDeathEffects, this.bloodEffects]) {
       if (effects) {
         effects.destroy();
       }
     }
-    this.enemyDeathEffects = this.bloodEffects = null;
+    this.burningEnemyEffects = this.enemyDeathEffects = this.bloodEffects = null;
     if (this.roomCamera) {
       this.roomCamera.destroy();
     }
@@ -284,6 +297,8 @@ PrinceJS.Game.prototype = {
       Phaser.Keyboard.ONE,
       Phaser.Keyboard.TWO,
       Phaser.Keyboard.THREE,
+      Phaser.Keyboard.FOUR,
+      Phaser.Keyboard.FIVE,
       Phaser.Keyboard.J
     ]) {
       this.input.keyboard.removeKey(key);
@@ -318,7 +333,8 @@ PrinceJS.Game.prototype = {
     let action = this.kid.specialAction;
     if (
       action &&
-      (!(this.weapons || []).includes(action.owner) || ["holstering", "throwing"].includes(action.owner.actionStage))
+      (!(this.weapons || []).includes(action.owner) ||
+        ["intro", "holstering", "throwing"].includes(action.owner.actionStage))
     ) {
       return;
     }
@@ -329,6 +345,10 @@ PrinceJS.Game.prototype = {
         instruction = ["hang", "hangstraight"].includes(this.kid.action)
           ? " - CTRL/F TO DROP"
           : " - HOLD CTRL/F, RELEASE";
+      } else if (id === "twinTorches") {
+        instruction = " - HOLD CTRL / F TO SPIN";
+      } else if (id === "whip") {
+        instruction = " - HOLD CTRL / F TO LASH / PULL";
       }
       this.ui.showText(weapon.spec.label + instruction, "weapon");
       this.ui.hideTextTimer = 40;

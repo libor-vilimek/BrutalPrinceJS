@@ -33,12 +33,330 @@ async function ready() {
         testGame.state.start("Game");
       }
       await pause(1000);
+      await settleOpeningIntro();
       testGame.input.reset(false);
       return;
     }
     await pause(100);
   }
   throw new Error("Game did not load");
+}
+
+async function settleOpeningIntro() {
+  for (let i = 0; i < 100; i++) {
+    const torches = gameState().twinTorches;
+    if (!torches || (!torches.introPending && torches.actionStage !== "intro")) {
+      return;
+    }
+    await pause(50);
+  }
+  throw new Error("The starting torch collection did not finish");
+}
+
+async function meleeFireChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  let keyR;
+  let kid;
+  try {
+    let state = await loadMission(1);
+    quietEnemies(state);
+    kid = state.kid;
+    check(
+      kid.hasTwinTorches && kid.activeWeapon === "twinTorches",
+      "Torches are automatically owned and selected first"
+    );
+    check(
+      state.twinTorches.introDone &&
+        state.twinTorches.introTorches.length === 2 &&
+        state.twinTorches.introTorches.every(({ tile, captured }) => captured && tile.taken && !tile.tileChild.visible),
+      "The real starting sequence removes both wall torches and tucks them away"
+    );
+    check(!kid.specialAction && !kid.cropRect, "Opening collection restores movement and the native Prince sprite");
+    placeKid(2, 70, 1, 1);
+    state.selectWeapon("twinTorches");
+    const targets = state.enemies.filter((enemy) => enemy.alive && enemy.baseCharName === "guard").slice(0, 2);
+    targets.forEach((enemy, index) => {
+      placeGuard(enemy, 2, index ? 16 : 13, index ? -1 : 1);
+      enemy.health = 4;
+    });
+    const startX = kid.charX;
+    const health = kid.health;
+    state.weaponCtrlKey.isDown = true;
+    state.weaponCtrlKey.onDown.dispatch();
+    await pause(90);
+    check(state.twinTorches.actionStage === "drawing", "Ctrl starts the vulnerable two-torch draw");
+    kid.stabbed();
+    check(
+      kid.health === health - 1 &&
+        state.twinTorches.actionStage === "drawing" &&
+        kid.specialAction.owner === state.twinTorches,
+      "A native sword hit during draw costs one life without interrupting the animation"
+    );
+    keyR = kid.keyR;
+    kid.keyR = () => true;
+    for (let i = 0; i < 50 && targets.some((enemy) => enemy.alive); i++) {
+      await pause(25);
+    }
+    check(state.twinTorches.isSpinning() && kid.charX === startX, "Held Ctrl completes the draw and spins in place");
+    check(
+      targets.every((enemy) => !enemy.alive && enemy.health === 0 && enemy.burningDeath),
+      "Both guards within the sweep are killed immediately and start burning"
+    );
+    const spinHealth = kid.health;
+    kid.stabbed();
+    check(kid.health === spinHealth, "Spinning deflects native sword strikes");
+    kid.keyR = keyR;
+    keyR = null;
+    const burns = targets.map((enemy) => enemy.burningDeath);
+    const positions = burns.map((burn) => burn.x);
+    state.weaponCtrlKey.isDown = false;
+    state.weaponCtrlKey.onUp.dispatch();
+    await pause(100);
+    check(
+      state.twinTorches.actionStage === "holstering" && kid.specialAction,
+      "Release locks the Prince while stowing both torches"
+    );
+    await pause(1100);
+    check(
+      burns.every((burn, index) => burn.x !== positions[index] && burn.age < 5 && burn.flames.visible),
+      "Already dead guards keep running with visible fire and smoke"
+    );
+    for (let i = 0; i < 100 && burns.some((burn) => burn.phase !== "charred"); i++) {
+      await pause(60);
+    }
+    check(
+      burns.every((burn) => burn.age >= 5 && burn.phase === "charred" && !burn.flames.visible),
+      "At five seconds the performance finishes with persistent charred bodies"
+    );
+    check(!kid.specialAction && !kid.cropRect, "Stowing restores normal controls and the original sprite");
+    state = await loadMission(2);
+    quietEnemies(state);
+    check(
+      !state.kid.hasWhip && state.whip.effects.ground.visible && state.whip.pickup.room === state.kid.room,
+      "The whip is visible beside the level-two arrival door"
+    );
+    await walkUntil(() => state.kid.hasWhip, "Walking right from the level-two start collects the whip");
+    check(
+      state.kid.activeWeapon === "whip" && !state.whip.effects.ground.visible,
+      "Pickup equips the whip and hides its floor art"
+    );
+    state = await loadMission(3);
+    quietEnemies(state);
+    check(
+      !state.kid.hasRocketLauncher && state.rocketLauncher.effects.ground.visible,
+      "Level three starts with a visible launcher to collect"
+    );
+    testGame.input.keyboard.addKey(gameFrame.contentWindow.Phaser.Keyboard.FOUR).onDown.dispatch();
+    check(state.kid.activeWeapon === "twinTorches", "Key four cannot select the launcher before pickup");
+    await walkUntil(() => state.kid.hasRocketLauncher, "Walking from the real level-three start picks up the launcher");
+    check(
+      state.kid.activeWeapon === "rocketLauncher" && !state.rocketLauncher.effects.ground.visible,
+      "The collected launcher is selected and its pickup disappears"
+    );
+    state = await loadMission(4);
+    check(
+      state.kid.hasRocketLauncher && state.kid.hasWhip && state.kid.hasTwinTorches,
+      "Later levels retain automatic weapons and select the basic torches"
+    );
+    report("ALL TORCH, BURN AND PICKUP CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    if (keyR) {
+      kid.keyR = keyR;
+    }
+    gameState().weaponFireKey.isDown = gameState().weaponCtrlKey.isDown = false;
+    busy = false;
+  }
+}
+
+async function prepareWhipLedge() {
+  const state = await loadMission(2);
+  quietEnemies(state);
+  await collectWeapon(state.whip);
+  placeKid(7, 77, 1, 1);
+  const room = state.level.rooms[7];
+  const kid = state.kid;
+  kid.charX += ((room.x * 320 + 176 - state.whip.position(kid).x) * 140) / 320;
+  kid.updateBlockXY();
+  kid.updateCharPosition();
+  const target = state.enemies.find((enemy) => enemy.alive && enemy.baseCharName === "guard");
+  placeGuard(target, 7, 6, -1);
+  target.charX += ((room.x * 320 + 208 - state.whip.position(target).x) * 140) / 320;
+  target.updateBlockXY();
+  target.updateCharPosition();
+  target.health = 4;
+  const snag = state.whip.findSnag(target);
+  check(snag && snag.gap.column === 5, "The whip reaches the upper ankle around the actual open ledge");
+  return { state, target };
+}
+
+async function whipChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    const { state, target } = await prepareWhipLedge();
+    let damage = 0;
+    target.onDamageLife.add((amount) => (damage += amount));
+    state.weaponCtrlKey.isDown = true;
+    for (let i = 0; i < 60 && !target.whipState; i++) {
+      await pause(25);
+    }
+    check(
+      target.whipState && state.whip.pulledEnemies.has(target),
+      "A real whip crack catches the upper guard's ankle"
+    );
+    state.weaponCtrlKey.isDown = false;
+    for (let i = 0; i < 80 && target.alive && target.whipState && target.whipState.phase !== "recovering"; i++) {
+      await pause(25);
+    }
+    check(
+      target.alive && target.whipState && target.whipState.phase === "recovering" && target.charBlockY === 1,
+      "The guard is dragged over the edge and lands face first on the lower floor"
+    );
+    check(target.health === 3 && damage === 1, "Even this short native fall removes exactly one life");
+    await pause(200);
+    check(target.whipState && !target.swordDrawn, "The stunned guard cannot attack while getting up");
+    for (let i = 0; i < 80 && target.whipState; i++) {
+      await pause(25);
+    }
+    check(
+      !target.whipState && target.alive && target.health === 3,
+      "Recovery releases the guard without repeating fall damage"
+    );
+    quietEnemies(state);
+    placeKid(7, 35, 1, 1);
+    state.selectWeapon("whip");
+    const ordinary = state.enemies.find((enemy) => enemy.alive && enemy !== target && enemy.baseCharName === "guard");
+    placeGuard(ordinary, 7, 13, -1);
+    ordinary.health = 4;
+    state.weaponCtrlKey.isDown = true;
+    for (let i = 0; i < 100 && ordinary.health === 4; i++) {
+      await pause(20);
+    }
+    state.weaponCtrlKey.isDown = false;
+    check(ordinary.health === 3 && !ordinary.whipState, "Ordinary same-floor whip strikes deal normal weapon damage");
+    await pause(300);
+    report("ALL WHIP ATTACK AND LEDGE PULL CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    gameState().weaponFireKey.isDown = gameState().weaponCtrlKey.isDown = false;
+    busy = false;
+  }
+}
+
+async function torchPreview() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    const state = await loadMission(1);
+    quietEnemies(state);
+    placeKid(2, 70, 1, 1);
+    state.selectWeapon("twinTorches");
+    state.enemies
+      .filter((enemy) => enemy.alive && enemy.baseCharName === "guard")
+      .slice(0, 2)
+      .forEach((enemy, index) => {
+        placeGuard(enemy, 2, index ? 16 : 13, index ? -1 : 1);
+        enemy.health = 4;
+      });
+    state.weaponCtrlKey.isDown = true;
+    for (let i = 0; i < 60 && !state.twinTorches.isSpinning(); i++) {
+      await pause(25);
+    }
+    check(state.twinTorches.isSpinning(), "Both torches are spinning around the original Prince");
+    await pause(350);
+    testGame.paused = true;
+    report(
+      "Torches and burning guards. Resume to see the five-second panic run. Hold Ctrl/F to spin; release to stow. 1 torches, 2 molotov, 3 minigun, 4 rockets, 5 whip."
+    );
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    busy = false;
+  }
+}
+
+async function whipPreview() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    const { state, target } = await prepareWhipLedge();
+    state.weaponCtrlKey.isDown = true;
+    for (let i = 0; i < 80 && !target.whipState; i++) {
+      await pause(20);
+    }
+    check(target.whipState, "The whip catches the guard above the actual gap");
+    await pause(70);
+    testGame.paused = true;
+    state.weaponCtrlKey.isDown = false;
+    report(
+      "Whip around the guard's ankle. Resume to pull him into the gap, lose one life on the short fall and recover before fighting again."
+    );
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    busy = false;
+  }
+}
+
+async function doorBloodPreview() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    const state = await loadMission(3);
+    quietEnemies(state);
+    const room = state.level.rooms[6];
+    const x = room.x * 320;
+    const y = room.y * 189 + 126;
+    state.bloodEffects.burst(x + 132, y + 22, 6, { count: 36, vx: 220, vy: 0 });
+    await pause(350);
+    const layer = state.bloodEffects.decalRooms.get(6);
+    check(
+      layer &&
+        layer.background &&
+        layer.background.drawnPixelCount > 0 &&
+        layer.background.sprite.parent === state.level.back,
+      "Blood on the actual next-level door is painted in the scenery behind the Prince"
+    );
+    const cache = layer.background;
+    const revision = cache.revision;
+    placeKid(2, 49, 1, 1);
+    await pause(200);
+    placeKid(6, 61, 2, 1);
+    await watchCamera(state, () => !state.roomCamera.transition);
+    check(
+      layer.background === cache && cache.revision === revision,
+      "Leaving and returning preserves the same door stains"
+    );
+    // Let Phaser render the vertical camera cut before freezing the preview.
+    await pause(100);
+    testGame.paused = true;
+    report(
+      "The Prince stands in front of the bloody exit. Door ink stays behind him; the floor lip and surrounding stone keep their normal layers."
+    );
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    busy = false;
+  }
 }
 
 function placeKid(room, x, row, direction) {
@@ -86,8 +404,9 @@ async function combatChecks() {
     check(!state.kid.hasMinigun && !state.minigun.pickup.collected, "Fresh spawn has a ground pickup");
     check(state.kid.health === 10 && state.ui.playerHPActive === 10, "The Prince and HUD start with ten health");
     check(
-      !state.rocketLauncher && state.weapons.map((weapon) => weapon.spec.id).join(",") === "molotov,minigun",
-      "Mission one lists molotov first, then minigun, without a rocket launcher"
+      !state.rocketLauncher &&
+        state.weapons.map((weapon) => weapon.spec.id).join(",") === "twinTorches,molotov,minigun",
+      "Mission one lists the starting torches, molotov and minigun"
     );
     state.selectWeapon("rocketLauncher");
     check(!state.kid.hasRocketLauncher && !state.kid.rocketLauncherEquipped, "Rocket selection cannot unlock it early");
@@ -161,10 +480,11 @@ async function combatChecks() {
     check(state.minigun.effects.casingRooms[21].settled.length >= roomShells, "Room piles remain on return");
     state = await freshLevel(3);
     quietEnemies(state);
+    await collectWeapon(state.rocketLauncher);
     state.selectWeapon("rocketLauncher");
     check(
       state.kid.hasRocketLauncher && state.kid.rocketLauncherEquipped,
-      "Mission three's automatic launcher can be selected without collecting anything"
+      "Mission three's collected launcher can be selected"
     );
     placeKid(13, 28, 2, 1);
     const rocketGuard = state.enemies.find((enemy) => enemy.reinforcement);
@@ -261,6 +581,7 @@ async function freshLevel(number) {
     await pause(100);
     if (testGame.state.current === "Game" && gameState().level && gameState().level.number === expected) {
       await pause(900);
+      await settleOpeningIntro();
       testGame.input.reset(false);
       if (expected !== number) {
         return freshLevel(number);
@@ -296,7 +617,9 @@ async function campaignChecks() {
       check(
         state.kid.hasMolotov === number >= 2 &&
           state.kid.hasMinigun === number >= 2 &&
-          state.kid.hasRocketLauncher === number >= 3,
+          state.kid.hasRocketLauncher === number >= 4 &&
+          state.kid.hasWhip === number >= 3 &&
+          state.kid.hasTwinTorches,
         "Level " + number + " grants the correct weapons immediately"
       );
       check(
@@ -313,11 +636,14 @@ async function campaignChecks() {
       );
       if (number >= 2) {
         check(
-          state.kid.activeWeapon === "minigun" &&
+          state.kid.activeWeapon === "twinTorches" &&
             state.weapons.every(
-              (weapon) => weapon.pickup.collected && weapon.effects.collected && !weapon.effects.ground.visible
+              (weapon) =>
+                !weapon.pickup ||
+                (weapon.pickup.collected === !!state.kid[weapon.spec.owned] &&
+                  weapon.effects.ground.visible === !state.kid[weapon.spec.owned])
             ),
-          "Level " + number + " starts with hidden pickups and minigun selected"
+          "Level " + number + " selects torches and only shows the pickups still needed"
         );
       }
       state.ui.showRemainingMinutes(true);
@@ -327,22 +653,25 @@ async function campaignChecks() {
         "Level " + number + " displays and saves the full 600-minute clock"
       );
     }
-    const state = await loadMission(3);
+    const state = await loadMission(4);
     quietEnemies(state);
     const keys = gameFrame.contentWindow.Phaser.Keyboard;
     for (const [code, id] of [
-      [keys.ONE, "molotov"],
-      [keys.TWO, "minigun"],
-      [keys.THREE, "rocketLauncher"]
+      [keys.ONE, "twinTorches"],
+      [keys.TWO, "molotov"],
+      [keys.THREE, "minigun"],
+      [keys.FOUR, "rocketLauncher"],
+      [keys.FIVE, "whip"]
     ]) {
       testGame.input.keyboard.addKey(code).onDown.dispatch();
       check(state.kid.activeWeapon === id, "Key " + String.fromCharCode(code) + " selects the owned " + id);
     }
     const oldWeapons = [...state.weapons];
-    await freshLevel(3);
+    await freshLevel(4);
     check(
-      oldWeapons.every((weapon) => weapon.destroyed) && gameState().weapons.every((weapon) => weapon.pickup.collected),
-      "Restart cleans up controllers and immediately restores all level-three weapons"
+      oldWeapons.every((weapon) => weapon.destroyed) &&
+        gameState().weapons.every((weapon) => !weapon.pickup || weapon.pickup.collected),
+      "Restart cleans up controllers and restores all level-four weapons"
     );
     report("ALL CAMPAIGN LOADOUT AND CLOCK CHECKS PASSED");
   } catch (error) {
@@ -515,6 +844,7 @@ async function wallFireChecks() {
 }
 
 async function blastExit(state) {
+  await collectWeapon(state.rocketLauncher);
   state.selectWeapon("rocketLauncher");
   const door = state.level.exitDoors.find((item) => item.room === 6);
   placeKid(6, 42, 2, 1);
@@ -550,6 +880,7 @@ async function exitDoorChecks() {
   try {
     state = await loadMission(3);
     quietEnemies(state);
+    await collectWeapon(state.rocketLauncher);
     state.selectWeapon("rocketLauncher");
     const entrance = state.level.entranceDoors[0];
     check(
@@ -708,7 +1039,10 @@ async function prepareOpeningEncounter() {
   const row = Math.floor((pickup.worldY - room.y * 189) / 63);
   placeKid(pickup.room, ((pickup.worldX - room.x * 320) * 140) / 320, row, 1);
   await pause(450);
-  check(kid.hasMolotov && !kid.hasMinigun, "Only the molotov is collected on the first screen");
+  check(
+    kid.hasTwinTorches && kid.hasMolotov && !kid.hasMinigun,
+    "Torches and molotov are available before the first gun"
+  );
   await jumpToFirstLanding(state);
   await walkUntil(() => kid.charX >= 105, "Crossing the loose floor reaches the safe ledge beside the shaft");
   for (let i = 0; i < 30 && state.level.getTileAt(6, 2, 1).element !== 0; i++) {
@@ -783,8 +1117,8 @@ async function openingChecks() {
       await pause(60);
     }
     check(
-      targets.every((enemy) => !enemy.alive),
-      "The dropped molotov burns both real guards in the room below"
+      targets.every((enemy) => !enemy.alive && enemy.health === 0 && enemy.burningDeath),
+      "The dropped molotov immediately kills and ignites both real guards in the room below"
     );
     await pause(500);
     check(!heard.some((key) => ["Victory", "JaffarDead"].includes(key)), "Enemy deaths play no kill jingle");
@@ -854,7 +1188,7 @@ async function openingPreview() {
     await watchCamera(prepared.state, () => !prepared.state.roomCamera.transition);
     testGame.paused = true;
     report(
-      "Opening: molotov first, two guards beneath the shaft, and the glowing minigun on clear floor to their left. Hold Shift to keep hanging; press Ctrl to light and drop a bottle. Keys 1/2/3 select molotov/minigun/rockets."
+      "Opening: two torches are collected automatically, the molotov stays upstairs, and the glowing minigun waits beside two guards below. Hold Shift to keep hanging, select 2 and press Ctrl to drop a bottle. Keys 1/2/3/4/5 select torches/molotov/minigun/rockets/whip."
     );
   } catch (error) {
     report("FAIL: " + error.message);
@@ -1267,10 +1601,21 @@ async function observeMolotovThrow(state, room, x, hold, up = false, direction =
       }
     }
     check(impacts.length === 1, "The real thrown bottle stops at one environment contact");
-    await pause(350);
+    for (let i = 0; i < 100 && (kid.specialAction || kid.cropRect || state.molotov.effects.head.visible); i++) {
+      await pause(25);
+    }
     check(
       !kid.specialAction && !kid.cropRect && !state.molotov.effects.head.visible,
-      "Throwing restores the native Prince sprite and movement"
+      "Throwing restores the native Prince sprite and movement" +
+        (kid.specialAction || kid.cropRect || state.molotov.effects.head.visible
+          ? ": " +
+            JSON.stringify({
+              stage: state.molotov.actionStage,
+              action: kid.specialAction && kid.specialAction.type,
+              crop: kid.cropRect,
+              head: state.molotov.effects.head.visible
+            })
+          : "")
     );
     return { launch, charge, flight, impact: impacts[0], range: Math.abs(impacts[0].x - launch.x) };
   } finally {
@@ -1292,15 +1637,15 @@ async function chargedMolotovChecks() {
     quietEnemies(state);
     await collectWeapon(state.molotov);
     check(
-      state.kid.activeWeapon === "molotov" && state.weapons[0] === state.molotov,
-      "Molotov is the selected first inventory weapon"
+      state.kid.activeWeapon === "molotov" && state.weapons[1] === state.molotov,
+      "Molotov is the selected second inventory weapon"
     );
     await collectWeapon(state.minigun);
     const keyboard = gameFrame.contentWindow.Phaser.Keyboard;
-    testGame.input.keyboard.addKey(keyboard.ONE).onDown.dispatch();
-    check(state.kid.molotovEquipped && !state.kid.minigunEquipped, "Number 1 selects molotov exclusively");
     testGame.input.keyboard.addKey(keyboard.TWO).onDown.dispatch();
-    check(state.kid.minigunEquipped && !state.kid.molotovEquipped, "Number 2 selects minigun exclusively");
+    check(state.kid.molotovEquipped && !state.kid.minigunEquipped, "Number 2 selects molotov exclusively");
+    testGame.input.keyboard.addKey(keyboard.THREE).onDown.dispatch();
+    check(state.kid.minigunEquipped && !state.kid.molotovEquipped, "Number 3 selects minigun exclusively");
     const short = await observeMolotovThrow(state, 20, 28, 100);
     const long = await observeMolotovThrow(state, 20, 28, 1600);
     check(
@@ -1316,11 +1661,17 @@ async function chargedMolotovChecks() {
     check(
       high.flight &&
         high.flight.aimUp &&
-        !high.impact.burning &&
+        high.impact.burning &&
         high.impact.y >= roof &&
         high.impact.y <= roof + 8 &&
         !state.molotov.bottles.length,
       "Holding Up launches a high arc that shatters against the native ceiling without passing through it"
+    );
+    await pause(650);
+    check(
+      state.molotov.fires.some((fire) => fire.room === 2 && fire.row === 1 && fire.y === roof + 56) &&
+        !state.molotov.fires.some((fire) => fire.room === 2 && fire.y < roof),
+      "Burning oil falls below the ceiling and lights the actual floor, without painting fire atop the roof"
     );
     const left = await observeMolotovThrow(state, 20, 98, 800, false, -1);
     check(
@@ -1860,9 +2211,14 @@ document.getElementById("boundary-preview").addEventListener("click", async () =
   await watchCamera(state, () => !state.roomCamera.transition);
   testGame.paused = true;
   output.textContent =
-    "The starting screen has only the molotov. Drop through the loose-floor shaft to the two guards and the minigun in the next room below.";
+    "The starting screen provides two torches and the molotov. Drop through the loose-floor shaft to the two guards and the minigun in the next room below.";
 });
 document.getElementById("run").addEventListener("click", combatChecks);
+document.getElementById("melee-fire").addEventListener("click", meleeFireChecks);
+document.getElementById("whip-check").addEventListener("click", whipChecks);
+document.getElementById("torch-preview").addEventListener("click", torchPreview);
+document.getElementById("whip-preview").addEventListener("click", whipPreview);
+document.getElementById("door-blood").addEventListener("click", doorBloodPreview);
 document.getElementById("features").addEventListener("click", featureChecks);
 document.getElementById("actions").addEventListener("click", actionChecks);
 document.getElementById("charged-molotov").addEventListener("click", chargedMolotovChecks);
@@ -1884,7 +2240,7 @@ document.getElementById("exit-preview").addEventListener("click", async () => {
     state.ui.showRemainingMinutes(true);
     testGame.paused = true;
     report(
-      "The next-level exit is shattered and remains usable. The arrival door is protected. Weapon keys: 1 molotov, 2 minigun, 3 rockets; 600-minute clock."
+      "The next-level exit is shattered and remains usable. The arrival door is protected. Weapon keys: 1 torches, 2 molotov, 3 minigun, 4 rockets, 5 whip; 600-minute clock."
     );
   } catch (error) {
     report("FAIL: " + error.message);
@@ -1919,7 +2275,7 @@ document.getElementById("molotov").addEventListener("click", async () => {
   await pause(1600);
   testGame.paused = true;
   output.textContent =
-    "Molotov fully charged and unlit. Resume game, then Hold / release Ctrl to light and throw. Up selects a 70-degree arc; otherwise 30 degrees. Weapon keys: 1 molotov, 2 minigun, 3 rockets.";
+    "Molotov fully charged and unlit. Resume game, then Hold / release Ctrl to light and throw. Up selects a 70-degree arc; otherwise 30 degrees. Weapon keys: 1 torches, 2 molotov, 3 minigun, 4 rockets, 5 whip.";
 });
 
 document.getElementById("jetpack").addEventListener("click", async () => {
@@ -1973,7 +2329,12 @@ document.getElementById("rockets").addEventListener("click", async () => {
   if (!state.kid.hasRocketLauncher) {
     const pickup = state.rocketLauncher.pickup;
     const room = state.level.rooms[pickup.room];
-    placeKid(pickup.room, ((pickup.worldX - room.x * 320) * 140) / 320, 1, 1);
+    placeKid(
+      pickup.room,
+      ((pickup.worldX - room.x * 320) * 140) / 320,
+      Math.floor((pickup.worldY - room.y * 189) / 63),
+      1
+    );
     await pause(600);
   }
   quietEnemies(state);

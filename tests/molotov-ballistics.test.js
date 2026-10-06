@@ -48,6 +48,7 @@ function fixture() {
   const shatters = [];
   const fires = [];
   const wallContacts = [];
+  const ceilingContacts = [];
   const controller = {
     level,
     kid: { room: 1 },
@@ -56,6 +57,10 @@ function fixture() {
     ignite: (bottle, column, row, y) => fires.push({ room: bottle.room, x: bottle.x, y, column, row }),
     igniteWall: (bottle, contact) => {
       wallContacts.push(contact);
+      shatters.push({ x: bottle.x, y: bottle.y, burning: true });
+    },
+    igniteCeiling: (bottle, contact) => {
+      ceilingContacts.push(contact);
       shatters.push({ x: bottle.x, y: bottle.y, burning: true });
     }
   };
@@ -84,6 +89,7 @@ function fixture() {
     shatters,
     fires,
     wallContacts,
+    ceilingContacts,
     create,
     flight
   };
@@ -143,7 +149,7 @@ test("Up produces a much higher arc while normal throws stay low", () => {
   assert.equal(f.shatters.length, 0);
 });
 
-test("an upward bottle shatters on the underside of the native ceiling slab", () => {
+test("an upward bottle bursts burning on the underside of the native ceiling slab without lighting its top", () => {
   const f = fixture();
   f.floor(1, 0);
   f.floor(1, 2);
@@ -151,7 +157,10 @@ test("an upward bottle shatters on the underside of the native ceiling slab", ()
   assert.equal(result.alive, false);
   assert.equal(f.fires.length, 0);
   assert.equal(f.shatters.length, 1);
-  assert.equal(f.shatters[0].burning, false);
+  assert.equal(f.shatters[0].burning, true);
+  assert.equal(f.ceilingContacts.length, 1);
+  assert.equal(f.ceilingContacts[0].normalY, 1);
+  assert.equal(f.ceilingContacts[0].surface.bottom, 63);
   assert.ok(Math.abs(f.shatters[0].y - 68) < 0.00001, "ceiling is row-zero slab bottom 63 plus bottle radius");
 });
 

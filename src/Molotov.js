@@ -86,7 +86,7 @@ PrinceJS.Molotov.prototype = {
     this.equip();
     this.effects.collect();
     this.game.sound.play("UnsheatheSword", 0.5);
-    this.delegate.ui.showText("1 MOLOTOV - HOLD CTRL/F, RELEASE", "weapon");
+    this.delegate.ui.showText("2 MOLOTOV - HOLD CTRL/F, RELEASE", "weapon");
     this.delegate.ui.hideTextTimer = 85;
   },
 
@@ -378,6 +378,29 @@ PrinceJS.Molotov.prototype = {
     }
   },
 
+  igniteCeiling: function (bottle, contact) {
+    this.effects.shatter(bottle.x, bottle.y, true);
+    this.game.sound.play("LooseFloorLands", 0.4);
+    // Start on the underside, outside the bottle's swept collision surface.
+    // Only the falling oil finds a supporting floor; the ceiling never becomes a pool.
+    for (let i = 0; i < 3 && this.oils.length < 36; i++) {
+      let oil = {
+        room: bottle.room,
+        x: bottle.x,
+        y: Math.max(bottle.y, contact.surface.bottom + 1.52) + i * 0.8,
+        vx: (i - 1) * 12,
+        vy: 45 + i * 12,
+        radius: 1.5,
+        oil: true,
+        age: 0,
+        life: 6
+      };
+      if (this.resolveRoom(oil)) {
+        this.oils.push(oil);
+      }
+    }
+  },
+
   updateWallFire: function (fire, tile) {
     if (tile !== fire.tile || !tile.isBarrier()) {
       return false;
@@ -462,7 +485,17 @@ PrinceJS.Molotov.prototype = {
           top + bounds.height >= fire.y - (wall ? 18 : 22) &&
           this.fireCanReach(fire, targetX, targetY)
         ) {
-          PrinceJS.RangedWeapon.prototype.hitEnemy.call(this, enemy);
+          if (this.delegate.burningEnemyEffects) {
+            this.delegate.burningEnemyEffects.ignite(enemy, {
+              x: targetX,
+              y: targetY,
+              room: fire.room,
+              direction: this.kid.charFace,
+              weapon: "molotov"
+            });
+          } else {
+            PrinceJS.RangedWeapon.prototype.hitEnemy.call(this, enemy);
+          }
           this.effects.singe(targetX, targetY);
           // Overlapping pools share a cadence, so repeated bottles cannot deal one hit per render frame.
           this.burnCooldowns.set(enemy, 0.45);

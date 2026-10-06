@@ -22,6 +22,10 @@ PrinceJS.Kid = function (game, level, location, direction, room) {
   this.molotovEquipped = false;
   this.hasJetpack = false;
   this.jetpackEquipped = false;
+  this.hasTwinTorches = false;
+  this.twinTorchesEquipped = false;
+  this.hasWhip = false;
+  this.whipEquipped = false;
   this.specialAction = null;
 
   this.allowCrawl = true;
@@ -508,6 +512,19 @@ PrinceJS.Kid.prototype.checkFight = PrinceJS.Kid.prototype.tryEngarde;
 PrinceJS.Kid.prototype.sheathe = function () {
   this.swordDrawn = false;
   this.sword.visible = false;
+};
+
+PrinceJS.Kid.prototype.stabbed = function () {
+  let action = this.specialAction;
+  if (
+    action &&
+    action.type === "twinTorches" &&
+    typeof action.owner.handleMeleeHit === "function" &&
+    action.owner.handleMeleeHit()
+  ) {
+    return;
+  }
+  PrinceJS.Fighter.prototype.stabbed.call(this);
 };
 
 PrinceJS.Kid.prototype.inFallDistance = function (tile) {

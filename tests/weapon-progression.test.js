@@ -7,7 +7,20 @@ const vm = require("node:vm");
 const { test } = require("node:test");
 
 function fixture(number) {
-  const keyboardCodes = { F: 70, CONTROL: 17, ONE: 49, TWO: 50, THREE: 51, J: 74, R: 82, A: 65, L: 76, SPACEBAR: 32 };
+  const keyboardCodes = {
+    F: 70,
+    CONTROL: 17,
+    ONE: 49,
+    TWO: 50,
+    THREE: 51,
+    FOUR: 52,
+    FIVE: 53,
+    J: 74,
+    R: 82,
+    A: 65,
+    L: 76,
+    SPACEBAR: 32
+  };
   const PrinceJS = {
     ROOM_WIDTH: 320,
     ROOM_HEIGHT: 189,
@@ -130,6 +143,10 @@ function fixture(number) {
       action: "stand",
       sword: { visible: false },
       specialAction: null,
+      hasTwinTorches: false,
+      twinTorchesEquipped: false,
+      hasWhip: false,
+      whipEquipped: false,
       hasMolotov: false,
       molotovEquipped: false,
       hasMinigun: false,
@@ -156,11 +173,43 @@ function fixture(number) {
     this.destroy = () => this.destroyCalls++;
   };
   PrinceJS.MinigunEffects = PrinceJS.RocketLauncherEffects = PrinceJS.MolotovEffects = effects;
+  // These tests exercise Game's grants/selection. Dedicated controller tests cover melee animation and physics.
+  PrinceJS.TwinTorches = function (delegate) {
+    Object.assign(this, {
+      delegate,
+      kid: delegate.kid,
+      spec: { id: "twinTorches", owned: "hasTwinTorches", equipped: "twinTorchesEquipped" },
+      pickup: null,
+      effects: new effects(null, null, { collected: true }),
+      equipTime: 0,
+      actionStage: "hidden"
+    });
+  };
+  PrinceJS.TwinTorches.prototype = Object.create(PrinceJS.RangedWeapon.prototype);
+  PrinceJS.TwinTorches.prototype.startIntro =
+    PrinceJS.TwinTorches.prototype.update =
+    PrinceJS.TwinTorches.prototype.cancelAction =
+      function () {};
+  PrinceJS.TwinTorches.prototype.destroy = function () {
+    this.destroyed = true;
+    this.effects.destroy();
+  };
+  PrinceJS.Whip = function (delegate, direction) {
+    PrinceJS.RangedWeapon.call(this, delegate, direction, {
+      id: "whip",
+      owned: "hasWhip",
+      equipped: "whipEquipped",
+      effects,
+      pickupRadius: 17
+    });
+  };
+  PrinceJS.Whip.prototype = Object.create(PrinceJS.RangedWeapon.prototype);
   PrinceJS.WeaponAudio =
     PrinceJS.RoomCamera =
     PrinceJS.Jetpack =
     PrinceJS.BloodEffects =
     PrinceJS.EnemyDeathEffects =
+    PrinceJS.BurningEnemyEffects =
       function () {
         this.update = this.destroy = () => {};
       };
@@ -185,35 +234,40 @@ test("level 1 keeps its original molotov and left-hand lower-room minigun pickup
   assert.equal(state.kid.hasMinigun, false);
   assert.equal(state.kid.hasRocketLauncher, false);
   assert.equal(state.kid.hasJetpack, false);
-  assert.equal(state.kid.activeWeapon, null);
+  assert.equal(state.kid.hasTwinTorches, true);
+  assert.equal(state.kid.activeWeapon, "twinTorches");
   assert.equal(state.rocketLauncher, null);
   assert.deepEqual(
     Array.from(state.weapons, (weapon) => weapon.spec.id),
-    ["molotov", "minigun"]
+    ["twinTorches", "molotov", "minigun"]
   );
   assert.equal(state.molotov.pickup.room, 1);
   assert.equal(state.minigun.pickup.room, 2);
   const lowerRoom = state.level.rooms[2];
   assert.equal(state.minigun.pickup.worldX - lowerRoom.x * 320, 48);
   assert.equal(state.minigun.pickup.worldY - lowerRoom.y * 189, 119);
-  for (const weapon of state.weapons) {
+  for (const weapon of state.weapons.filter((item) => item.pickup)) {
     assert.equal(weapon.pickup.collected, false);
     assert.equal(weapon.effects.pickupVisible, true);
   }
 });
 
-test("direct level 2 starts with molotov and minigun, silently selected and with no pickup art", () => {
+test("level 2 selects the basic torches, grants molotov/minigun, and leaves a whip to collect", () => {
   const { state, messages, sounds, keys, keyboardCodes } = fixture(2);
   assert.equal(state.kid.hasMolotov, true);
   assert.equal(state.kid.hasMinigun, true);
   assert.equal(state.kid.hasRocketLauncher, false);
   assert.equal(state.kid.hasJetpack, false);
   assert.equal(state.rocketLauncher, null);
-  assert.equal(state.kid.activeWeapon, "minigun");
-  assert.equal(state.kid.minigunEquipped, true);
+  assert.equal(state.kid.activeWeapon, "twinTorches");
+  assert.equal(state.kid.twinTorchesEquipped, true);
+  assert.equal(state.kid.minigunEquipped, false);
+  assert.equal(state.kid.hasWhip, false);
+  assert.equal(state.whip.pickup.collected, false);
+  assert.equal(state.whip.effects.pickupVisible, true);
   assert.equal(state.kid.molotovEquipped, false);
   assert.equal(state.kid.specialAction, null);
-  for (const weapon of state.weapons) {
+  for (const weapon of [state.molotov, state.minigun]) {
     assert.equal(weapon.pickup.collected, true);
     assert.equal(weapon.effects.collected, true);
     assert.equal(weapon.effects.pickupVisible, false);
@@ -223,27 +277,54 @@ test("direct level 2 starts with molotov and minigun, silently selected and with
   state.update();
   assert.deepEqual(messages, []);
   assert.deepEqual(sounds, []);
-  keys.get(keyboardCodes.ONE).onDown.dispatch();
+  keys.get(keyboardCodes.TWO).onDown.dispatch();
   assert.equal(state.kid.activeWeapon, "molotov");
   assert.equal(state.kid.molotovEquipped, true);
   assert.equal(state.kid.minigunEquipped, false);
-  keys.get(keyboardCodes.TWO).onDown.dispatch();
-  assert.equal(state.kid.activeWeapon, "minigun");
   keys.get(keyboardCodes.THREE).onDown.dispatch();
+  assert.equal(state.kid.activeWeapon, "minigun");
+  keys.get(keyboardCodes.FOUR).onDown.dispatch();
   assert.equal(state.kid.activeWeapon, "minigun", "the launcher remains unavailable before level 3");
 });
 
-for (const number of [3, 12, 13, 14, 99]) {
-  test(`direct level ${number} owns all three weapons and preserves them on restart`, () => {
+test("level 3 shows the launcher until walking over it, and restart restores that pickup", () => {
+  const { state, keys, keyboardCodes } = fixture(3);
+  assert.equal(state.kid.hasRocketLauncher, false);
+  assert.equal(state.rocketLauncher.effects.pickupVisible, true);
+  keys.get(keyboardCodes.FOUR).onDown.dispatch();
+  assert.equal(state.kid.activeWeapon, "twinTorches");
+  const pickup = state.rocketLauncher.pickup;
+  const room = state.level.rooms[pickup.room];
+  state.kid.room = pickup.room;
+  state.kid.baseX = room.x * 320;
+  state.kid.baseY = room.y * 189 + 3;
+  state.kid.charX = ((pickup.worldX - state.kid.baseX) * 140) / 320;
+  state.kid.charY = pickup.worldY - state.kid.baseY;
+  state.rocketLauncher.checkPickup();
+  assert.equal(state.kid.hasRocketLauncher, true);
+  assert.equal(state.kid.activeWeapon, "rocketLauncher");
+  assert.equal(pickup.collected, true);
+  assert.equal(state.rocketLauncher.effects.collectCalls, 1);
+  state.shutdown();
+  state.create();
+  assert.equal(state.kid.hasRocketLauncher, false);
+  assert.equal(state.rocketLauncher.pickup.collected, false);
+  assert.equal(state.kid.activeWeapon, "twinTorches");
+});
+
+for (const number of [4, 12, 13, 14, 99]) {
+  test(`direct level ${number} owns all five weapons and preserves them on restart`, () => {
     const { state, messages, sounds, keys, keyboardCodes } = fixture(number);
     assert.deepEqual(
       Array.from(state.weapons, (weapon) => weapon.spec.id),
-      ["molotov", "minigun", "rocketLauncher"]
+      ["twinTorches", "molotov", "minigun", "rocketLauncher", "whip"]
     );
-    assert.equal(state.kid.activeWeapon, "minigun");
+    assert.equal(state.kid.activeWeapon, "twinTorches");
+    assert.equal(state.kid.hasTwinTorches, true);
+    assert.equal(state.kid.hasWhip, true);
     assert.equal(state.kid.hasJetpack, number >= 13);
     assert.equal(state.kid.jetpackEquipped, false);
-    for (const weapon of state.weapons) {
+    for (const weapon of state.weapons.filter((item) => item.pickup)) {
       assert.equal(state.kid[weapon.spec.owned], true);
       assert.equal(weapon.pickup.collected, true);
       assert.equal(weapon.effects.collected, true);
@@ -253,12 +334,14 @@ for (const number of [3, 12, 13, 14, 99]) {
     }
     assert.deepEqual(messages, []);
     assert.deepEqual(sounds, []);
-    keys.get(keyboardCodes.THREE).onDown.dispatch();
+    keys.get(keyboardCodes.FOUR).onDown.dispatch();
     assert.equal(state.kid.activeWeapon, "rocketLauncher");
     assert.equal(state.kid.rocketLauncherEquipped, true);
     assert.equal(state.kid.minigunEquipped, false);
-    keys.get(keyboardCodes.ONE).onDown.dispatch();
+    keys.get(keyboardCodes.TWO).onDown.dispatch();
     assert.equal(state.kid.activeWeapon, "molotov");
+    keys.get(keyboardCodes.FIVE).onDown.dispatch();
+    assert.equal(state.kid.activeWeapon, "whip");
     const originalWeapons = Array.from(state.weapons);
     state.shutdown();
     for (const weapon of originalWeapons) {
@@ -267,10 +350,10 @@ for (const number of [3, 12, 13, 14, 99]) {
     }
     assert.equal(state.weapons.length, 0);
     state.create();
-    assert.equal(state.kid.activeWeapon, "minigun");
+    assert.equal(state.kid.activeWeapon, "twinTorches");
     assert.equal(state.kid.hasJetpack, number >= 13);
     assert.equal(state.kid.jetpackEquipped, false);
-    for (const weapon of state.weapons) {
+    for (const weapon of state.weapons.filter((item) => item.pickup)) {
       assert.equal(state.kid[weapon.spec.owned], true);
       assert.equal(weapon.pickup.collected, true);
       assert.equal(originalWeapons.includes(weapon), false);
