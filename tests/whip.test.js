@@ -824,3 +824,23 @@ test("destroying the controller restores native actors, crops and graphics", () 
   assert.equal(f.whip.pulledEnemies.size, 0);
   assert.ok(f.visuals.every((visual) => visual.destroyed));
 });
+
+test("the shadow overlay cannot leave original arms visible during a whip pose", () => {
+  const f = fixture();
+  const shadow = {
+    visible: true,
+    cropRect: null,
+    crop(rect) {
+      this.cropRect = rect;
+    }
+  };
+  f.kid.shadowOverlay = shadow;
+  f.whipKey.isDown = true;
+  f.advance(0.3);
+  assert.equal(shadow.cropRect, f.kid.cropRect);
+  assert.equal(shadow.cropRect.y, 25);
+  f.whipKey.isDown = false;
+  f.advance(0.8);
+  assert.equal(shadow.cropRect, null);
+  assert.equal(f.kid.cropRect, null);
+});

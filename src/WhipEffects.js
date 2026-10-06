@@ -96,13 +96,26 @@ PrinceJS.WhipEffects.prototype = {
       this.croppedKid = true;
     }
     this.kid.crop(this.bodyCrop);
+    if (this.kid.shadowOverlay && this.kid.shadowOverlay.visible) {
+      if (this.croppedShadow !== this.kid.shadowOverlay) {
+        this.croppedShadow = this.kid.shadowOverlay;
+        let crop = this.croppedShadow.cropRect;
+        this.savedShadowCrop = crop ? new Phaser.Rectangle(crop.x, crop.y, crop.width, crop.height) : null;
+      }
+      this.croppedShadow.crop(this.bodyCrop);
+    }
   },
 
   restoreBody: function () {
     if (this.croppedKid && this.kid.cropRect === this.bodyCrop) {
       this.kid.crop(this.savedCrop);
     }
+    if (this.croppedShadow && this.croppedShadow.cropRect === this.bodyCrop) {
+      this.croppedShadow.crop(this.savedShadowCrop);
+    }
     this.croppedKid = false;
+    this.croppedShadow = null;
+    this.savedShadowCrop = null;
     this.savedCrop = null;
   },
 
@@ -152,8 +165,7 @@ PrinceJS.WhipEffects.prototype = {
     this.pose.x = Math.round(x);
     this.pose.y = Math.round(floorY);
     this.pose.scale.x = direction;
-    this.rect(this.pose, 0xddbbaa, -11 + twist, -32, 10, 16);
-    this.rect(this.pose, 0xffffdd, -9 + twist, -32, 8, 16);
+    PrinceJS.PrincePose.drawTorso(this.pose, -33, -16, -6, twist);
     this.head.x = Math.round(x + twist * direction);
     this.head.y = floorY - 41 + PrinceJS.PrincePose.HEAD_HEIGHT;
     this.head.scale.x = -direction;

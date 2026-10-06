@@ -128,7 +128,7 @@ PrinceJS.MolotovEffects.prototype = {
       this.croppedKid = true;
     }
     this.bodyCrop.y = crouched ? 14 : 25;
-    this.bodyCrop.width = crouched ? 20 : 12;
+    this.bodyCrop.width = crouched ? 1 : 12;
     this.bodyCrop.height = crouched ? 5 : 16;
     this.kid.crop(this.bodyCrop);
     if (this.kid.shadowOverlay && this.kid.shadowOverlay.visible) {
@@ -234,9 +234,8 @@ PrinceJS.MolotovEffects.prototype = {
     hand = [arm.hand.x, arm.hand.y];
 
     // One hand stays anchored to the ledge from start to finish. The legs counterbalance the free arm.
-    PrinceJS.PrincePose.drawArm(graphics, PrinceJS.PrincePose.arm({ x: -4 + sway, y: 17 }, { x: 0, y: 0 }, -1));
-    this.rect(graphics, 0xddbbaa, -13 + sway, 19, 10, 18);
-    this.rect(graphics, 0xffffdd, -12 + sway, 19, 8, 18);
+    PrinceJS.PrincePose.drawArm(graphics, PrinceJS.PrincePose.arm({ x: -3 + sway, y: 14 }, { x: 0, y: 0 }, -1));
+    PrinceJS.PrincePose.drawTorso(graphics, 17, 37, -8 + sway);
     this.rect(graphics, 0xffffdd, -12 + sway, 34, 9, 8);
     this.limb(graphics, [-10 + sway, 40], [-11 - sway, 49], 0xddbbaa, 5);
     this.limb(graphics, [-11 - sway, 49], [-10 - sway, 55], 0xffffdd, 4);
@@ -247,7 +246,7 @@ PrinceJS.MolotovEffects.prototype = {
 
     // Keep the original Prince's small head and ochre hair while he leans toward the flame.
     this.head.x = graphics.x + (sway - 2) * this.anchor.direction;
-    this.head.y = graphics.y + 10 + PrinceJS.PrincePose.HEAD_HEIGHT;
+    this.head.y = graphics.y + 9 + PrinceJS.PrincePose.HEAD_HEIGHT;
     this.head.scale.x = -this.anchor.direction;
     this.head.tint = 0xffffff;
 
@@ -267,9 +266,6 @@ PrinceJS.MolotovEffects.prototype = {
     }
     if (charging || (time >= 0.2 && time < PrinceJS.Molotov.RELEASE_TIME)) {
       this.drawBottle(graphics, hand[0] + 2, hand[1] + 1, !charging && time >= 0.28, this.elapsed * 28);
-    }
-    if (!charging && time >= 0.12 && time < 0.45) {
-      this.rect(graphics, 0xffc84c, -10 + sway, 13, 7, 7, 0.18 + Math.sin(this.elapsed * 37) * 0.05);
     }
     this.drawCharge(state, -8, -13);
   },
@@ -319,10 +315,10 @@ PrinceJS.MolotovEffects.prototype = {
     );
     bottleHand[1] += lift;
     lighterHand[1] += lift;
-    this.rect(graphics, 0xddbbaa, -11, shoulderY, 9, waistY - shoulderY + 1);
-    this.rect(graphics, 0xffffdd, -9, shoulderY, 8, waistY - shoulderY);
-    this.rect(graphics, 0xffffdd, -10, waistY, 9, 3);
-    this.rect(graphics, 0xddbbaa, -10, waistY, 1, 3);
+    if (state.crouched) {
+      PrinceJS.PrincePose.drawCrouchedLegs(graphics);
+    }
+    PrinceJS.PrincePose.drawTorso(graphics, headY + PrinceJS.PrincePose.HEAD_HEIGHT, waistY + 3);
     this.head.x = graphics.x;
     this.head.y = graphics.y + headY + PrinceJS.PrincePose.HEAD_HEIGHT;
     this.head.scale.x = -this.anchor.direction;
@@ -341,7 +337,6 @@ PrinceJS.MolotovEffects.prototype = {
       this.rect(graphics, 0xadb4b0, lighterHand[0], lighterHand[1] - 5, 3, 1);
       if (state.lighterLit) {
         this.flame(graphics, lighterHand[0] + 1, lighterHand[1] - 5, 5, this.elapsed * 31, 1);
-        this.rect(graphics, 0xffc84c, -8, headY + 5, 7, 7, 0.2);
       }
     }
     this.drawCharge(state, -5, headY - 8);

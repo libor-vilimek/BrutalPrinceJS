@@ -202,13 +202,34 @@ test("the Prince reaches behind, pulls the gun forward, then grips and fires wit
   assert.equal(f.effects.head.frameName, "kid-15");
   assert.equal(
     f.effects.head.cropRect.height,
-    9,
+    8,
     "the original hair, face and short neckline are preserved at native size"
   );
   assert.equal(f.kid.cropRect, f.effects.bodyCrop, "the relaxed native arms are replaced during firing");
   assert.notEqual(f.kid.tint, 0xffffff, "yellow muzzle light illuminates the original Prince sprite");
   assert.ok(f.effects.light.shapes.some((shape) => shape.type === "circle"));
   assert.equal(f.effects.casings.length, 3);
+});
+
+test("the trigger hand follows the tilted receiver throughout drawing and stowing", () => {
+  for (const direction of [-1, 1]) {
+    const f = fixture(direction);
+    for (const stage of ["drawing", "holstering"]) {
+      for (const progress of [0.26, 0.4, 0.6, 0.8, 1]) {
+        f.effects.actionStage = stage;
+        f.effects.drawProgress = progress;
+        const pose = { x: 128, y: 95, floorY: 119, direction, crouched: false, visible: true };
+        f.effects.drawPrince(pose);
+        const transform = f.effects.getWeaponTransform();
+        const gripX = Math.round(transform.x - Math.sin(transform.angle) * 3 - 1);
+        const gripY = Math.round(pose.y - pose.floorY + transform.y + Math.cos(transform.angle) * 3 - 1);
+        assert.ok(
+          f.effects.hands.shapes.some((shape) => shape.color === 0xbb7766 && shape.x === gripX && shape.y === gripY),
+          "the trigger hand must stay attached to the moving gun grip"
+        );
+      }
+    }
+  }
 });
 
 test("release stops firing immediately, keeps the Prince locked while stowing, then restores the full sprite", () => {
@@ -251,6 +272,7 @@ test("the draw and two-handed firing pose mirror correctly and remain grounded w
     f.advance(30);
     assert.equal(f.kid.action, "stoop");
     assert.equal(f.kid.charFrame, 109);
+    assert.equal(f.kid.cropRect.width, 1, "the original crouch's supporting hand is excluded from the source sprite");
     assert.equal(f.effects.weapon.scale.x, direction);
     assert.equal(f.effects.body.scale.x, direction);
     assert.equal(f.effects.hands.scale.x, direction);

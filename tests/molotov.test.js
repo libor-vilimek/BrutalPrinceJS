@@ -307,6 +307,7 @@ test("standing and crouched throws retain native legs and head size, mirror dire
       assert.equal(f.kid.alpha, 0.8);
       assert.equal(f.kid.cropRect, f.molotov.effects.bodyCrop);
       assert.equal(f.molotov.effects.bodyCrop.height, action === "stoop" ? 5 : 16);
+      assert.equal(f.molotov.effects.bodyCrop.width, action === "stoop" ? 1 : 12, "only the two animated hands remain");
       assert.equal(f.molotov.effects.head.scale.x, -direction);
       f.kid.keyU = () => true;
       f.ctrlKey.isDown = false;

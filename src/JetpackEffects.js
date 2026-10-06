@@ -164,22 +164,18 @@ PrinceJS.JetpackEffects.prototype = {
 
     // Match the original Prince palette. Only these two bent arms remain above the cropped legs.
     let shoulder = top + 9;
-    rect(this.grip, 0xddbbaa, -5, shoulder + 1, 9, height - 25);
-    rect(this.grip, 0xffffdd, -4, shoulder + 1, 7, height - 25);
-    rect(this.grip, 0xddbbaa, -5, -19, 9, 4);
-    rect(this.grip, 0xffffdd, -4, -18, 7, 3);
-    rect(this.grip, 0xffffdd, -4, -20, 7, 3);
+    PrinceJS.PrincePose.drawTorso(this.grip, top + PrinceJS.PrincePose.HEAD_HEIGHT, -15, 0);
     rect(this.grip, 0x554530, -5, shoulder, 2, 14);
     rect(this.grip, 0xb39c61, -5, shoulder + 1, 1, 12);
     rect(this.grip, 0x544630, 3, shoulder + 1, 2, 13);
     rect(this.grip, 0xa28f54, 4, shoulder + 2, 1, 11);
     PrinceJS.PrincePose.drawArm(
       this.grip,
-      PrinceJS.PrincePose.arm({ x: -4, y: shoulder + 2 }, { x: -4, y: shoulder + 8 }, 1)
+      PrinceJS.PrincePose.arm({ x: -3, y: shoulder + 2 }, { x: -3, y: shoulder + 9 }, 1, 0.7)
     );
     PrinceJS.PrincePose.drawArm(
       this.grip,
-      PrinceJS.PrincePose.arm({ x: 3, y: shoulder + 3 }, { x: 3, y: shoulder + 9 }, -1)
+      PrinceJS.PrincePose.arm({ x: 2, y: shoulder + 3 }, { x: 3, y: shoulder + 10 }, -1, 0.7)
     );
     rect(this.grip, 0xdac690, -5, shoulder + 11, 2, 2);
     rect(this.grip, 0xdac690, 3, shoulder + 12, 2, 2);

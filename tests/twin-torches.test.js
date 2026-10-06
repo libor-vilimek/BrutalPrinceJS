@@ -251,7 +251,7 @@ test("owned idle torches stay put away and Ctrl draws two torches before station
   assert.equal(f.effects.body.visible, true);
   assert.equal(f.effects.head.frameName, "kid-15");
   assert.equal(f.effects.head.cropRect.width, 12);
-  assert.equal(f.effects.head.cropRect.height, 9);
+  assert.equal(f.effects.head.cropRect.height, 8, "the crop excludes the atlas shoulder pixels");
   const startX = f.kid.charX;
   f.advance(0.3);
   assert.equal(f.weapon.actionStage, "spinning");
@@ -303,8 +303,14 @@ test("torch arms keep human proportions through the full turn, with native cloth
       assert.equal(arms.length, 2);
       for (const arm of arms) {
         assert.ok(Math.hypot(arm.elbow.x - arm.shoulder.x, arm.elbow.y - arm.shoulder.y) <= 8.01);
-        assert.ok(Math.hypot(arm.hand.x - arm.elbow.x, arm.hand.y - arm.elbow.y) <= 10.01);
-        assert.ok(Math.hypot(arm.hand.x - arm.shoulder.x, arm.hand.y - arm.shoulder.y) <= 18);
+        assert.ok(Math.hypot(arm.hand.x - arm.elbow.x, arm.hand.y - arm.elbow.y) <= 7.01);
+        assert.ok(Math.hypot(arm.hand.x - arm.shoulder.x, arm.hand.y - arm.shoulder.y) < 15);
+        if (i === 12 || i === 36) {
+          assert.ok(
+            Math.hypot(arm.elbow.x - arm.shoulder.x, arm.elbow.y - arm.shoulder.y) <= 4.01,
+            "an arm pointing toward the viewer is foreshortened instead of forming a full-width elbow loop"
+          );
+        }
       }
       assert.equal(f.kid.tint, 0xffffff, "the clothes keep their native color while spinning");
       assert.equal(f.effects.head.tint, 0xffffff);
@@ -339,7 +345,7 @@ test("the opening steps beside each actual handle before pickup instead of exten
     const arm = f.PrinceJS.PrincePose.arm({ x: index ? -9 : -3, y: -30 }, hand, index ? -1 : 1);
     const torch = f.weapon.introTorches[index];
     assert.ok(Math.abs(x + arm.hand.x - torch.x) < 0.1, "the hand touches the real socket");
-    assert.ok(Math.abs(y + arm.hand.y - (torch.y + 18)) < 0.1);
+    assert.ok(Math.abs(y + arm.hand.y - (torch.y + 12)) < 0.1, "the grip meets the middle of the handle");
     assert.notEqual(f.kid.charX, start, "the Prince steps closer before reaching");
     assert.equal(torch.tile.taken, true);
   }
@@ -351,6 +357,63 @@ test("the opening steps beside each actual handle before pickup instead of exten
   const blocked = f.setTile(f.kid.room, 1, 1, 20);
   assert.equal(f.weapon.safeIntroStep(f.weapon.introTorches[1]), 0, "pickup steps cannot pass through a real wall");
   assert.equal(blocked.element, 20);
+});
+
+test("walking between wall sockets uses the complete native step without a second torso or stale crop", () => {
+  const map = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/maps/level1.json"), "utf8"));
+  for (const direction of [-1, 1]) {
+    const f = fixture(1, map);
+    f.kid.charFace = direction;
+    f.kid.charX = 14;
+    f.kid.charBlockX = 0;
+    f.kid.charBlockY = 1;
+    f.weapon.startIntro();
+    f.weapon.beginAction("intro");
+    for (const time of [0.12, 0.34, 0.68, 0.94, 1.35]) {
+      f.weapon.elapsed = time;
+      f.weapon.updateIntro(0);
+      f.effects.update(0, f.weapon);
+      if ([0.12, 0.68, 1.35].includes(time)) {
+        assert.ok(f.kid.charFrame >= 121 && f.kid.charFrame <= 132);
+        assert.ok(!f.kid.cropRect);
+        assert.equal(f.effects.head.visible, false);
+        assert.equal(f.effects.body.visible, false);
+      } else {
+        const index = time === 0.34 ? 0 : 1;
+        const x = f.kid.baseX + f.PrinceJS.Utils.convertX(f.kid.charX);
+        const y = f.kid.baseY + f.kid.charY;
+        const pose = f.effects.introHand(f.weapon, index, x, y);
+        const arm = f.PrinceJS.PrincePose.arm({ x: index ? -9 : -3, y: -30 }, pose.hand, index ? -1 : 1);
+        assert.ok(Math.abs(x + arm.hand.x * direction - f.weapon.introTorches[index].x) < 0.1);
+        assert.equal(f.effects.head.visible, true);
+      }
+    }
+  }
+});
+
+test("stowing preserves the projected elbows and wrists of the last spin frame", () => {
+  const f = fixture();
+  f.ctrlKey.isDown = true;
+  f.advance(0.5);
+  const rig = f.PrinceJS.PrincePose;
+  const drawArm = rig.drawArm;
+  let arms = [];
+  rig.drawArm = function (graphics, arm, light) {
+    arms.push(JSON.parse(JSON.stringify(arm)));
+    drawArm.call(this, graphics, arm, light);
+  };
+  for (const time of [0.03, 0.1, 0.18, 0.3]) {
+    f.weapon.actionStage = "spinning";
+    f.weapon.spinTime = time;
+    f.weapon.drawProgress = 1;
+    arms = [];
+    f.effects.update(0, f.weapon);
+    const spinning = arms;
+    f.weapon.beginHolster();
+    arms = [];
+    f.effects.update(0, f.weapon);
+    assert.deepEqual(arms, spinning, "release must not snap the arms to full length");
+  }
 });
 
 test("fatal opening damage preserves native death and releases both animation and body crop", () => {

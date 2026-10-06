@@ -28,6 +28,14 @@ PrinceJS.TwinTorches.HOLSTER_DURATION = 0.26;
 PrinceJS.TwinTorches.INTRO_DURATION = 1.5;
 PrinceJS.TwinTorches.INTRO_CAPTURES = [0.34, 0.94];
 
+PrinceJS.TwinTorches.introMotion = function (time) {
+  let segment =
+    time < 0.22 ? [0, 0.22] : time >= 0.56 && time < 0.78 ? [0.56, 0.22] : time >= 1.18 ? [1.18, 0.32] : null;
+  let progress = segment ? Math.min(1, (time - segment[0]) / segment[1]) : 0;
+  // The native step's complete footfall replaces the old forward/backward shuffle of four frames.
+  return { walking: !!segment, frame: segment ? 121 + Math.min(11, Math.floor(progress * 12)) : 15 };
+};
+
 PrinceJS.TwinTorches.prototype = {
   canSelect: function () {
     let action = this.kid.specialAction;
@@ -310,10 +318,7 @@ PrinceJS.TwinTorches.prototype = {
     let back = ease(1.18, 0.32);
     this.kid.charX =
       this.introStartX + (this.introSteps[0] * first + (this.introSteps[1] - this.introSteps[0]) * second) * (1 - back);
-    let walking = this.elapsed < 0.22 || (this.elapsed >= 0.56 && this.elapsed < 0.78) || this.elapsed >= 1.18;
-    this.kid.setSpecialActionFrame(
-      walking ? [121, 122, 123, 124, 123, 122, 132][Math.floor(this.elapsed * 24) % 7] : 15
-    );
+    this.kid.setSpecialActionFrame(PrinceJS.TwinTorches.introMotion(this.elapsed).frame);
     this.kid.updateBlockXY();
     let captures = PrinceJS.TwinTorches.INTRO_CAPTURES;
     for (let i = 0; i < this.introTorches.length; i++) {

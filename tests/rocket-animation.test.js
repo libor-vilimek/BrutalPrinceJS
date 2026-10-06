@@ -196,7 +196,7 @@ test("drawing locks the Prince, reaches back first, and then joins both hands to
   assert.equal(f.effects.head.atlas, "kid");
   assert.equal(f.effects.head.frameName, "kid-15");
   assert.equal(f.effects.head.cropRect.width, 12);
-  assert.equal(f.effects.head.cropRect.height, 9, "native hair, head and neckline dimensions are preserved");
+  assert.equal(f.effects.head.cropRect.height, 8, "the native neck remains without the old shoulder pixels");
   assert.equal(f.kid.cropRect, f.effects.bodyCrop, "the replacement arms leave the original legs intact");
   assert.notEqual(f.kid.tint, 0xffffff);
   assert.equal(f.effects.head.tint, f.kid.tint);
@@ -283,6 +283,11 @@ test("the planted pose and shoulder stow mirror in both directions and work whil
       f.key.isDown = true;
       f.advance(29);
       assert.equal(f.kid.charFrame, action === "crawl" ? 109 : 15);
+      assert.equal(
+        f.kid.cropRect.width,
+        action === "crawl" ? 1 : 12,
+        "crouching cannot retain the atlas supporting hand"
+      );
       assert.equal(f.effects.weapon.scale.x, direction);
       assert.equal(f.effects.body.scale.x, direction);
       assert.equal(f.effects.hands.scale.x, direction);

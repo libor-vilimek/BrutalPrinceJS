@@ -40,6 +40,17 @@
       </select></label
     >
     <label>Animation time <input id="time" type="range" min="0" max="1.5" step="0.01" value="0.34" /></label>
+    <label
+      >Seconds <input id="seconds" type="number" min="0" max="1.5" step="0.01" value="0.34" style="width: 60px"
+    /></label>
+    <label
+      >Gun pose
+      <select id="gun-pose">
+        <option value="firing">Holding</option>
+        <option value="drawing">Drawing</option>
+        <option value="holstering">Stowing</option>
+      </select></label
+    >
     <button id="animate">Animate</button>
     <p id="status">Loading native sprites…</p>
     <div id="preview"></div>

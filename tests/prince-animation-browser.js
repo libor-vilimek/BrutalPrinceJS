@@ -3,11 +3,14 @@
 const timeInput = document.getElementById("time");
 const facingInput = document.getElementById("facing");
 const status = document.getElementById("status");
+const secondsInput = document.getElementById("seconds");
+const gunPoseInput = document.getElementById("gun-pose");
+const previewColumns = Math.max(1, Math.min(4, Math.floor((window.innerWidth - 32) / 320)));
 let animated = false;
 let previews = [];
 let previewGame = new Phaser.Game(
-  1280,
-  710,
+  previewColumns * 320,
+  Math.ceil(12 / previewColumns) * 230 + 20,
   Phaser.CANVAS,
   "preview",
   {
@@ -25,6 +28,9 @@ let previewGame = new Phaser.Game(
         timeInput.value = (Number(timeInput.value) + this.game.time.elapsedMS / 1000) % 1.5;
       }
       previews.forEach((draw) => draw(Number(timeInput.value)));
+      if (document.activeElement !== secondsInput) {
+        secondsInput.value = timeInput.value;
+      }
       status.textContent =
         "Time: " + Number(timeInput.value).toFixed(2) + "s · Native pale clothing, bare arms and neckline";
     }
@@ -78,8 +84,8 @@ function buildPreviews() {
     "Jetpack · straps"
   ];
   labels.forEach((label, index) => {
-    const column = index % 4;
-    const row = Math.floor(index / 4);
+    const column = index % previewColumns;
+    const row = Math.floor(index / previewColumns);
     const start = previewGame.world.children.length;
     const kid = makeKid(direction, [8, 9].includes(index) ? 109 : index === 11 ? 32 : 15);
     const pickup = { collected: true };
@@ -121,8 +127,7 @@ function buildPreviews() {
             { x: 16, y: 20 }
           ];
           kid.x = kid.baseX;
-          const walking = time < 0.22 || (time >= 0.56 && time < 0.78) || time >= 1.18;
-          kid.charFrame = walking ? [121, 122, 123, 124, 123, 122, 132][Math.floor(time * 24) % 7] : 15;
+          kid.charFrame = PrinceJS.TwinTorches.introMotion(time).frame;
           kid.frameName = "kid-" + kid.charFrame;
         }
         effects.update(0, state);
@@ -136,12 +141,17 @@ function buildPreviews() {
       const pose = { x: 0, y: crouched ? 41 : index === 5 ? 26 : 30, floorY: 54, direction, crouched, visible: true };
       effects.actionStage = "firing";
       effects.drawProgress = 1;
-      draw = () => {
+      draw = (time) => {
+        effects.actionStage = gunPoseInput.value;
+        effects.drawProgress =
+          gunPoseInput.value === "holstering" ? 1 - time / 1.5 : gunPoseInput.value === "drawing" ? time / 1.5 : 1;
         effects.drawPrince(pose);
-        effects.weapon.visible = true;
+        effects.weapon.visible = effects.actionStage === "firing" || effects.drawProgress >= 0.26;
         effects.weapon.clear();
-        effects.weapon.x = 0;
-        effects.weapon.y = pose.y;
+        const transform = effects.getWeaponTransform();
+        effects.weapon.x = Math.round(transform.x * direction);
+        effects.weapon.y = Math.round(pose.y + transform.y);
+        effects.weapon.rotation = transform.angle * direction;
         effects.weapon.scale.x = direction;
         effects.drawWeapon(effects.weapon);
       };
@@ -186,6 +196,9 @@ function buildPreviews() {
 }
 
 facingInput.addEventListener("change", buildPreviews);
+secondsInput.addEventListener("input", () => {
+  timeInput.value = secondsInput.value;
+});
 document.getElementById("animate").addEventListener("click", (event) => {
   animated = !animated;
   event.target.textContent = animated ? "Pause" : "Animate";

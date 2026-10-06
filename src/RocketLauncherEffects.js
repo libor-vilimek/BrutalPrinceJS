@@ -248,7 +248,7 @@ PrinceJS.RocketLauncherEffects.prototype.cropBody = function (pose) {
   let height = pose.crouched ? 19 : 41;
   let legs = pose.crouched ? 5 : 16;
   this.bodyCrop.y = height - legs;
-  this.bodyCrop.width = pose.crouched ? 20 : 12;
+  this.bodyCrop.width = pose.crouched ? 1 : 12;
   this.bodyCrop.height = legs;
   this.kid.crop(this.bodyCrop);
   if (this.kid.shadowOverlay && this.kid.shadowOverlay.visible) {
@@ -316,16 +316,15 @@ PrinceJS.RocketLauncherEffects.prototype.drawPrince = function (pose) {
   let shoulderY = pose.crouched ? -10 : -32;
   let waistY = pose.crouched ? -5 : -19;
   let twist = reaching ? -Math.round(Math.sin((progress / 0.26) * Math.PI) * 2) : 0;
-  let sleeve = this.litColor(0xffffdd);
-  let sleeveShade = this.litColor(0xddbbaa);
   let skin = this.litColor(0xdd8866);
   let skinShade = this.litColor(0xbb7766);
 
-  this.rect(body, sleeveShade, -11 + twist, shoulderY, 9, waistY - shoulderY + 1);
-  this.rect(body, sleeve, -9 + twist, shoulderY, 8, waistY - shoulderY);
-  this.rect(body, sleeve, -6 + twist, shoulderY + 1, 4, waistY - shoulderY - 1);
-  this.rect(body, sleeve, -10, waistY, 9, 3);
-  this.rect(body, sleeveShade, -10, waistY, 1, 3);
+  if (pose.crouched) {
+    PrinceJS.PrincePose.drawCrouchedLegs(body, (color) => this.litColor(color));
+  }
+  PrinceJS.PrincePose.drawTorso(body, headY + PrinceJS.PrincePose.HEAD_HEIGHT, waistY + 3, -6, twist, 1, (color) =>
+    this.litColor(color)
+  );
   // Keep the original ochre hair and small face at the exact atlas dimensions.
   this.head.x = Math.round(body.x + twist * pose.direction);
   this.head.y = body.y + headY + PrinceJS.PrincePose.HEAD_HEIGHT;
@@ -351,7 +350,12 @@ PrinceJS.RocketLauncherEffects.prototype.drawPrince = function (pose) {
     nearHand[0] += (triggerHand[0] - nearHand[0]) * pickupBlend;
     nearHand[1] += (triggerHand[1] - nearHand[1]) * pickupBlend;
   }
-  let nearArm = PrinceJS.PrincePose.arm({ x: -8 + twist, y: shoulderY + 2 }, { x: nearHand[0], y: nearHand[1] }, 1);
+  let nearArm = PrinceJS.PrincePose.arm(
+    { x: -8 + twist, y: shoulderY + 2 },
+    { x: nearHand[0], y: nearHand[1] },
+    1,
+    pose.crouched ? 0.75 : 1
+  );
   PrinceJS.PrincePose.drawArm(body, nearArm, (color) => this.litColor(color));
   nearHand = [nearArm.hand.x, nearArm.hand.y];
   this.rect(hands, skinShade, nearHand[0] - 1, nearHand[1] - 1, 4, 4);
@@ -363,7 +367,8 @@ PrinceJS.RocketLauncherEffects.prototype.drawPrince = function (pose) {
   let supportArm = PrinceJS.PrincePose.arm(
     { x: -3 + twist, y: shoulderY + 3 },
     { x: supportHand[0], y: supportHand[1] },
-    1
+    1,
+    pose.crouched ? 0.85 : 1
   );
   PrinceJS.PrincePose.drawArm(body, supportArm, (color) => this.litColor(color));
   supportHand = [supportArm.hand.x, supportArm.hand.y];

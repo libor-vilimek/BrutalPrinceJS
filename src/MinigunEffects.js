@@ -626,7 +626,8 @@ PrinceJS.MinigunEffects.prototype.cropBody = function (pose) {
   let height = pose.crouched ? 19 : 41;
   let legs = pose.crouched ? 5 : 16;
   this.bodyCrop.y = height - legs;
-  this.bodyCrop.width = pose.crouched ? 20 : 12;
+  // kid-109's bottom rows contain its supporting hand; keep only a transparent column in that pose.
+  this.bodyCrop.width = pose.crouched ? 1 : 12;
   this.bodyCrop.height = legs;
   this.kid.crop(this.bodyCrop);
   if (this.kid.shadowOverlay && this.kid.shadowOverlay.visible) {
@@ -666,6 +667,13 @@ PrinceJS.MinigunEffects.prototype.drawLimb = function (graphics, from, to, color
   }
 };
 
+PrinceJS.MinigunEffects.prototype.getWeaponTransform = function () {
+  let moving = this.actionStage === "drawing" || this.actionStage === "holstering";
+  let draw = moving ? Math.max(0, Math.min(1, (this.drawProgress - 0.26) / 0.74)) : 1;
+  let remaining = Math.pow(1 - draw, 2);
+  return { x: -12 * remaining, y: -9 * remaining, angle: remaining > 0 ? -1.15 * remaining : 0 };
+};
+
 PrinceJS.MinigunEffects.prototype.drawPrince = function (pose) {
   let body = this.body;
   let hands = this.hands;
@@ -689,19 +697,17 @@ PrinceJS.MinigunEffects.prototype.drawPrince = function (pose) {
   let headY = pose.crouched ? -19 : -41;
   let shoulderY = pose.crouched ? -10 : -32;
   let waistY = pose.crouched ? -5 : -19;
-  let gripY = pose.y - pose.floorY + 3;
-  let sleeve = this.litColor(0xffffdd);
-  let sleeveShade = this.litColor(0xddbbaa);
   let skin = this.litColor(0xdd8866);
   let skinShade = this.litColor(0xbb7766);
   let twist = reaching ? -Math.round(Math.sin((progress / 0.4) * Math.PI) * 2) : 0;
 
   // Replace the atlas torso and relaxed arm, leaving its legs planted on the floor.
-  this.rect(body, sleeveShade, -11 + twist, shoulderY, 9, waistY - shoulderY + 1);
-  this.rect(body, sleeve, -9 + twist, shoulderY, 8, waistY - shoulderY);
-  this.rect(body, sleeve, -6 + twist, shoulderY + 1, 4, waistY - shoulderY - 1);
-  this.rect(body, sleeve, -10, waistY, 9, 3);
-  this.rect(body, sleeveShade, -10, waistY, 1, 3);
+  if (pose.crouched) {
+    PrinceJS.PrincePose.drawCrouchedLegs(body, (color) => this.litColor(color));
+  }
+  PrinceJS.PrincePose.drawTorso(body, headY + PrinceJS.PrincePose.HEAD_HEIGHT, waistY + 3, -6, twist, 1, (color) =>
+    this.litColor(color)
+  );
   // Reuse the atlas head at its native size, including its small ochre hair silhouette.
   this.head.x = Math.round(body.x + twist * pose.direction);
   this.head.y = body.y + headY + PrinceJS.PrincePose.HEAD_HEIGHT;
@@ -711,29 +717,43 @@ PrinceJS.MinigunEffects.prototype.drawPrince = function (pose) {
     this.rect(hands, this.litColor(0xffffdd), -5, headY + 5, 2, 1);
   }
 
-  let blend = Math.max(0, Math.min(1, (progress - 0.35) / 0.65));
+  let transform = this.getWeaponTransform();
+  let grip = (x, y) => [
+    transform.x + Math.cos(transform.angle) * x - Math.sin(transform.angle) * y,
+    pose.y - pose.floorY + transform.y + Math.sin(transform.angle) * x + Math.cos(transform.angle) * y
+  ];
+  let blend = Math.max(0, Math.min(1, (progress - 0.16) / 0.1));
+  let reach = Math.min(1, progress / 0.16);
   let backHand = [-14 + twist, waistY - 4];
-  let triggerHand = [0, gripY];
+  backHand = [-4 + (backHand[0] + 4) * reach, waistY + 2 + (backHand[1] - waistY - 2) * reach];
+  let triggerHand = grip(0, 3);
   let nearHand = [
     backHand[0] + (triggerHand[0] - backHand[0]) * blend,
     backHand[1] + (triggerHand[1] - backHand[1]) * blend
   ];
   nearHand[0] += (-4 - nearHand[0]) * relax;
   nearHand[1] += (waistY + 2 - nearHand[1]) * relax;
-  let nearArm = PrinceJS.PrincePose.arm({ x: -8 + twist, y: shoulderY + 2 }, { x: nearHand[0], y: nearHand[1] }, 1);
+  let nearArm = PrinceJS.PrincePose.arm(
+    { x: -8 + twist, y: shoulderY + 2 },
+    { x: nearHand[0], y: nearHand[1] },
+    1,
+    pose.crouched ? 0.75 : 1
+  );
   PrinceJS.PrincePose.drawArm(body, nearArm, (color) => this.litColor(color));
   nearHand = [nearArm.hand.x, nearArm.hand.y];
   this.rect(hands, skinShade, nearHand[0] - 1, nearHand[1] - 1, 4, 4);
   this.rect(hands, skin, nearHand[0] - 1, nearHand[1] - 1, 3, 3);
 
   let support = Math.max(0, Math.min(1, (progress - 0.55) / 0.45));
-  let supportHand = [-3 + 12 * support, waistY + (gripY - waistY) * support];
+  let frontGrip = grip(9, 3);
+  let supportHand = [-3 + (frontGrip[0] + 3) * support, waistY + (frontGrip[1] - waistY) * support];
   supportHand[0] += (-9 - supportHand[0]) * relax;
   supportHand[1] += (waistY + 2 - supportHand[1]) * relax;
   let supportArm = PrinceJS.PrincePose.arm(
     { x: -3 + twist, y: shoulderY + 3 },
     { x: supportHand[0], y: supportHand[1] },
-    1
+    1,
+    pose.crouched ? 0.85 : 1
   );
   PrinceJS.PrincePose.drawArm(body, supportArm, (color) => this.litColor(color));
   supportHand = [supportArm.hand.x, supportArm.hand.y];
@@ -948,17 +968,13 @@ PrinceJS.MinigunEffects.prototype.update = function (deltaSeconds, firing) {
   if (this.weapon.visible) {
     let x = pose.x - Math.round(this.recoil) * pose.direction;
     let y = pose.y;
-    let movingGun = this.actionStage === "drawing" || this.actionStage === "holstering";
-    let draw = movingGun ? Math.min(1, (this.drawProgress - 0.26) / 0.74) : 1;
-    let ease = 1 - Math.pow(1 - draw, 2);
-    if (movingGun) {
-      x -= 12 * (1 - ease) * pose.direction;
-      y -= 9 * (1 - ease);
-    }
+    let transform = this.getWeaponTransform();
+    x += transform.x * pose.direction;
+    y += transform.y;
     this.weapon.x = Math.round(x);
     this.weapon.y = Math.round(y);
     this.weapon.scale.x = pose.direction;
-    this.weapon.rotation = movingGun ? -1.15 * (1 - ease) * pose.direction : 0;
+    this.weapon.rotation = transform.angle * pose.direction;
     this.drawWeapon(this.weapon);
   }
 
