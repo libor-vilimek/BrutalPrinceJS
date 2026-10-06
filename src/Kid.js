@@ -1097,6 +1097,10 @@ PrinceJS.Kid.prototype.keyS = function () {
   return this.shiftKey.isDown || this.pointerS() || PrinceJS.Utils.gamepadActionPressed(this.game);
 };
 
+PrinceJS.Kid.prototype.keyWeaponAction = function () {
+  return this.pointerS() || PrinceJS.Utils.gamepadActionPressed(this.game);
+};
+
 PrinceJS.Kid.prototype.pointerL = function () {
   if (!PrinceJS.Utils.pointerDown(this.game)) {
     return;

@@ -88,7 +88,8 @@ function fixture() {
       this.charFrame = frame;
     },
     sword: {},
-    keyS: () => false
+    keyS: () => false,
+    keyWeaponAction: () => false
   };
   PrinceJS.MinigunEffects = function () {
     this.shots = 0;
@@ -142,22 +143,26 @@ function fixture() {
   return { PrinceJS, game, kid, level, delegate, gun, key, enemy, bullet, setTile };
 }
 
-test("level 1 pickup sits beside the actual landing, and requires proximity on the same floor", () => {
+test("level 1 minigun waits on the lower landing and cannot be collected from the upper starting floor", () => {
   const f = fixture();
   const map = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/maps/level1.json"), "utf8"));
   map.room
     .find((room) => room.id === map.prince.room)
     .tile.forEach((tile, i) => f.setTile(1, i % 10, Math.floor(i / 10), tile.element));
   f.kid.charBlockY = 0;
+  f.level.number = 1;
   const pickup = f.gun.findPickup(1);
-  assert.equal(pickup.worldX, 80);
-  assert.equal(pickup.worldY, 119);
+  assert.equal(pickup.worldX, 168);
+  assert.equal(pickup.worldY, 182);
   f.gun.pickup = pickup;
-  f.kid.charX = 35;
+  f.kid.charX = 74;
   f.kid.charY = 53;
   f.gun.checkPickup();
   assert.equal(pickup.collected, false);
   f.kid.charY = 116;
+  f.gun.checkPickup();
+  assert.equal(pickup.collected, false);
+  f.kid.charY = 179;
   f.kid.inFallDown = true;
   f.gun.checkPickup();
   assert.equal(pickup.collected, false);
@@ -268,6 +273,11 @@ test("held minigun fire draws first, locks a planted stance, then fires until re
   const shots = f.gun.effects.shots;
   f.key.isDown = false;
   f.gun.update(0.05);
+  assert.equal(f.kid.specialAction.owner, f.gun);
+  assert.equal(f.gun.actionStage, "holstering");
+  for (let i = 0; i < 6; i++) {
+    f.gun.update(0.05);
+  }
   assert.equal(f.kid.specialAction, null);
   assert.equal(f.gun.actionStage, "hidden");
   f.key.isDown = true;
@@ -279,7 +289,7 @@ test("held minigun fire draws first, locks a planted stance, then fires until re
   assert.equal(f.gun.effects.shots, shots);
 });
 
-test("letting go during the draw cancels without a shot, and a new press draws again", () => {
+test("letting go during a partial draw stows without a shot, and a new press waits for it to finish", () => {
   const f = fixture();
   f.kid.hasMinigun = f.kid.minigunEquipped = f.gun.pickup.collected = true;
   f.key.isDown = true;
@@ -289,12 +299,41 @@ test("letting go during the draw cancels without a shot, and a new press draws a
   f.key.isDown = false;
   f.gun.update(0.05);
   assert.equal(f.gun.effects.shots, 0);
-  assert.equal(f.gun.actionStage, "hidden");
-  assert.equal(f.kid.specialAction, null);
+  assert.equal(f.gun.actionStage, "holstering");
+  assert.equal(f.kid.specialAction.owner, f.gun);
   f.key.isDown = true;
+  f.gun.update(0.05);
+  assert.equal(f.gun.actionStage, "holstering");
+  f.gun.update(0.05);
+  assert.equal(f.gun.actionStage, "holstering");
+  f.gun.update(0.05);
+  assert.equal(f.gun.actionStage, "hidden");
   f.gun.update(0.05);
   assert.equal(f.gun.actionStage, "drawing");
   assert.equal(f.gun.drawElapsed, 0.05);
+});
+
+test("weapon selection cannot skip the stowing animation", () => {
+  const f = fixture();
+  const rocket = new f.PrinceJS.RocketLauncher(f.delegate, -1);
+  f.delegate.weapons = [f.gun, rocket];
+  f.kid.hasMinigun = f.kid.minigunEquipped = f.gun.pickup.collected = true;
+  f.kid.hasRocketLauncher = true;
+  f.key.isDown = true;
+  for (let i = 0; i < 12; i++) {
+    f.gun.update(0.05);
+  }
+  f.key.isDown = false;
+  f.gun.update(0.05);
+  assert.equal(rocket.equip(), false);
+  assert.equal(f.gun.equip(), false);
+  assert.equal(f.kid.specialAction.owner, f.gun);
+  assert.equal(f.kid.minigunEquipped, true);
+  for (let i = 0; i < 6; i++) {
+    f.gun.update(0.05);
+  }
+  assert.equal(rocket.equip(), true);
+  assert.equal(f.kid.specialAction, null);
 });
 
 test("switches, damage, death, and destruction release the minigun movement lock", () => {
@@ -350,9 +389,11 @@ test("other special actions block shooting, Ctrl, pickups, and weapon selection"
   assert.equal(f.gun.pickup.collected, false);
 });
 
-test("action fire preserves potion interactions, and hidden/inactive guards are not hit", () => {
+test("Shift keeps potion and movement actions, touch fire preserves potions, and hidden guards are not hit", () => {
   const f = fixture();
   f.kid.keyS = () => true;
+  assert.equal(f.gun.triggerDown(), false);
+  f.kid.keyWeaponAction = () => true;
   assert.equal(f.gun.triggerDown(), true);
   f.setTile(1, 2, 1, 10);
   assert.equal(f.gun.triggerDown(), false);
@@ -367,7 +408,7 @@ test("action fire preserves potion interactions, and hidden/inactive guards are 
   assert.equal(inactive.health, 3);
 });
 
-test("Ctrl holsters and re-equips an owned minigun, preventing hidden fire and clearing stale combat stance", () => {
+test("inventory holstering and re-equipping prevent hidden fire and clear a stale combat stance", () => {
   const f = fixture();
   f.gun.toggleEquipped();
   assert.equal(f.kid.minigunEquipped, undefined);
@@ -395,7 +436,7 @@ test("Ctrl holsters and re-equips an owned minigun, preventing hidden fire and c
   assert.ok(f.gun.effects.shots > 0);
 });
 
-test("switching between collected weapons draws exactly one, with Ctrl preserving the selected inventory", () => {
+test("switching between collected weapons selects exactly one and preserves inventory", () => {
   const f = fixture();
   const launcher = new f.PrinceJS.RocketLauncher(f.delegate, -1);
   f.delegate.weapons = [f.gun, launcher];

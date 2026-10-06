@@ -97,21 +97,30 @@ test("another controller cannot steal or release an active action, and death res
   assert.equal(kid.beginSpecialAction({}, "minigun"), false);
 });
 
-test("Ctrl on a ledge throws the molotov without toggling the selected firearm", () => {
+test("Ctrl on a ledge throws the molotov; on the ground it selects the gun without toggling it off", () => {
   const { PrinceJS, kid } = fixture();
   const calls = [];
   const state = Object.assign(Object.create(PrinceJS.Game.prototype), {
     kid,
     molotov: { throwFromHang: () => calls.push("molotov") },
-    weapons: [{ spec: { id: "minigun" }, toggleEquipped: () => calls.push("gun") }],
+    weapons: [
+      {
+        spec: { id: "minigun", equipped: "minigunEquipped" },
+        equip: () => {
+          kid.minigunEquipped = true;
+          calls.push("gun");
+        }
+      }
+    ],
     jetpack: { toggle: () => calls.push("jetpack") }
   });
   kid.activeWeapon = "minigun";
   kid.action = "hangstraight";
-  state.toggleWeapon();
+  state.handleWeaponControl();
   assert.deepEqual(calls, ["molotov"]);
   kid.action = "stand";
-  state.toggleWeapon();
+  state.handleWeaponControl();
+  state.handleWeaponControl();
   state.toggleJetpack();
   assert.deepEqual(calls, ["molotov", "gun", "jetpack"]);
 });

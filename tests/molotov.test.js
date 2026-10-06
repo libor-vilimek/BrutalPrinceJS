@@ -33,6 +33,9 @@ function fixture() {
   const layers = [];
   const game = {
     add: {
+      sprite() {
+        return { scale: { x: 1 }, anchor: { setTo() {} }, crop() {}, destroy() {} };
+      },
       graphics() {
         const graphics = {
           scale: { x: 1, y: 1 },
@@ -160,6 +163,8 @@ test("the level-one bottle sits on a safe landing tile separate from the minigun
   Object.assign(f.molotov.effects.pickup, f.molotov.pickup);
   assert.equal(f.molotov.pickup.worldX, 112);
   assert.equal(f.molotov.pickup.worldY, 119);
+  f.delegate.minigun.pickup = { worldX: 168, worldY: 182 };
+  assert.equal(f.molotov.findPickup(1).worldX, 80, "moving the minigun frees the visible upper pickup spot");
   f.kid.charX = 49;
   f.kid.charY = 53;
   f.molotov.checkPickup();

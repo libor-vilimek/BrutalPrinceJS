@@ -126,8 +126,8 @@ PrinceJS.Game.prototype = {
 
     this.weaponFireKey = this.input.keyboard.addKey(Phaser.Keyboard.F);
     this.weaponAudio = new PrinceJS.WeaponAudio(this.game);
-    this.weaponToggleKey = this.input.keyboard.addKey(Phaser.Keyboard.CONTROL);
-    this.weaponToggleKey.onDown.add(this.toggleWeapon, this);
+    this.weaponCtrlKey = this.input.keyboard.addKey(Phaser.Keyboard.CONTROL);
+    this.weaponCtrlKey.onDown.add(this.handleWeaponControl, this);
     this.input.keyboard.addKey(Phaser.Keyboard.ONE).onDown.add(() => this.selectWeapon("minigun"), this);
     this.input.keyboard.addKey(Phaser.Keyboard.TWO).onDown.add(() => this.selectWeapon("rocketLauncher"), this);
     this.minigun = new PrinceJS.Minigun(this, json.prince.direction * (json.prince.reverse || 1));
@@ -258,7 +258,7 @@ PrinceJS.Game.prototype = {
     this.game.onResume.remove(this.onResume, this);
   },
 
-  toggleWeapon: function () {
+  handleWeaponControl: function () {
     if (["hang", "hangstraight"].includes(this.kid.action)) {
       if (this.molotov) {
         this.molotov.throwFromHang();
@@ -266,8 +266,8 @@ PrinceJS.Game.prototype = {
       return;
     }
     let weapon = (this.weapons || []).find((item) => item.spec.id === this.kid.activeWeapon);
-    if (weapon) {
-      weapon.toggleEquipped();
+    if (weapon && !this.kid[weapon.spec.equipped]) {
+      weapon.equip();
     }
   },
 
@@ -282,9 +282,8 @@ PrinceJS.Game.prototype = {
       return;
     }
     let weapon = (this.weapons || []).find((item) => item.spec.id === id);
-    if (weapon && this.kid[weapon.spec.owned]) {
-      weapon.equip();
-      this.ui.showText(weapon.spec.label + " READY - CTRL TO HIDE", "weapon");
+    if (weapon && this.kid[weapon.spec.owned] && weapon.equip()) {
+      this.ui.showText(weapon.spec.label + " - HOLD CTRL / F TO FIRE", "weapon");
       this.ui.hideTextTimer = 40;
     }
   },

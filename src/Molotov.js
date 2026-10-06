@@ -30,8 +30,8 @@ PrinceJS.Molotov.prototype = {
     if (this.delegate.minigun && !occupied.includes(this.delegate.minigun.pickup)) {
       occupied.push(this.delegate.minigun.pickup);
     }
-    // Give the bottle its own floor tile beside the level-one landing and minigun.
-    for (let offset of [direction * 32, -direction * 32, direction * 64, -direction * 64, 0]) {
+    // Use the visible starting floor; move beside it only when another pickup occupies that spot.
+    for (let offset of [0, direction * 32, -direction * 32, direction * 64, -direction * 64]) {
       let x = pickup.worldX + offset;
       let column = Math.floor((x - room.x * PrinceJS.ROOM_WIDTH) / PrinceJS.BLOCK_WIDTH);
       let tile = this.level.getTileAt(column, row, pickup.room);

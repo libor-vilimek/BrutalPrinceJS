@@ -11,6 +11,11 @@ PrinceJS.MolotovEffects = function (game, kid, pickup) {
   this.ground = game.add.graphics(0, 0);
   this.light = game.add.graphics(0, 0);
   this.pose = game.add.graphics(0, 0);
+  this.head = game.add.sprite(0, 0, "kid", "kid-15");
+  this.head.anchor.setTo(0, 1);
+  this.head.crop(new Phaser.Rectangle(0, 0, 12, 7));
+  this.head.visible = false;
+  this.head.z = 25;
   this.bottles = game.add.graphics(0, 0);
   this.fire = game.add.graphics(0, 0);
   this.debris = game.add.graphics(0, 0);
@@ -103,6 +108,7 @@ PrinceJS.MolotovEffects.prototype = {
     }
     this.pose.clear();
     this.pose.visible = false;
+    this.head.visible = false;
   },
 
   getDropPoint: function () {
@@ -137,7 +143,7 @@ PrinceJS.MolotovEffects.prototype = {
   drawPose: function (state) {
     let graphics = this.pose;
     graphics.clear();
-    graphics.visible = !!state && this.poseActive;
+    graphics.visible = this.head.visible = !!state && this.poseActive;
     if (!graphics.visible) {
       return;
     }
@@ -167,14 +173,12 @@ PrinceJS.MolotovEffects.prototype = {
     this.rect(graphics, 0xe9b377, -11 - sway, 54, 5, 2);
     this.rect(graphics, 0xffc990, -3 + sway, 52, 6, 2);
 
-    // Warm skin, hair, eyes and a slight forward head tilt toward the burning lighter.
-    this.rect(graphics, 0x875329, -12 + sway, 10, 8, 5);
-    this.rect(graphics, 0xe9b67e, -11 + sway, 13, 7, 6);
-    this.rect(graphics, 0xffd4a0, -8 + sway, 13, 5, 4);
-    this.rect(graphics, 0xaf794d, -11 + sway, 18, 5, 2);
-    this.rect(graphics, 0x472e18, -10 + sway, 10, 6, 2);
-    this.rect(graphics, 0x2c291b, -4 + sway, 14, 1, 1);
-    this.rect(graphics, 0x8e5033, -3 + sway, 17, 2, 1);
+    // Keep the original Prince's small head and ochre hair while he leans toward the flame.
+    this.head.x = graphics.x + (sway - 2) * this.anchor.direction;
+    this.head.y = graphics.y + 17;
+    this.head.scale.x = -this.anchor.direction;
+    this.head.tint = time >= 0.27 && time < 0.91 ? 0xffffcc : 0xffffff;
+    this.rect(graphics, 0xdd8866, -8 + sway, 17, 3, 3);
 
     this.limb(graphics, shoulder, elbow, 0xbebc9d, 5);
     this.limb(graphics, shoulder, elbow, 0xefedc3, 3);
@@ -348,7 +352,7 @@ PrinceJS.MolotovEffects.prototype = {
     this.finishThrow();
     this.destroyed = true;
     this.particles.length = 0;
-    [this.ground, this.light, this.pose, this.bottles, this.fire, this.debris].forEach((graphics) =>
+    [this.ground, this.light, this.pose, this.head, this.bottles, this.fire, this.debris].forEach((graphics) =>
       graphics.destroy()
     );
   }

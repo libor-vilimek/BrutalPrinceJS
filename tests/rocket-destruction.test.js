@@ -339,6 +339,7 @@ test("tapestry barriers are removed but hanging tops do not create a floor over 
 
 test("sword floor decoration no longer suppresses action-button fire while potions still do", () => {
   const f = fixture();
+  f.kid.keyWeaponAction = () => true;
   f.setTile(1, 2, 1, f.PrinceJS.Level.TILE_SWORD);
   assert.equal(f.launcher.triggerDown(), true);
   f.setTile(1, 2, 1, f.PrinceJS.Level.TILE_POTION);

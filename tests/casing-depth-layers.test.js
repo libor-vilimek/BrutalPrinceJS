@@ -56,7 +56,14 @@ function fixture() {
     }
   }
   const PrinceJS = { Utils: { convertX: (x) => Math.floor((x * 320) / 140) } };
-  const context = vm.createContext({ PrinceJS });
+  const context = vm.createContext({
+    PrinceJS,
+    Phaser: {
+      Rectangle: function (x, y, width, height) {
+        Object.assign(this, { x, y, width, height });
+      }
+    }
+  });
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/MinigunEffects.js"), "utf8"), context);
   const rooms = {};
   for (let room = 1; room <= 2; room++) {
@@ -82,7 +89,16 @@ function fixture() {
     charFace: 1,
     minigunEquipped: false
   };
-  const game = { add: { graphics: (x, y) => new Graphics(x, y) } };
+  const game = {
+    add: {
+      graphics: (x, y) => new Graphics(x, y),
+      sprite: () => ({
+        anchor: { setTo() {} },
+        crop() {},
+        destroy() {}
+      })
+    }
+  };
   const effects = new PrinceJS.MinigunEffects(game, kid, { room: 1, worldX: 120, worldY: 119, collected: true });
   const emit = (depthLayer, x = 120, y = 92, vx = 0, vy = 0) => {
     const casing = effects.emitCasing(x, y, vx, vy, 0xffdb70, 119, depthLayer);

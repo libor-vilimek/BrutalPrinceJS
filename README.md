@@ -10,9 +10,9 @@ Prince of Persia reimplementation written in HTML5 / JavaScript (MS-DOS version)
     - `Left / Right key`: Move Left/Right, Advance/Retreat
     - `Up key`: Jump, Climb Up
     - `Down key`: Crouch, Crawl, Climb Down
-  - `SHIFT`: Drink Potion, Grab Edge, Fire Equipped Weapon
-  - `F`: Hold to fire the selected weapon
-  - `CTRL`: Enable/disable the selected gun; while hanging, throw a collected molotov below
+  - `SHIFT`: Walk slowly, Drink Potion, Grab Edge
+  - `CTRL / F`: Hold to draw and fire the selected weapon
+  - `CTRL` while hanging: Throw a collected molotov below
   - `1 / 2`: Select the collected minigun / rocket launcher
   - `J`: Equip/activate the jetpack, or remove it; fly with the cursor keys
   - `SPACE`: Show Remaining Time
@@ -35,11 +35,11 @@ Prince of Persia reimplementation written in HTML5 / JavaScript (MS-DOS version)
 
 The Prince starts with 10 health points. Each enemy sword hit removes one point, including when the Prince has no weapon drawn; a surviving hit briefly staggers him before normal movement resumes.
 
-A minigun lies on safe ground beside the starting area of each level. The rocket launcher becomes available from level 2 onward. Walk over a weapon to pick it up. On level 1, the minigun is just to the right of the ledge where the Prince lands.
+A minigun lies on safe ground in each level. The rocket launcher becomes available from level 2 onward. Walk over a weapon to pick it up. On level 1, the minigun waits on the lower ledge of the starting screen, where the Prince lands after jumping from the upper platform, before the spikes.
 
-Hold `F` to fire in the direction the Prince faces. Press `1` for the minigun or `2` for the rocket launcher once collected. Press `CTRL` to enable or disable the selected gun; both stay in your inventory. Guns are hidden while idle. The minigun starts with a quick reach behind the back and draw animation, then the Prince braces it with both hands. Drawing and firing lock movement; releasing fire hides the minigun and restores movement. Muzzle flashes light his face and clothes yellow. The Prince's sword is disabled, including automatic sword combat near enemies. `SHIFT`, the touch action area, and controller action buttons also fire while a weapon is enabled; potion pickups and ledge grabs keep their normal controls. Both guns have unlimited ammunition; firing stops during jumps, climbing, item animations, and jetpack flight.
+Hold `CTRL` or `F` to fire in the direction the Prince faces. Press `1` for the minigun or `2` for the rocket launcher once collected; both stay in your inventory. Guns are hidden while idle. The minigun starts with a quick reach behind the back and draw animation, then the Prince braces it with both hands. Drawing, firing and stowing lock movement. Releasing fire stops shots immediately, then the Prince puts the minigun behind his back and lowers his hands in a 0.32-second animation before movement resumes. A new trigger press waits for stowing to finish and draws again; weapon selection cannot skip it. Releasing an incomplete draw reverses that shorter part of the motion. Its head and ochre hair use the original Prince sprite at native size, with a small clenched smile. Muzzle flashes light his face and clothes yellow. The Prince's sword is disabled, including automatic sword combat near enemies. `SHIFT` keeps ordinary slow walking, potion pickups and ledge grabs without drawing a gun. The touch action area and controller action buttons can also fire; potion pickups keep priority on those inputs. Both guns have unlimited ammunition; firing stops during jumps, climbing, item animations, and jetpack flight.
 
-A molotov pickup sits beside the minigun on the first level's starting screen. Collect it, hold a ledge with `SHIFT`, then press `CTRL`: the Prince keeps one hand on the ledge while quickly taking out a lighter, holding its flame in his mouth, lighting the bottle and dropping it straight below. The sequence takes about a second. The bottle breaks into a patch of fire that burns enemies; collected molotovs have unlimited ammunition.
+A molotov pickup remains on the upper platform of the first level's starting screen. Collect it, hold a ledge with `SHIFT`, then press `CTRL`: the Prince keeps one hand on the ledge while quickly taking out a lighter, holding its flame in his mouth, lighting the bottle and dropping it straight below. The sequence takes about a second. The bottle breaks into a patch of fire that burns enemies; collected molotovs have unlimited ammunition.
 
 Press `J` to equip and activate the jetpack. The Prince holds both straps and flies with the cursor keys; releasing the keys lets him hover. Walls, gates, floors and ceilings still block him, and he can fly through connected room openings. Press `J` again to remove the pack and resume ordinary movement or falling.
 

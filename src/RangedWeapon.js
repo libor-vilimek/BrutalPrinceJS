@@ -9,6 +9,7 @@ PrinceJS.RangedWeapon = function (delegate, direction, spec) {
   this.pickup = this.findPickup(direction);
   this.effects = new spec.effects(this.game, this.kid, this.pickup);
   this.fireKey = delegate.weaponFireKey;
+  this.ctrlKey = delegate.weaponCtrlKey;
   this.bullets = [];
   this.projectileId = 0;
   this.cooldown = 0;
@@ -122,7 +123,7 @@ PrinceJS.RangedWeapon.prototype = {
     this.equipTime = 0.45;
     this.effects.collect();
     this.game.sound.play("UnsheatheSword");
-    this.delegate.ui.showText(this.spec.label + " - F FIRE / CTRL HIDE", "weapon");
+    this.delegate.ui.showText(this.spec.label + " - HOLD CTRL / F TO FIRE", "weapon");
     this.delegate.ui.hideTextTimer = 75;
   },
 
@@ -139,7 +140,7 @@ PrinceJS.RangedWeapon.prototype = {
     this.firing = false;
     this.equipTime = Math.max(this.equipTime, 0.2);
     this.delegate.ui.showText(
-      this.spec.label + (this.kid[this.spec.equipped] ? " READY - F TO FIRE" : " HIDDEN - CTRL TO EQUIP"),
+      this.spec.label + (this.kid[this.spec.equipped] ? " - HOLD CTRL / F TO FIRE" : " HIDDEN - SELECT TO EQUIP"),
       "weapon"
     );
     this.delegate.ui.hideTextTimer = 40;
@@ -166,6 +167,9 @@ PrinceJS.RangedWeapon.prototype = {
 
   canSelect: function () {
     let action = this.kid.specialAction;
+    if (action && action.owner.actionStage === "holstering") {
+      return false;
+    }
     return !action || action.owner === this || (this.delegate.weapons || [this]).includes(action.owner);
   },
 
@@ -193,10 +197,10 @@ PrinceJS.RangedWeapon.prototype = {
   },
 
   triggerDown: function () {
-    if (this.fireKey.isDown) {
+    if (this.fireKey.isDown || (this.ctrlKey && this.ctrlKey.isDown)) {
       return true;
     }
-    if (!this.kid.keyS()) {
+    if (!this.kid.keyWeaponAction()) {
       return false;
     }
     // Keep the existing action button available for potions.

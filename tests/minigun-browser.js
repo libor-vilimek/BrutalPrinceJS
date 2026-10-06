@@ -45,6 +45,7 @@ function placeKid(room, x, row, direction) {
   const state = gameState();
   const kid = state.kid;
   state.weaponFireKey.isDown = false;
+  state.weaponCtrlKey.isDown = false;
   for (const weapon of state.weapons) {
     weapon.cancelAction();
   }
@@ -87,24 +88,12 @@ async function combatChecks() {
     check(!state.rocketLauncher && state.weapons.length === 1, "Mission one has no rocket launcher or rocket graphics");
     state.selectWeapon("rocketLauncher");
     check(!state.kid.hasRocketLauncher && !state.kid.rocketLauncherEquipped, "Rocket selection cannot unlock it early");
-    check(state.minigun.pickup.worldY === state.kid.baseY + state.kid.charY, "Pickup is on the spawn landing floor");
-    const keyR = state.kid.keyR;
-    state.kid.keyR = () => true;
-    for (let i = 0; i < 40 && !state.kid.hasMinigun; i++) {
-      await pause(50);
-    }
-    state.kid.keyR = keyR;
-    await pause(800);
+    check(state.minigun.pickup.worldY === state.kid.baseY + 179, "Minigun is on the lower landing ledge");
     check(
-      state.kid.hasMinigun && state.minigun.pickup.collected,
-      "Walking from spawn collects the minigun (x=" +
-        state.kid.charX +
-        ", action=" +
-        state.kid.action +
-        ", paused=" +
-        testGame.paused +
-        ")"
+      state.molotov.pickup.worldY === state.kid.baseY + 116,
+      "Only the molotov remains on the upper starting floor"
     );
+    await jumpToFirstMinigun(state);
     check(!state.minigun.effects.weapon.visible, "Collected minigun stays hidden until fire is held");
     placeKid(21, 42, 0, 1);
     const guard = state.enemies.find((enemy) => enemy.room === 21);
@@ -115,20 +104,34 @@ async function combatChecks() {
     check(!guard.alive && guard.health === 0, "Held fire kills a real guard");
     check(state.minigun.effects.shots >= 10, "Held fire emits repeated shots");
     check(state.minigun.effects.casings.length >= 30, "Firing ejects brass casings");
-    state.weaponToggleKey.onDown.dispatch();
-    state.minigun.fireKey.isDown = true;
+    state.weaponFireKey.isDown = false;
+    state.weaponCtrlKey.isDown = true;
+    state.weaponCtrlKey.onDown.dispatch();
     const shots = state.minigun.effects.shots;
-    await pause(400);
-    check(state.kid.hasMinigun && !state.kid.minigunEquipped, "Ctrl holsters without losing inventory");
-    check(
-      !state.minigun.effects.getMuzzle().visible && !state.minigun.effects.weapon.visible,
-      "Holstered minigun is invisible"
-    );
-    check(state.minigun.effects.shots === shots, "Holstered minigun cannot fire");
-    state.weaponToggleKey.onDown.dispatch();
     await pause(900);
-    check(state.kid.minigunEquipped && state.minigun.effects.shots > shots, "Ctrl re-equips and firing resumes");
-    state.minigun.fireKey.isDown = false;
+    check(
+      state.kid.minigunEquipped && state.minigun.effects.shots > shots,
+      "Holding Ctrl fires the selected gun directly"
+    );
+    state.weaponCtrlKey.isDown = false;
+    await pause(100);
+    check(
+      state.minigun.actionStage === "holstering" && state.kid.specialAction,
+      "Releasing Ctrl starts a locked stowing animation"
+    );
+    await pause(350);
+    check(
+      !state.minigun.effects.weapon.visible && !state.kid.specialAction,
+      "Stowing finishes before the gun disappears and movement resumes"
+    );
+    state.weaponCtrlKey.isDown = true;
+    state.weaponCtrlKey.onDown.dispatch();
+    await pause(800);
+    check(
+      state.kid.minigunEquipped && state.minigun.effects.shots > shots,
+      "Pressing Ctrl again fires without holstering inventory"
+    );
+    state.weaponCtrlKey.isDown = false;
     placeKid(21, 63, 0, -1);
     state.minigun.fireKey.isDown = true;
     await pause(800);
@@ -215,8 +218,7 @@ async function preview() {
   const state = await freshLevel(1);
   quietEnemies(state);
   if (!state.kid.hasMinigun) {
-    placeKid(state.minigun.pickup.room, ((state.minigun.pickup.worldX - state.kid.baseX) * 140) / 320, 1, 1);
-    await pause(600);
+    await collectWeapon(state.minigun);
   }
   placeKid(21, 49, 0, 1);
   if (!state.kid.minigunEquipped) {
@@ -225,7 +227,7 @@ async function preview() {
   state.minigun.fireKey.isDown = true;
   state.weaponAudio.unlock();
   await pause(650);
-  output.textContent = "Sustained fire preview. Ctrl toggles holster; Stop firing releases the trigger.";
+  output.textContent = "Sustained fire preview. Hold Ctrl or F to fire; Shift keeps slow steps and ledge grabs.";
 }
 
 async function freshLevel(number) {
@@ -274,6 +276,31 @@ async function collectWeapon(weapon) {
   placeKid(weapon.pickup.room, x, row, 1);
   await pause(650);
   check(gameState().kid[weapon.spec.owned], "Walking over the " + weapon.spec.id + " equips it");
+}
+
+async function jumpToFirstMinigun(state) {
+  const kid = state.kid;
+  const keyR = kid.keyR;
+  const keyU = kid.keyU;
+  placeKid(1, 42, 1, 1);
+  kid.keyR = kid.keyU = () => true;
+  try {
+    await pause(160);
+    kid.keyR = keyR;
+    kid.keyU = keyU;
+    for (let i = 0; i < 60 && !kid.hasMinigun && kid.alive; i++) {
+      await pause(50);
+    }
+    check(
+      kid.alive && kid.hasMinigun,
+      "The first real jump collects the minigun on landing " +
+        JSON.stringify({ x: kid.charX, y: kid.charY, action: kid.action })
+    );
+    await pause(600);
+  } finally {
+    kid.keyR = keyR;
+    kid.keyU = keyU;
+  }
 }
 
 async function walkUntil(predicate, description) {
@@ -441,9 +468,25 @@ async function actionChecks() {
     quietEnemies(state);
     await collectWeapon(state.minigun);
     check(!state.minigun.effects.weapon.visible, "The selected minigun is hidden while idle");
+    placeKid(21, 49, 0, 1);
     const kid = state.kid;
     const keyR = kid.keyR;
-    state.weaponFireKey.isDown = true;
+    kid.shiftKey.isDown = true;
+    kid.keyR = () => true;
+    const stepX = kid.charX;
+    const stepShots = state.minigun.effects.shots;
+    savedKeys = { kid, keyR };
+    await pause(400);
+    check(kid.charX > stepX && !kid.specialAction, "Shift and Right preserve slow movement with a collected minigun");
+    check(
+      state.minigun.effects.shots === stepShots && !state.minigun.effects.weapon.visible,
+      "Shift never draws or fires the gun"
+    );
+    kid.keyR = keyR;
+    kid.shiftKey.isDown = false;
+    await pause(500);
+    state.weaponCtrlKey.isDown = true;
+    state.weaponCtrlKey.onDown.dispatch();
     await pause(130);
     const x = kid.charX;
     const shots = state.minigun.effects.shots;
@@ -457,21 +500,38 @@ async function actionChecks() {
       state.minigun.effects.shots > shots && kid.charX === x,
       "Two-handed sustained fire holds the Prince in place"
     );
-    state.weaponFireKey.isDown = false;
-    kid.keyR = keyR;
-    savedKeys = null;
+    state.weaponCtrlKey.isDown = false;
+    const releaseShots = state.minigun.effects.shots;
     await pause(120);
     check(
-      !kid.specialAction && !state.minigun.effects.weapon.visible,
-      "Releasing fire hides the gun and unlocks movement"
+      kid.specialAction && state.minigun.actionStage === "holstering" && kid.charX === x,
+      "Releasing fire keeps movement locked while the Prince puts the gun back"
     );
+    check(
+      state.minigun.effects.shots === releaseShots && state.minigun.effects.weapon.visible,
+      "The gun moves toward the back without firing another shot"
+    );
+    await pause(250);
+    check(
+      !kid.specialAction && !state.minigun.effects.weapon.visible,
+      "Finishing the stow hides the gun and unlocks movement"
+    );
+    check(
+      !kid.cropRect && !state.minigun.effects.head.visible,
+      "Releasing fire restores the complete original Prince sprite"
+    );
+    // The original run-start animation has four stationary frames before its first step.
+    await pause(450);
+    check(kid.charX > x, "Held movement resumes after stowing finishes");
+    kid.keyR = keyR;
+    savedKeys = null;
 
     const prepared = await prepareMolotov();
     state = prepared.state;
     savedKeys = { kid: state.kid, keyS: prepared.keyS };
     const hangX = state.kid.charX;
     const hangY = state.kid.charY;
-    state.weaponToggleKey.onDown.dispatch();
+    state.weaponCtrlKey.onDown.dispatch();
     await pause(150);
     check(state.kid.specialAction && state.kid.specialAction.owner === state.molotov, "Ctrl starts the hanging throw");
     await pause(430);
@@ -537,6 +597,8 @@ async function actionChecks() {
       }
     }
     gameState().weaponFireKey.isDown = false;
+    gameState().weaponCtrlKey.isDown = false;
+    gameState().kid.shiftKey.isDown = false;
     busy = false;
   }
 }
@@ -548,7 +610,7 @@ document.getElementById("actions").addEventListener("click", actionChecks);
 document.getElementById("molotov").addEventListener("click", async () => {
   await ready();
   const { state, keyS } = await prepareMolotov();
-  state.weaponToggleKey.onDown.dispatch();
+  state.weaponCtrlKey.onDown.dispatch();
   await pause(630);
   testGame.paused = true;
   state.kid.keyS = keyS;
@@ -575,6 +637,14 @@ document.getElementById("resume").addEventListener("click", () => {
   testGame.paused = false;
 });
 document.getElementById("preview").addEventListener("click", preview);
+document.getElementById("holster").addEventListener("click", async () => {
+  await preview();
+  const state = gameState();
+  state.weaponFireKey.isDown = state.weaponCtrlKey.isDown = false;
+  await pause(160);
+  testGame.paused = true;
+  output.textContent = "Stowing preview paused halfway. Resume game finishes the 0.32-second movement lock.";
+});
 document.getElementById("rockets").addEventListener("click", async () => {
   await ready();
   const state = await freshLevel(2);
@@ -602,7 +672,13 @@ document.getElementById("piles").addEventListener("click", async () => {
   await pause(3500);
   output.textContent = effects.casings.length + " permanent shells. Leave the room and return: the pile remains.";
 });
-document.getElementById("toggle").addEventListener("click", () => gameState().weaponToggleKey.onDown.dispatch());
+document.getElementById("toggle").addEventListener("click", () => {
+  const key = gameState().weaponCtrlKey;
+  key.isDown = !key.isDown;
+  if (key.isDown) {
+    key.onDown.dispatch();
+  }
+});
 document.getElementById("inspect").addEventListener("click", () => {
   const state = gameState();
   output.textContent = JSON.stringify(
@@ -660,6 +736,7 @@ document.getElementById("inspect").addEventListener("click", () => {
 });
 document.getElementById("stop").addEventListener("click", () => {
   gameState().minigun.fireKey.isDown = false;
+  gameState().weaponCtrlKey.isDown = false;
 });
 gameFrame.addEventListener("load", () =>
   ready().then(() => {

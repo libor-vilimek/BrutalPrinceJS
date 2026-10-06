@@ -16,11 +16,28 @@ PrinceJS.Minigun = function (delegate, direction) {
   this.actionStage = "hidden";
   this.drawElapsed = 0;
   this.drawDuration = 0.44;
+  this.holsterElapsed = 0;
+  this.holsterDuration = 0.32;
+  this.holsterStartProgress = 1;
   this.stanceAction = "stand";
 };
 
 PrinceJS.Minigun.prototype = Object.create(PrinceJS.RangedWeapon.prototype);
 PrinceJS.Minigun.prototype.constructor = PrinceJS.Minigun;
+
+PrinceJS.Minigun.prototype.findPickup = function (direction) {
+  let pickup = PrinceJS.RangedWeapon.prototype.findPickup.call(this, direction);
+  if (this.level.number === 1 && this.kid.room === 1) {
+    let tile = this.level.getTileAt(5, 2, this.kid.room);
+    if (tile.isSafeWalkable() && !tile.isBarrier()) {
+      let room = this.level.rooms[this.kid.room];
+      // The first jump lands on this lower ledge, before the neighboring spikes.
+      pickup.worldX = room.x * PrinceJS.ROOM_WIDTH + 5 * PrinceJS.BLOCK_WIDTH + 8;
+      pickup.worldY = room.y * PrinceJS.ROOM_HEIGHT + PrinceJS.Utils.convertBlockYtoY(2) + 3;
+    }
+  }
+  return pickup;
+};
 
 PrinceJS.Minigun.prototype.beginDraw = function () {
   this.stanceAction = /stoop|crawl/.test(this.kid.action) ? "stoop" : "stand";
@@ -48,8 +65,17 @@ PrinceJS.Minigun.prototype.cancelAction = function () {
   }
   this.actionStage = "hidden";
   this.drawElapsed = 0;
+  this.holsterElapsed = 0;
   this.cooldown = 0;
   this.effects.setAction("hidden", 0);
+};
+
+PrinceJS.Minigun.prototype.beginHolster = function () {
+  this.holsterStartProgress = Math.min(1, this.drawElapsed / this.drawDuration);
+  this.holsterElapsed = 0;
+  this.actionStage = "holstering";
+  this.firing = false;
+  this.effects.setAction(this.actionStage, this.holsterStartProgress);
 };
 
 PrinceJS.Minigun.prototype.update = function (delta) {
@@ -61,11 +87,15 @@ PrinceJS.Minigun.prototype.update = function (delta) {
   this.equipTime = Math.max(0, this.equipTime - delta);
   this.checkPickup();
 
-  let requested = this.canFire() && this.triggerDown();
+  let canAct = this.canFire();
+  let requested = canAct && this.triggerDown();
   let ownsAction = this.kid.specialAction && this.kid.specialAction.owner === this;
-  if (this.actionStage !== "hidden" && (!ownsAction || !requested || this.kid.action !== this.stanceAction)) {
+  if (this.actionStage !== "hidden" && (!ownsAction || !canAct || this.kid.action !== this.stanceAction)) {
     this.cancelAction();
     requested = false;
+  }
+  if (["drawing", "firing"].includes(this.actionStage) && !requested) {
+    this.beginHolster();
   }
   if (this.actionStage === "hidden" && requested) {
     this.beginDraw();
@@ -76,7 +106,18 @@ PrinceJS.Minigun.prototype.update = function (delta) {
       this.actionStage = "firing";
     }
   }
-  this.effects.setAction(this.actionStage, Math.min(1, this.drawElapsed / this.drawDuration));
+  let progress = Math.min(1, this.drawElapsed / this.drawDuration);
+  if (this.actionStage === "holstering") {
+    // Reverse only the portion actually drawn if the trigger was released early.
+    let duration = this.holsterDuration * Math.max(0.2, this.holsterStartProgress);
+    this.holsterElapsed += delta;
+    progress = this.holsterStartProgress * Math.max(0, 1 - this.holsterElapsed / duration);
+    if (this.holsterElapsed >= duration) {
+      this.cancelAction();
+      progress = 0;
+    }
+  }
+  this.effects.setAction(this.actionStage, progress);
   this.firing = this.actionStage === "firing";
   this.effects.firing = this.firing;
   this.advanceBullets(delta);
