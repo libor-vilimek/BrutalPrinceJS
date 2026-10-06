@@ -15,7 +15,7 @@ PrinceJS.MolotovEffects = function (game, kid, pickup) {
   this.pose = game.add.graphics(0, 0);
   this.head = game.add.sprite(0, 0, "kid", "kid-15");
   this.head.anchor.setTo(0, 1);
-  this.head.crop(new Phaser.Rectangle(0, 0, 12, 7));
+  this.head.crop(new Phaser.Rectangle(0, 0, 12, PrinceJS.PrincePose.HEAD_HEIGHT));
   this.head.visible = false;
   this.head.z = 25;
   this.bottles = game.add.graphics(0, 0);
@@ -226,42 +226,32 @@ PrinceJS.MolotovEffects.prototype = {
             [0.2, -14, 32],
             [0.28, -2, 26],
             [0.32, -9, 33],
-            [0.42, -8, 45],
-            [0.6, -1, 1]
+            [0.42, -8, 36],
+            [0.6, -6, 33]
           ]
     );
-    let shoulder = [-7 + sway, 20];
-    let elbow = [-17 + sway, Math.min(30, Math.max(14, hand[1] - 3))];
+    let arm = PrinceJS.PrincePose.arm({ x: -7 + sway, y: 20 }, { x: hand[0], y: hand[1] }, 1);
+    hand = [arm.hand.x, arm.hand.y];
 
     // One hand stays anchored to the ledge from start to finish. The legs counterbalance the free arm.
-    this.limb(graphics, [-4 + sway, 18], [-3, 7], 0xc8c5a4, 5);
-    this.limb(graphics, [-3, 7], [0, 0], 0xf6efc5, 3);
-    this.rect(graphics, 0xd19a62, -2, -1, 5, 3);
-    this.rect(graphics, 0xffcb91, -1, -2, 4, 2);
-    this.rect(graphics, 0xb1a77d, -13 + sway, 19, 10, 18);
-    this.rect(graphics, 0xefefc6, -12 + sway, 19, 8, 17);
-    this.rect(graphics, 0xffffdb, -10 + sway, 21, 5, 11);
-    this.rect(graphics, 0xa78258, -12 + sway, 33, 9, 3);
-    this.rect(graphics, 0xeee9bd, -12 + sway, 34, 9, 8);
-    this.limb(graphics, [-10 + sway, 40], [-11 - sway, 49], 0xc8c6a4, 5);
-    this.limb(graphics, [-11 - sway, 49], [-10 - sway, 55], 0xf4efc7, 4);
-    this.limb(graphics, [-5 + sway, 40], [-4 + sway, 48], 0xf7f0c8, 5);
-    this.limb(graphics, [-4 + sway, 48], [-1 + sway, 53], 0xc8c6a4, 4);
-    this.rect(graphics, 0xe9b377, -11 - sway, 54, 5, 2);
-    this.rect(graphics, 0xffc990, -3 + sway, 52, 6, 2);
+    PrinceJS.PrincePose.drawArm(graphics, PrinceJS.PrincePose.arm({ x: -4 + sway, y: 17 }, { x: 0, y: 0 }, -1));
+    this.rect(graphics, 0xddbbaa, -13 + sway, 19, 10, 18);
+    this.rect(graphics, 0xffffdd, -12 + sway, 19, 8, 18);
+    this.rect(graphics, 0xffffdd, -12 + sway, 34, 9, 8);
+    this.limb(graphics, [-10 + sway, 40], [-11 - sway, 49], 0xddbbaa, 5);
+    this.limb(graphics, [-11 - sway, 49], [-10 - sway, 55], 0xffffdd, 4);
+    this.limb(graphics, [-5 + sway, 40], [-4 + sway, 48], 0xffffdd, 5);
+    this.limb(graphics, [-4 + sway, 48], [-1 + sway, 53], 0xddbbaa, 4);
+    this.rect(graphics, 0xdd8866, -11 - sway, 54, 5, 2);
+    this.rect(graphics, 0xdd8866, -3 + sway, 52, 6, 2);
 
     // Keep the original Prince's small head and ochre hair while he leans toward the flame.
     this.head.x = graphics.x + (sway - 2) * this.anchor.direction;
-    this.head.y = graphics.y + 17;
+    this.head.y = graphics.y + 10 + PrinceJS.PrincePose.HEAD_HEIGHT;
     this.head.scale.x = -this.anchor.direction;
-    this.head.tint = !charging && time >= 0.12 && time < 0.45 ? 0xffffcc : 0xffffff;
-    this.rect(graphics, 0xdd8866, -8 + sway, 17, 3, 3);
+    this.head.tint = 0xffffff;
 
-    this.limb(graphics, shoulder, elbow, 0xbebc9d, 5);
-    this.limb(graphics, shoulder, elbow, 0xefedc3, 3);
-    this.limb(graphics, elbow, hand, 0xf5edc6, 3);
-    this.rect(graphics, 0xc98b58, hand[0] - 1, hand[1] - 1, 4, 4);
-    this.rect(graphics, 0xffce95, hand[0], hand[1] - 1, 3, 3);
+    PrinceJS.PrincePose.drawArm(graphics, arm);
 
     // Pull the lighter from the belt, then keep it in the mouth while the free hand takes the bottle.
     if (!charging && time >= 0.04 && time < 0.12) {
@@ -293,7 +283,7 @@ PrinceJS.MolotovEffects.prototype = {
     let charging = state.phase === "charging";
     let time = state.time;
     let headY = state.crouched ? -19 : -41;
-    let shoulderY = state.crouched ? -12 : -31;
+    let shoulderY = state.crouched ? -10 : -32;
     let waistY = state.crouched ? -5 : -19;
     let lift = state.crouched ? 11 : 0;
     let bottleHand = this.handAt(
@@ -331,22 +321,18 @@ PrinceJS.MolotovEffects.prototype = {
     lighterHand[1] += lift;
     this.rect(graphics, 0xddbbaa, -11, shoulderY, 9, waistY - shoulderY + 1);
     this.rect(graphics, 0xffffdd, -9, shoulderY, 8, waistY - shoulderY);
-    this.rect(graphics, 0xddbbaa, -10, waistY, 9, 2);
-    this.rect(graphics, 0xbb7766, -7, headY + 7, 3, 3);
-    this.rect(graphics, 0xdd8866, -6, headY + 7, 2, 3);
+    this.rect(graphics, 0xffffdd, -10, waistY, 9, 3);
+    this.rect(graphics, 0xddbbaa, -10, waistY, 1, 3);
     this.head.x = graphics.x;
-    this.head.y = graphics.y + headY + 7;
+    this.head.y = graphics.y + headY + PrinceJS.PrincePose.HEAD_HEIGHT;
     this.head.scale.x = -this.anchor.direction;
-    this.head.tint = !charging && state.lighterLit && time < 0.35 ? 0xffffcc : 0xffffff;
-    for (let arm of [
-      { shoulder: [-8, shoulderY + 2], elbow: [-11, waistY - 2], hand: lighterHand },
-      { shoulder: [-3, shoulderY + 3], elbow: [2, waistY], hand: bottleHand }
-    ]) {
-      this.limb(graphics, arm.shoulder, arm.elbow, 0xddbbaa, 4);
-      this.limb(graphics, arm.elbow, arm.hand, 0xffffdd, 3);
-      this.rect(graphics, 0xbb7766, arm.hand[0] - 1, arm.hand[1] - 1, 4, 4);
-      this.rect(graphics, 0xdd8866, arm.hand[0] - 1, arm.hand[1] - 1, 3, 3);
-    }
+    this.head.tint = 0xffffff;
+    let lighterArm = PrinceJS.PrincePose.arm({ x: -8, y: shoulderY + 2 }, { x: lighterHand[0], y: lighterHand[1] }, 1);
+    let bottleArm = PrinceJS.PrincePose.arm({ x: -3, y: shoulderY + 3 }, { x: bottleHand[0], y: bottleHand[1] }, 1);
+    PrinceJS.PrincePose.drawArm(graphics, lighterArm);
+    PrinceJS.PrincePose.drawArm(graphics, bottleArm);
+    lighterHand = [lighterArm.hand.x, lighterArm.hand.y];
+    bottleHand = [bottleArm.hand.x, bottleArm.hand.y];
     if (charging || time < PrinceJS.Molotov.RELEASE_TIME) {
       this.drawBottle(graphics, bottleHand[0] + 1, bottleHand[1] + 1, !charging && time >= 0.24, this.elapsed * 28);
     }

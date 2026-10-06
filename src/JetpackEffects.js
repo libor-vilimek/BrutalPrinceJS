@@ -11,7 +11,7 @@ PrinceJS.JetpackEffects = function (game, kid, pickup) {
   this.grip = game.add.graphics(0, 0);
   this.head = game.add.sprite(0, 0, "kid", "kid-15");
   this.head.anchor.setTo(0.5, 1);
-  this.head.crop(new Phaser.Rectangle(0, 0, 12, 8));
+  this.head.crop(new Phaser.Rectangle(0, 0, 12, PrinceJS.PrincePose.HEAD_HEIGHT));
   this.pack.z = 19;
   this.pickupGraphic.z = 20;
   this.exhaust.z = 18;
@@ -153,7 +153,7 @@ PrinceJS.JetpackEffects.prototype = {
     }
     this.head.visible = true;
     this.head.x = x;
-    this.head.y = y + top + 8;
+    this.head.y = y + top + PrinceJS.PrincePose.HEAD_HEIGHT;
     this.head.scale.x = -direction;
     this.pack.alpha = equip;
     let rect = (graphics, color, rx, ry, width, rh, alpha) => {
@@ -163,27 +163,24 @@ PrinceJS.JetpackEffects.prototype = {
     this.drawPack(this.pack, 0, packY);
 
     // Match the original Prince palette. Only these two bent arms remain above the cropped legs.
-    let shoulder = top + 10;
-    rect(this.grip, 0xdd8866, -1, top + 7, 3, 5);
-    rect(this.grip, 0xbb7766, -1, top + 10, 1, 2);
+    let shoulder = top + 9;
     rect(this.grip, 0xddbbaa, -5, shoulder + 1, 9, height - 25);
     rect(this.grip, 0xffffdd, -4, shoulder + 1, 7, height - 25);
     rect(this.grip, 0xddbbaa, -5, -19, 9, 4);
     rect(this.grip, 0xffffdd, -4, -18, 7, 3);
-    rect(this.grip, 0xbb9966, -5, -20, 9, 1);
+    rect(this.grip, 0xffffdd, -4, -20, 7, 3);
     rect(this.grip, 0x554530, -5, shoulder, 2, 14);
     rect(this.grip, 0xb39c61, -5, shoulder + 1, 1, 12);
     rect(this.grip, 0x544630, 3, shoulder + 1, 2, 13);
     rect(this.grip, 0xa28f54, 4, shoulder + 2, 1, 11);
-    rect(this.grip, 0xddbbaa, -8, shoulder + 2, 3, 8);
-    rect(this.grip, 0xffffdd, -8, shoulder + 2, 2, 6);
-    rect(this.grip, 0xffffdd, -7, shoulder + 8, 5, 3);
-    rect(this.grip, 0xdd8866, -4, shoulder + 5, 3, 5);
-    rect(this.grip, 0xbb7766, -4, shoulder + 9, 3, 1);
-    rect(this.grip, 0xddbbaa, 5, shoulder + 3, 3, 8);
-    rect(this.grip, 0xffffdd, 3, shoulder + 10, 5, 3);
-    rect(this.grip, 0xdd8866, 2, shoulder + 6, 3, 6);
-    rect(this.grip, 0xbb7766, 2, shoulder + 11, 3, 1);
+    PrinceJS.PrincePose.drawArm(
+      this.grip,
+      PrinceJS.PrincePose.arm({ x: -4, y: shoulder + 2 }, { x: -4, y: shoulder + 8 }, 1)
+    );
+    PrinceJS.PrincePose.drawArm(
+      this.grip,
+      PrinceJS.PrincePose.arm({ x: 3, y: shoulder + 3 }, { x: 3, y: shoulder + 9 }, -1)
+    );
     rect(this.grip, 0xdac690, -5, shoulder + 11, 2, 2);
     rect(this.grip, 0xdac690, 3, shoulder + 12, 2, 2);
 

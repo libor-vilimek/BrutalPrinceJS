@@ -45,6 +45,7 @@ function fixture(number = 3, owned = false, direction = -1, changeMap) {
     "tiles/Base",
     "RangedWeapon",
     "RocketLauncherAction",
+    "PrincePose",
     "RocketLauncherEffects",
     "RocketLauncher"
   ]) {

@@ -61,6 +61,7 @@ function fixture(number = 2, map = null) {
     "tiles/Gate",
     "tiles/Torch",
     "GorePhysics",
+    "PrincePose",
     "TwinTorchesEffects",
     "TwinTorches"
   ]) {
@@ -250,7 +251,7 @@ test("owned idle torches stay put away and Ctrl draws two torches before station
   assert.equal(f.effects.body.visible, true);
   assert.equal(f.effects.head.frameName, "kid-15");
   assert.equal(f.effects.head.cropRect.width, 12);
-  assert.equal(f.effects.head.cropRect.height, 7);
+  assert.equal(f.effects.head.cropRect.height, 9);
   const startX = f.kid.charX;
   f.advance(0.3);
   assert.equal(f.weapon.actionStage, "spinning");
@@ -279,6 +280,77 @@ test("nonfatal melee damage during draw does not interrupt holding Ctrl; spin de
   assert.deepEqual(f.damageEvents, [1]);
   assert.equal(f.weapon.isSpinning(), true);
   assert.equal(f.sounds.filter((sound) => sound[0] === "StabbedByOpponent").length, 1);
+});
+
+test("torch arms keep human proportions through the full turn, with native clothing and correct mirroring", () => {
+  for (const direction of [-1, 1]) {
+    const f = fixture();
+    f.kid.charFace = direction;
+    f.ctrlKey.isDown = true;
+    f.advance(0.5);
+    const start = f.kid.charX;
+    const rig = f.PrinceJS.PrincePose;
+    const drawArm = rig.drawArm;
+    let arms = [];
+    rig.drawArm = function (graphic, arm, light) {
+      arms.push(arm);
+      drawArm.call(this, graphic, arm, light);
+    };
+    for (let i = 0; i < 48; i++) {
+      arms = [];
+      f.weapon.spinTime = (i / 48) * 0.4;
+      f.effects.update(0, f.weapon);
+      assert.equal(arms.length, 2);
+      for (const arm of arms) {
+        assert.ok(Math.hypot(arm.elbow.x - arm.shoulder.x, arm.elbow.y - arm.shoulder.y) <= 8.01);
+        assert.ok(Math.hypot(arm.hand.x - arm.elbow.x, arm.hand.y - arm.elbow.y) <= 10.01);
+        assert.ok(Math.hypot(arm.hand.x - arm.shoulder.x, arm.hand.y - arm.shoulder.y) <= 18);
+      }
+      assert.equal(f.kid.tint, 0xffffff, "the clothes keep their native color while spinning");
+      assert.equal(f.effects.head.tint, 0xffffff);
+      assert.equal(f.effects.body.scale.x, direction);
+      assert.ok(f.effects.body.shapes.every((shape) => [0xffffdd, 0xddbbaa].includes(shape.color)));
+      assert.equal(f.kid.charX, start);
+    }
+    assert.equal(f.PrinceJS.TwinTorches.REACH, 76);
+    const trails = [...f.effects.back.shapes, ...f.effects.front.shapes].filter((shape) => shape.alpha < 0.5);
+    assert.ok(
+      trails.some((shape) => Math.abs(shape.x + 6) > 45),
+      "the wide outer fire trail is preserved"
+    );
+  }
+});
+
+test("the opening steps beside each actual handle before pickup instead of extending the arms", () => {
+  const map = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/maps/level1.json"), "utf8"));
+  const f = fixture(1, map);
+  f.kid.charX = 14;
+  f.kid.charBlockX = 0;
+  f.kid.charBlockY = 1;
+  f.weapon.startIntro();
+  f.weapon.beginAction("intro");
+  const start = f.kid.charX;
+  for (let index = 0; index < 2; index++) {
+    f.weapon.elapsed = f.PrinceJS.TwinTorches.INTRO_CAPTURES[index];
+    f.weapon.updateIntro(0);
+    const x = f.kid.baseX + f.PrinceJS.Utils.convertX(f.kid.charX);
+    const y = f.kid.baseY + f.kid.charY;
+    const hand = f.effects.introHand(f.weapon, index, x, y).hand;
+    const arm = f.PrinceJS.PrincePose.arm({ x: index ? -9 : -3, y: -30 }, hand, index ? -1 : 1);
+    const torch = f.weapon.introTorches[index];
+    assert.ok(Math.abs(x + arm.hand.x - torch.x) < 0.1, "the hand touches the real socket");
+    assert.ok(Math.abs(y + arm.hand.y - (torch.y + 18)) < 0.1);
+    assert.notEqual(f.kid.charX, start, "the Prince steps closer before reaching");
+    assert.equal(torch.tile.taken, true);
+  }
+  f.weapon.elapsed = f.PrinceJS.TwinTorches.INTRO_DURATION;
+  f.weapon.updateIntro(0);
+  assert.equal(f.kid.charX, start);
+  assert.equal(f.kid.charFrame, 15);
+  assert.equal(f.kid.specialAction, null);
+  const blocked = f.setTile(f.kid.room, 1, 1, 20);
+  assert.equal(f.weapon.safeIntroStep(f.weapon.introTorches[1]), 0, "pickup steps cannot pass through a real wall");
+  assert.equal(blocked.element, 20);
 });
 
 test("fatal opening damage preserves native death and releases both animation and body crop", () => {
@@ -375,6 +447,19 @@ test("release keeps movement blocked while the torches go back into pants, then 
   assert.equal(f.effects.front.visible, false);
 });
 
+test("stowing starts at the actual spinning hands and torch tips without snapping to the draw pose", () => {
+  const f = fixture();
+  f.ctrlKey.isDown = true;
+  f.advance(0.7);
+  const spinning = [0, 1].map((index) => f.effects.actionHand(f.weapon, index));
+  f.weapon.beginHolster();
+  for (let index = 0; index < 2; index++) {
+    const stowing = f.effects.actionHand(f.weapon, index);
+    assert.deepEqual({ ...stowing.hand }, { ...spinning[index].hand });
+    assert.deepEqual({ ...stowing.torch }, { ...spinning[index].torch });
+  }
+});
+
 test("early release reverses the draw; a fall or trap damage can still interrupt and kill while spinning", () => {
   const f = fixture();
   f.ctrlKey.isDown = true;
@@ -432,15 +517,15 @@ test("level1 intro waits for landing, takes both actual nearby wall torches, tuc
   assert.equal(f.weapon.actionStage, "intro");
   assert.equal(f.weapon.canSelect(), false);
   assert.equal(f.kid.specialAction.owner, f.weapon);
-  f.advance(0.15);
+  f.advance(0.26);
   assert.equal(f.level.getTileAt(0, 1, 1).taken, true);
   assert.equal(f.level.getTileAt(1, 1, 1).taken, false);
   f.kid.stabbed();
   assert.equal(f.kid.health, 2);
   assert.equal(f.weapon.actionStage, "intro");
-  f.advance(0.4);
+  f.advance(0.6);
   assert.equal(f.level.getTileAt(1, 1, 1).taken, true);
-  f.advance(0.45);
+  f.advance(0.6);
   assert.equal(f.weapon.introPending, false);
   assert.equal(f.weapon.introDone, true);
   assert.equal(f.weapon.actionStage, "hidden");

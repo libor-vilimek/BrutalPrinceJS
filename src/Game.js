@@ -142,7 +142,8 @@ PrinceJS.Game.prototype = {
     this.input.keyboard.addKey(Phaser.Keyboard.TWO).onDown.add(() => this.selectWeapon("molotov"), this);
     this.input.keyboard.addKey(Phaser.Keyboard.THREE).onDown.add(() => this.selectWeapon("minigun"), this);
     this.input.keyboard.addKey(Phaser.Keyboard.FOUR).onDown.add(() => this.selectWeapon("rocketLauncher"), this);
-    this.input.keyboard.addKey(Phaser.Keyboard.FIVE).onDown.add(() => this.selectWeapon("whip"), this);
+    this.whipKey = this.input.keyboard.addKey(Phaser.Keyboard.X);
+    this.whipKey.onDown.add(this.handleWhipControl, this);
     this.kid.hasTwinTorches = true;
     this.kid.hasMolotov = this.kid.hasMinigun = PrinceJS.currentLevel >= 2;
     this.kid.hasRocketLauncher = PrinceJS.currentLevel >= 4;
@@ -160,7 +161,6 @@ PrinceJS.Game.prototype = {
     this.whip = null;
     if (PrinceJS.currentLevel >= 2) {
       this.whip = new PrinceJS.Whip(this, direction);
-      this.weapons.push(this.whip);
     }
     this.twinTorches.equip();
     this.kid.hasJetpack = PrinceJS.currentLevel >= 13;
@@ -200,6 +200,9 @@ PrinceJS.Game.prototype = {
     const delta = this.game.time.elapsedMS / 1000;
     if (this.jetpack) {
       this.jetpack.update(delta);
+    }
+    if (this.whip) {
+      this.whip.update(delta);
     }
     for (let weapon of this.weapons || []) {
       weapon.update(delta);
@@ -272,6 +275,9 @@ PrinceJS.Game.prototype = {
       this.jetpack.destroy();
     }
     this.jetpack = null;
+    if (this.whip) {
+      this.whip.destroy();
+    }
     for (let weapon of this.weapons || []) {
       weapon.destroy();
     }
@@ -298,7 +304,7 @@ PrinceJS.Game.prototype = {
       Phaser.Keyboard.TWO,
       Phaser.Keyboard.THREE,
       Phaser.Keyboard.FOUR,
-      Phaser.Keyboard.FIVE,
+      Phaser.Keyboard.X,
       Phaser.Keyboard.J
     ]) {
       this.input.keyboard.removeKey(key);
@@ -329,6 +335,12 @@ PrinceJS.Game.prototype = {
     }
   },
 
+  handleWhipControl: function () {
+    if (this.whip && this.whip.actionStage === "hidden" && this.whip.canAct()) {
+      this.whip.beginDraw();
+    }
+  },
+
   selectWeapon: function (id) {
     let action = this.kid.specialAction;
     if (
@@ -347,8 +359,6 @@ PrinceJS.Game.prototype = {
           : " - HOLD CTRL/F, RELEASE";
       } else if (id === "twinTorches") {
         instruction = " - HOLD CTRL / F TO SPIN";
-      } else if (id === "whip") {
-        instruction = " - HOLD CTRL / F TO LASH / PULL";
       }
       this.ui.showText(weapon.spec.label + instruction, "weapon");
       this.ui.hideTextTimer = 40;

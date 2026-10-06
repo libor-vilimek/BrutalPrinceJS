@@ -52,7 +52,13 @@ function fixture(direction = 1, action = "stand") {
       }
     }
   });
-  for (const file of ["RangedWeapon", "RocketLauncherEffects", "RocketLauncherAction", "RocketLauncher"]) {
+  for (const file of [
+    "PrincePose",
+    "RangedWeapon",
+    "RocketLauncherEffects",
+    "RocketLauncherAction",
+    "RocketLauncher"
+  ]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "src", file + ".js"), "utf8"), context);
   }
   const tiles = Array.from({ length: 30 }, () => ({
@@ -190,7 +196,7 @@ test("drawing locks the Prince, reaches back first, and then joins both hands to
   assert.equal(f.effects.head.atlas, "kid");
   assert.equal(f.effects.head.frameName, "kid-15");
   assert.equal(f.effects.head.cropRect.width, 12);
-  assert.equal(f.effects.head.cropRect.height, 7, "native hair and head dimensions are preserved");
+  assert.equal(f.effects.head.cropRect.height, 9, "native hair, head and neckline dimensions are preserved");
   assert.equal(f.kid.cropRect, f.effects.bodyCrop, "the replacement arms leave the original legs intact");
   assert.notEqual(f.kid.tint, 0xffffff);
   assert.equal(f.effects.head.tint, f.kid.tint);

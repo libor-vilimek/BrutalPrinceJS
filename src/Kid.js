@@ -25,7 +25,6 @@ PrinceJS.Kid = function (game, level, location, direction, room) {
   this.hasTwinTorches = false;
   this.twinTorchesEquipped = false;
   this.hasWhip = false;
-  this.whipEquipped = false;
   this.specialAction = null;
 
   this.allowCrawl = true;

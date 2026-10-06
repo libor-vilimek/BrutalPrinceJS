@@ -25,6 +25,7 @@ function fixture(number = 13, map = null) {
     "Level",
     "tiles/Base",
     "tiles/Gate",
+    "PrincePose",
     "JetpackEffects",
     "Jetpack"
   ]) {
@@ -590,7 +591,15 @@ test("pixel-art pack, two-handed straps and animated exhaust are visible only wh
   assert.equal(f.kid.cropRect.height, 15);
   assert.ok(f.kid.cropRect.y >= 24);
   assert.ok(effects.pack.shapes.some((shape) => shape.color === 0x97adb0));
-  assert.equal(effects.grip.shapes.filter((shape) => shape.color === 0xdd8866 && shape.y >= -25).length, 2);
+  const skin = effects.grip.shapes.filter((shape) => shape.color === 0xdd8866);
+  assert.ok(
+    skin.some((shape) => shape.x === -5 && shape.width === 2 && shape.height === 2),
+    "left hand grips its strap"
+  );
+  assert.ok(
+    skin.some((shape) => shape.x === 2 && shape.width === 2 && shape.height === 2),
+    "right hand grips its strap"
+  );
   assert.ok(effects.exhaust.shapes.some((shape) => shape.color === 0xfff4aa));
   f.pressed.up = false;
   f.advance(120);

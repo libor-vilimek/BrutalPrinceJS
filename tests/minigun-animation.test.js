@@ -59,7 +59,7 @@ function fixture(direction = 1, action = "stand") {
       }
     }
   });
-  for (const file of ["RangedWeapon", "MinigunEffects", "Minigun"]) {
+  for (const file of ["PrincePose", "RangedWeapon", "MinigunEffects", "Minigun"]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "src", file + ".js"), "utf8"), context);
   }
   const tiles = Array.from({ length: 30 }, () => ({
@@ -200,7 +200,11 @@ test("the Prince reaches behind, pulls the gun forward, then grips and fires wit
   );
   assert.equal(f.effects.head.atlas, "kid");
   assert.equal(f.effects.head.frameName, "kid-15");
-  assert.equal(f.effects.head.cropRect.height, 7, "the original hair and face are preserved at native size");
+  assert.equal(
+    f.effects.head.cropRect.height,
+    9,
+    "the original hair, face and short neckline are preserved at native size"
+  );
   assert.equal(f.kid.cropRect, f.effects.bodyCrop, "the relaxed native arms are replaced during firing");
   assert.notEqual(f.kid.tint, 0xffffff, "yellow muzzle light illuminates the original Prince sprite");
   assert.ok(f.effects.light.shapes.some((shape) => shape.type === "circle"));

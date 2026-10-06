@@ -57,7 +57,7 @@ Navazující implementační rozhodnutí: kompletní pořadí kláves je `1` poc
 
 ## Vzhled prince a animace zbraní
 
-- **ART-01:** Nové pózy musí odpovídat původnímu modelu prince, zejména velikosti hlavy a barvě a velikosti vlasů. Při střelbě má být úsměv/škleb malý; cenění zubů nesmí vytvářet přehnaně velká ústa.
+- **ART-01:** Nové pózy musí odpovídat původnímu modelu prince, zejména velikosti hlavy, barvě a velikosti vlasů, původní světlé barvě oblečení a odhaleným pažím. Krk má mít přirozené původní proporce. Animace nesmí trvale barvit oblečení dožluta; krátké osvětlení zábleskem při střelbě podle ART-04 zůstává. Při střelbě má být úsměv/škleb malý; cenění zubů nesmí vytvářet přehnaně velká ústa.
 - **ART-02:** Zbraň se při běžném pohybu nezobrazuje trvale. Vidět je při vytahování, používání a schovávání.
 - **ART-03:** Vytahování střelných zbraní je krátká blokující sekvence: princ během ní nevykonává jiné akce.
 - **ART-04:** Při střelbě princ drží minigun i raketomet oběma rukama a stojí na místě. Záblesky ho osvětlují žlutě.
@@ -72,6 +72,7 @@ Navazující implementační rozhodnutí: kompletní pořadí kláves je `1` poc
 - **TORCH-04:** Při samotném otáčení ho nepřátelé mečem nemohou zranit. To nedává obecnou nesmrtelnost proti pádům či pastím.
 - **TORCH-05:** Během úvodní animace a vytahování ho mohou nepřátelé zranit. Neusmrcující zásah tuto sekvenci nepřeruší; pokud stále drží `CTRL`/`F`, dokončí ji a začne se otáčet.
 - **TORCH-06:** Zapálení používá stejnou okamžitou smrt a pětisekundovou animaci hořícího nepřítele jako molotov.
+- **TORCH-07:** Paže při používání i sběru pochodní mají lidské proporce a přirozeně ohnuté lokty. Při úvodním sběru může princ přistoupit k pochodním, aby nenatahoval ruce; během útoku dál stojí na místě. Dosah útoku a ohnivého efektu se touto úpravou nezmenšuje.
 
 ## Molotov a oheň
 
@@ -96,7 +97,7 @@ Navazující implementační rozhodnutí: kompletní pořadí kláves je `1` poc
 
 - **WHIP-01:** Bič je v druhém levelu u vstupních dveří k sebrání.
 - **WHIP-02:** Lze jím normálně práskat a zraňovat nepřátele jako zbraní.
-- **WHIP-03:** Jestli nad princem blízko okraje stojí nepřítel, bič ho může chytit za nohu a posunout do skutečné díry, do níž spadne. Nejde o přesun skrz souvislou podlahu nebo strop.
+- **WHIP-03:** Jestli nad princem blízko okraje stojí nepřítel, bič ho může chytit za nohu a posunout do skutečné díry, do níž spadne. Funguje i přímo pod protivníkem při otočení prince na obě strany: bič se vede kolem volného okraje plošiny. Nejde o přesun skrz souvislou podlahu nebo strop.
 - **WHIP-04:** I při krátkém pádu dopadne na obličej a ztratí jeden život. Velký pád ho zabije podle původních pravidel pádu.
 - **WHIP-05:** Přeživší nepřítel se musí chvíli sbírat ze země, než začne znovu útočit. Samotné zotavování neodebírá opakovaně další životy.
 

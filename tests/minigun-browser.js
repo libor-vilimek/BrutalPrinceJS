@@ -174,24 +174,30 @@ async function meleeFireChecks() {
   }
 }
 
-async function prepareWhipLedge() {
+async function prepareWhipLedge(directlyBelow = false) {
   const state = await loadMission(2);
   quietEnemies(state);
   await collectWeapon(state.whip);
-  placeKid(7, 77, 1, 1);
-  const room = state.level.rooms[7];
+  const roomId = directlyBelow ? 16 : 7;
+  placeKid(roomId, 77, 1, 1);
+  const room = state.level.rooms[roomId];
   const kid = state.kid;
   kid.charX += ((room.x * 320 + 176 - state.whip.position(kid).x) * 140) / 320;
   kid.updateBlockXY();
   kid.updateCharPosition();
   const target = state.enemies.find((enemy) => enemy.alive && enemy.baseCharName === "guard");
-  placeGuard(target, 7, 6, -1);
-  target.charX += ((room.x * 320 + 208 - state.whip.position(target).x) * 140) / 320;
+  placeGuard(target, roomId, directlyBelow ? 5 : 6, -1);
+  target.charX += ((room.x * 320 + (directlyBelow ? 176 : 208) - state.whip.position(target).x) * 140) / 320;
   target.updateBlockXY();
   target.updateCharPosition();
   target.health = 4;
   const snag = state.whip.findSnag(target);
-  check(snag && snag.gap.column === 5, "The whip reaches the upper ankle around the actual open ledge");
+  check(
+    snag && snag.gap.column === (directlyBelow ? 6 : 5),
+    directlyBelow
+      ? "Standing directly underneath reaches the upper ankle around both corners of the actual floor"
+      : "The whip reaches the upper ankle around the actual open ledge"
+  );
   return { state, target };
 }
 
@@ -202,35 +208,39 @@ async function whipChecks() {
   busy = true;
   output.textContent = "";
   try {
-    const { state, target } = await prepareWhipLedge();
-    let damage = 0;
-    target.onDamageLife.add((amount) => (damage += amount));
-    state.weaponCtrlKey.isDown = true;
-    for (let i = 0; i < 60 && !target.whipState; i++) {
-      await pause(25);
+    let state;
+    let target;
+    for (let directlyBelow of [false, true]) {
+      ({ state, target } = await prepareWhipLedge(directlyBelow));
+      let damage = 0;
+      target.onDamageLife.add((amount) => (damage += amount));
+      state.weaponCtrlKey.isDown = true;
+      for (let i = 0; i < 60 && !target.whipState; i++) {
+        await pause(25);
+      }
+      check(
+        target.whipState && state.whip.pulledEnemies.has(target),
+        "A real whip crack catches the upper guard's ankle"
+      );
+      state.weaponCtrlKey.isDown = false;
+      for (let i = 0; i < 80 && target.alive && target.whipState && target.whipState.phase !== "recovering"; i++) {
+        await pause(25);
+      }
+      check(
+        target.alive && target.whipState && target.whipState.phase === "recovering" && target.charBlockY === 1,
+        "The guard is dragged over the edge and lands face first on the lower floor"
+      );
+      check(target.health === 3 && damage === 1, "Even this short native fall removes exactly one life");
+      await pause(200);
+      check(target.whipState && !target.swordDrawn, "The stunned guard cannot attack while getting up");
+      for (let i = 0; i < 80 && target.whipState; i++) {
+        await pause(25);
+      }
+      check(
+        !target.whipState && target.alive && target.health === 3,
+        "Recovery releases the guard without repeating fall damage"
+      );
     }
-    check(
-      target.whipState && state.whip.pulledEnemies.has(target),
-      "A real whip crack catches the upper guard's ankle"
-    );
-    state.weaponCtrlKey.isDown = false;
-    for (let i = 0; i < 80 && target.alive && target.whipState && target.whipState.phase !== "recovering"; i++) {
-      await pause(25);
-    }
-    check(
-      target.alive && target.whipState && target.whipState.phase === "recovering" && target.charBlockY === 1,
-      "The guard is dragged over the edge and lands face first on the lower floor"
-    );
-    check(target.health === 3 && damage === 1, "Even this short native fall removes exactly one life");
-    await pause(200);
-    check(target.whipState && !target.swordDrawn, "The stunned guard cannot attack while getting up");
-    for (let i = 0; i < 80 && target.whipState; i++) {
-      await pause(25);
-    }
-    check(
-      !target.whipState && target.alive && target.health === 3,
-      "Recovery releases the guard without repeating fall damage"
-    );
     quietEnemies(state);
     placeKid(7, 35, 1, 1);
     state.selectWeapon("whip");
@@ -295,7 +305,7 @@ async function whipPreview() {
   busy = true;
   output.textContent = "";
   try {
-    const { state, target } = await prepareWhipLedge();
+    const { state, target } = await prepareWhipLedge(true);
     state.weaponCtrlKey.isDown = true;
     for (let i = 0; i < 80 && !target.whipState; i++) {
       await pause(20);

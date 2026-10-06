@@ -15,7 +15,7 @@ PrinceJS.WhipEffects = function (game, kid, pickup) {
   this.flash = game.add.graphics(0, 0);
   this.head = game.add.sprite(0, 0, "kid", "kid-15");
   this.head.anchor.setTo(0, 1);
-  this.head.crop(new Phaser.Rectangle(0, 0, 12, 7));
+  this.head.crop(new Phaser.Rectangle(0, 0, 12, PrinceJS.PrincePose.HEAD_HEIGHT));
   this.bodyCrop = new Phaser.Rectangle(0, 25, 12, 16);
   this.ground.z = 22;
   this.pose.z = 24;
@@ -133,7 +133,6 @@ PrinceJS.WhipEffects.prototype = {
       state.actionStage === "hidden" ||
       !kid.alive ||
       !kid.visible ||
-      !kid.whipEquipped ||
       !kid.specialAction ||
       kid.specialAction.owner !== state
     ) {
@@ -153,12 +152,10 @@ PrinceJS.WhipEffects.prototype = {
     this.pose.x = Math.round(x);
     this.pose.y = Math.round(floorY);
     this.pose.scale.x = direction;
-    this.rect(this.pose, 0xddbbaa, -11 + twist, -31, 10, 12);
-    this.rect(this.pose, 0xffffdd, -9 + twist, -31, 8, 11);
-    this.rect(this.pose, 0xbb7766, -7 + twist, -34, 3, 4);
-    this.rect(this.pose, 0xdd8866, -6 + twist, -34, 2, 4);
+    this.rect(this.pose, 0xddbbaa, -11 + twist, -32, 10, 16);
+    this.rect(this.pose, 0xffffdd, -9 + twist, -32, 8, 16);
     this.head.x = Math.round(x + twist * direction);
-    this.head.y = floorY - 34;
+    this.head.y = floorY - 41 + PrinceJS.PrincePose.HEAD_HEIGHT;
     this.head.scale.x = -direction;
     let drawing = state.actionStage === "drawing";
     let holstering = state.actionStage === "holstering";
@@ -166,10 +163,11 @@ PrinceJS.WhipEffects.prototype = {
     armProgress = Math.max(0, Math.min(1, armProgress));
     let gripX = -6 + armProgress * (snap * 20 + Math.sin(progress * Math.PI * 2) * 8);
     let gripY = -20 - armProgress * (11 + Math.sin(progress * Math.PI * 2) * 14);
-    this.limb(this.pose, { x: -7 + twist, y: -29 }, { x: gripX - 4, y: gripY + 3 }, 0xffffdd, 4);
-    this.limb(this.pose, { x: gripX - 4, y: gripY + 3 }, { x: gripX, y: gripY }, 0xdd8866, 3);
-    this.limb(this.pose, { x: -9 + twist, y: -28 }, { x: -15, y: -23 }, 0xffffdd, 3);
-    this.limb(this.pose, { x: -15, y: -23 }, { x: -7, y: -20 }, 0xdd8866, 3);
+    let arm = PrinceJS.PrincePose.arm({ x: -7 + twist, y: -30 }, { x: gripX, y: gripY }, 1);
+    PrinceJS.PrincePose.drawArm(this.pose, arm);
+    PrinceJS.PrincePose.drawArm(this.pose, PrinceJS.PrincePose.arm({ x: -9 + twist, y: -29 }, { x: -7, y: -20 }, 1));
+    gripX = arm.hand.x;
+    gripY = arm.hand.y;
     let hand = { x: x + gripX * direction, y: floorY + gripY };
     let handle = { x: hand.x + direction * 2, y: hand.y - 7 };
     this.limb(this.cord, hand, handle, 0x3b2117, 3);
@@ -178,7 +176,7 @@ PrinceJS.WhipEffects.prototype = {
     if (this.tether && this.tether.enemy.whipState) {
       let stateOwner = this.tether.enemy.whipState.owner;
       let ankle = stateOwner.position(this.tether.enemy);
-      path.push(this.tether.edge, { x: ankle.x, y: ankle.y - 7 });
+      path.push(...this.tether.route, { x: ankle.x, y: ankle.y - 7 });
       for (let i = 0; i < 12; i++) {
         let angle = (i / 12) * Math.PI * 2;
         this.rect(this.cord, 0xd8ad66, ankle.x + Math.cos(angle) * 4, ankle.y - 7 + Math.sin(angle) * 2, 1, 1);

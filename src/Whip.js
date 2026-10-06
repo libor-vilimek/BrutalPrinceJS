@@ -1,20 +1,18 @@
 "use strict";
 
 PrinceJS.Whip = function (delegate, direction) {
-  this.spec = { id: "whip", label: "WHIP", owned: "hasWhip", equipped: "whipEquipped" };
+  this.spec = { id: "whip", label: "WHIP", owned: "hasWhip" };
   this.delegate = delegate;
   this.game = delegate.game;
   this.level = delegate.level;
   this.kid = delegate.kid;
-  this.fireKey = delegate.weaponFireKey;
-  this.ctrlKey = delegate.weaponCtrlKey;
+  this.actionKey = delegate.whipKey;
   this.physics = new PrinceJS.GorePhysics(this.level);
   this.pickup = this.findPickup(direction);
   this.pickup.collected = !!this.kid.hasWhip;
   this.effects = new PrinceJS.WhipEffects(this.game, this.kid, this.pickup);
   this.actionStage = "hidden";
   this.elapsed = 0;
-  this.equipTime = 0;
   this.cooldown = 0;
   this.cracks = 0;
   this.pulledEnemies = new Set();
@@ -75,20 +73,32 @@ PrinceJS.Whip.prototype = {
       return false;
     }
     kid.hasWhip = this.pickup.collected = true;
-    this.equip();
     this.effects.collect();
     this.game.sound.play("UnsheatheSword", 0.5);
-    this.delegate.ui.showText("5 WHIP - CTRL/F CRACK / PULL GUARDS OFF LEDGES", "weapon");
+    this.delegate.ui.showText("X WHIP - CRACK / HOLD TO LASH / PULL GUARDS OFF LEDGES", "weapon");
     this.delegate.ui.hideTextTimer = 90;
     return true;
   },
 
-  canSelect: PrinceJS.RangedWeapon.prototype.canSelect,
-  equip: PrinceJS.RangedWeapon.prototype.equip,
-  triggerDown: PrinceJS.RangedWeapon.prototype.triggerDown,
+  triggerDown: function () {
+    return !!(this.actionKey && this.actionKey.isDown);
+  },
 
   canAct: function () {
-    return this.kid.activeWeapon === this.spec.id && PrinceJS.RangedWeapon.prototype.canFire.call(this);
+    let kid = this.kid;
+    return (
+      kid.hasWhip &&
+      kid.alive &&
+      kid.visible &&
+      kid.active &&
+      (!kid.specialAction || kid.specialAction.owner === this) &&
+      !kid.inFallDown &&
+      !kid.inJumpUp &&
+      !kid.pickupPotion &&
+      !kid.pickupSword &&
+      (["stand", "startrun", "running", "runstop", "turnrun", "stoop", "standup", "crawl"].includes(kid.action) ||
+        /^step\d+$/.test(kid.action))
+    );
   },
 
   beginDraw: function () {
@@ -128,7 +138,6 @@ PrinceJS.Whip.prototype = {
       return;
     }
     let dt = Math.max(0, Math.min(Number(delta) || 0, 0.05));
-    this.equipTime = Math.max(0, this.equipTime - dt);
     this.checkPickup();
     for (let enemy of this.pulledEnemies) {
       if (!enemy.alive || enemy.burningDeath || enemy.exists === false) {
@@ -148,11 +157,6 @@ PrinceJS.Whip.prototype = {
       this.beginDraw();
     }
     this.elapsed += dt;
-    if (["drawing", "cracking"].includes(this.actionStage) && !requested) {
-      this.actionStage = "holstering";
-      this.elapsed = 0;
-      this.effects.tether = null;
-    }
     if (this.actionStage === "drawing" && this.elapsed >= PrinceJS.Whip.DRAW_DURATION) {
       this.beginCrack();
     }
@@ -161,7 +165,12 @@ PrinceJS.Whip.prototype = {
         this.hitDone = true;
         this.attack();
       }
-      if (this.elapsed >= PrinceJS.Whip.CRACK_DURATION) {
+      // A quick X tap completes one strike; holding X repeats it until release.
+      if (!requested && this.hitDone) {
+        this.actionStage = "holstering";
+        this.elapsed = 0;
+        this.effects.tether = null;
+      } else if (this.elapsed >= PrinceJS.Whip.CRACK_DURATION) {
         this.beginCrack();
       }
     }
@@ -249,8 +258,8 @@ PrinceJS.Whip.prototype = {
     let kid = this.position(this.kid);
     let foot = this.position(enemy);
     let height = kid.y - foot.y;
-    let distance = (foot.x - kid.x) * this.kid.charFace;
-    if (height < 35 || height > 104 || distance < -12 || distance > PrinceJS.Whip.RANGE) {
+    let distance = Math.abs(foot.x - kid.x);
+    if (height < 35 || height > 104 || distance > PrinceJS.Whip.RANGE) {
       return null;
     }
     let standing = this.tileAt(foot.x, foot.y - 2, foot.room);
@@ -275,15 +284,26 @@ PrinceJS.Whip.prototype = {
         let anchor = { x: edgeX + direction * 3, y: foot.y - 8, room: next.room };
         let hand = { x: kid.x + this.kid.charFace * 7, y: kid.y - 25, room: kid.room };
         let ankle = { x: foot.x, y: foot.y - 8, room: foot.room };
-        // The cord travels through the open side of the ledge, then curls over its lip.
-        // A straight line through the floor would let it catch guards through a ceiling.
-        if (
-          Math.abs(foot.x - edgeX) <= 50 &&
-          Math.hypot(anchor.x - hand.x, anchor.y - hand.y) <= PrinceJS.Whip.RANGE + 16 &&
-          this.lineClear(hand, anchor) &&
-          this.lineClear(anchor, ankle)
-        ) {
-          candidates.push({ enemy, foot, targetX, gap: next, edge: anchor, direction });
+        let underside = {
+          x: anchor.x,
+          y: this.level.rooms[standing.room].y * PrinceJS.ROOM_HEIGHT + (standing.row + 1) * PrinceJS.BLOCK_HEIGHT + 2,
+          room: next.room
+        };
+        // From directly below the guard, the cord must go around both corners of the floor.
+        // Keep the shorter straight cast when the Prince is already beside the open lip.
+        let route = this.lineClear(hand, anchor) ? [anchor] : [underside, anchor];
+        let points = [hand, ...route, ankle];
+        let length = 0;
+        let clear = true;
+        for (let i = 1; i < points.length; i++) {
+          length += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+          if (!this.lineClear(points[i - 1], points[i])) {
+            clear = false;
+            break;
+          }
+        }
+        if (Math.abs(foot.x - edgeX) <= 50 && length <= PrinceJS.Whip.RANGE + 16 && clear) {
+          candidates.push({ enemy, foot, targetX, gap: next, route, direction });
         }
         break;
       }

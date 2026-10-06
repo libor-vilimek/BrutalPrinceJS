@@ -64,7 +64,9 @@ function fixture() {
       }
     }
   });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/MinigunEffects.js"), "utf8"), context);
+  for (const file of ["PrincePose", "MinigunEffects"]) {
+    vm.runInContext(fs.readFileSync(path.join(__dirname, "../src", file + ".js"), "utf8"), context);
+  }
   const rooms = {};
   for (let room = 1; room <= 2; room++) {
     rooms[room] = {

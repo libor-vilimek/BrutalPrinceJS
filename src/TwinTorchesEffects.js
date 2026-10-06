@@ -11,9 +11,9 @@ PrinceJS.TwinTorchesEffects = function (game, kid) {
   this.front = game.add.graphics(0, 0);
   this.head = game.add.sprite(0, 0, "kid", "kid-15");
   this.head.anchor.setTo(0, 1);
-  this.head.crop(new Phaser.Rectangle(0, 0, 12, 7));
+  this.head.crop(new Phaser.Rectangle(0, 0, 12, PrinceJS.PrincePose.HEAD_HEIGHT));
   this.back.z = 21;
-  this.light.z = 22;
+  this.light.z = 19;
   this.body.z = 24;
   this.head.z = 25;
   this.front.z = 26;
@@ -53,6 +53,9 @@ PrinceJS.TwinTorchesEffects.prototype = {
       this.savedCrop = this.copyCrop(this.kid.cropRect);
       this.croppedKid = true;
     }
+    let frame = this.game.cache && this.game.cache.getFrameByName("kid", "kid-" + this.kid.charFrame);
+    this.bodyCrop.y = (frame ? frame.height : 41) - 16;
+    this.bodyCrop.width = frame ? frame.width : 12;
     this.kid.crop(this.bodyCrop);
     if (this.kid.shadowOverlay && this.kid.shadowOverlay.visible) {
       if (this.croppedShadow !== this.kid.shadowOverlay) {
@@ -106,12 +109,12 @@ PrinceJS.TwinTorchesEffects.prototype = {
 
   introHand: function (weapon, index, x, y) {
     let torch = weapon.introTorches[index];
-    let start = index === 0 ? 0 : 0.4;
-    let capture = index === 0 ? 0.22 : 0.62;
-    let tuck = index === 0 ? 0.46 : 0.92;
+    let start = index === 0 ? 0.1 : 0.66;
+    let capture = PrinceJS.TwinTorches.INTRO_CAPTURES[index];
+    let tuck = index === 0 ? 0.56 : 1.18;
     let time = weapon.elapsed;
-    let waist = { x: index ? -2 : -9, y: -15 };
-    let socket = { x: torch.x - x, y: torch.y + 18 - y };
+    let waist = { x: index ? -9 : -3, y: -18 };
+    let socket = { x: (torch.x - x) * this.kid.charFace, y: torch.y + 18 - y };
     let hand =
       time < capture
         ? this.interpolate(waist, socket, (time - start) / (capture - start))
@@ -120,26 +123,36 @@ PrinceJS.TwinTorchesEffects.prototype = {
   },
 
   actionHand: function (weapon, index) {
-    let side = index ? 1 : -1;
-    let waist = { x: index ? -2 : -9, y: -15 };
+    let side = index ? -1 : 1;
+    let waist = { x: index ? -9 : -3, y: -18 };
     let progress = weapon.drawProgress;
     if (weapon.actionStage === "spinning") {
       let angle = weapon.spinTime * Math.PI * 5 + index * Math.PI;
       let cos = Math.cos(angle);
       let sin = Math.sin(angle);
       return {
-        hand: { x: -5 + cos * 26, y: -26 + sin * 6 },
-        torch: { x: -5 + cos * 54, y: -29 + sin * 8 },
+        hand: { x: -6 + cos * 17, y: -27 + sin * 4 },
+        torch: { x: -6 + cos * 38, y: -29 + sin * 8 },
         flame: true,
         depth: sin,
         angle: angle
       };
     }
     let spread = Math.max(0, Math.min(1, (progress - 0.22) / 0.78));
-    let hand = this.interpolate(waist, { x: -5 + side * 19, y: -26 }, spread);
+    let hand = this.interpolate(waist, { x: -6 + side * 17, y: -27 }, spread);
+    let torch = { x: hand.x + side * (2 + spread * 8), y: hand.y - 17 };
+    if (weapon.actionStage === "holstering" && weapon.holsterFromSpin) {
+      let angle = weapon.spinTime * Math.PI * 5 + index * Math.PI;
+      hand = this.interpolate({ x: -6 + Math.cos(angle) * 17, y: -27 + Math.sin(angle) * 4 }, waist, 1 - progress);
+      torch = this.interpolate(
+        { x: -6 + Math.cos(angle) * 38, y: -29 + Math.sin(angle) * 8 },
+        { x: waist.x + side * 2, y: waist.y - 17 },
+        1 - progress
+      );
+    }
     return {
       hand: hand,
-      torch: { x: hand.x + side * (2 + spread * 12), y: hand.y - 17 },
+      torch: torch,
       flame: progress > 0.22,
       depth: side
     };
@@ -175,11 +188,15 @@ PrinceJS.TwinTorchesEffects.prototype = {
     for (let i = 6; i >= 1; i--) {
       let angle = weapon.spinTime * Math.PI * 5 + index * Math.PI - i * 0.16;
       let sin = Math.sin(angle);
-      let x = -5 + Math.cos(angle) * 54;
+      let x = -6 + Math.cos(angle) * 54;
       let y = -32 + sin * 8;
       let graphic = sin < 0 ? this.back : this.front;
       this.rect(graphic, i > 3 ? 0xd9531e : 0xffad32, x - 2, y - 2, 4, 5, (7 - i) * 0.065);
       this.rect(graphic, 0xffe382, x, y - 1, 1, 3, (7 - i) * 0.075);
+      // The outer fire wake retains its original radius while the arms stay compact.
+      this.light.beginFill(0xffbb35, (7 - i) * 0.0015);
+      this.light.drawCircle(x, y, 42);
+      this.light.endFill();
     }
   },
 
@@ -201,46 +218,48 @@ PrinceJS.TwinTorchesEffects.prototype = {
       graphic.visible = true;
       graphic.x = x;
       graphic.y = y;
+      graphic.scale.x = kid.charFace;
     }
     this.cropBody();
     let spinning = weapon.actionStage === "spinning";
     let rotation = weapon.spinTime * Math.PI * 5;
-    let facing = spinning ? (Math.cos(rotation) < 0 ? -1 : 1) : kid.charFace;
-    let width = spinning ? 6 + Math.round(Math.abs(Math.cos(rotation)) * 4) : 9;
-    let left = -5 - width / 2;
-    this.rect(this.body, 0xddbbaa, left, -31, width, 14);
-    this.rect(this.body, 0xffffdd, left + 1, -30, width - 2, 12);
-    this.rect(this.body, 0xbb9966, left, -18, width, 2);
-    this.rect(this.body, 0xdd8866, -7, -35, 3, 5);
-    this.rect(this.body, 0xbb7766, -7, -34, 1, 3);
+    let facing = spinning ? (Math.cos(rotation) < 0 ? -kid.charFace : kid.charFace) : kid.charFace;
+    let width = spinning ? 5 + Math.round(Math.abs(Math.cos(rotation)) * 3) : 8;
+    let left = -6 - width / 2;
+    this.rect(this.body, 0xddbbaa, left, -32, width, 16);
+    this.rect(this.body, 0xffffdd, left + 1, -32, width - 1, 16);
     this.head.visible = true;
-    this.head.x = x + (facing < 0 ? -10 : 0);
-    this.head.y = y - 34;
+    this.head.x = x - 6 * kid.charFace + 6 * facing;
+    this.head.y = y - 41 + PrinceJS.PrincePose.HEAD_HEIGHT;
     this.head.scale.x = -facing;
     if (this.originalTint === null) {
       this.originalTint = typeof kid.tint === "number" ? kid.tint : 0xffffff;
     }
-    this.lastTint = this.hitTime > 0 ? 0xffb395 : 0xffefcf;
+    this.lastTint = this.hitTime > 0 ? 0xffb395 : this.originalTint;
     kid.tint = this.head.tint = this.lastTint;
     for (let index = 0; index < 2; index++) {
       let pose = weapon.actionStage === "intro" ? this.introHand(weapon, index, x, y) : this.actionHand(weapon, index);
-      let shoulder = { x: index ? -2 : -9, y: -29 };
-      let elbow = {
-        x: shoulder.x + (pose.hand.x - shoulder.x) * 0.46,
-        y: Math.max(-27, (shoulder.y + pose.hand.y) / 2 + 4)
-      };
+      let side = index ? -1 : 1;
+      let shoulder = { x: -6 + side * 3, y: -30 };
+      if (spinning) {
+        shoulder.x = -6 + Math.cos(pose.angle) * 3;
+        shoulder.y += pose.depth;
+      }
+      let arm = PrinceJS.PrincePose.arm(shoulder, pose.hand, side);
+      let offset = { x: arm.hand.x - pose.hand.x, y: arm.hand.y - pose.hand.y };
+      pose.torch.x += offset.x;
+      pose.torch.y += offset.y;
+      pose.hand = arm.hand;
       let graphic = spinning && pose.depth < 0 ? this.back : this.front;
-      this.limb(graphic, shoulder, elbow, 0xddbbaa, 4);
-      this.limb(graphic, shoulder, elbow, 0xffffdd, 2);
-      this.limb(graphic, elbow, pose.hand, 0xffffdd, 3);
+      PrinceJS.PrincePose.drawArm(graphic, arm);
       if (spinning) {
         this.drawTrail(weapon, index);
       }
       if (pose.flame) {
         this.drawTorch(graphic, pose.hand, pose, index);
       }
-      this.rect(graphic, 0xbb7766, pose.hand.x - 2, pose.hand.y - 1, 4, 4);
-      this.rect(graphic, 0xdd8866, pose.hand.x - 1, pose.hand.y - 1, 3, 3);
+      this.rect(graphic, 0xbb7766, pose.hand.x - 1, pose.hand.y - 1, 3, 3);
+      this.rect(graphic, 0xdd8866, pose.hand.x - 1, pose.hand.y - 1, 2, 2);
     }
   },
 

@@ -41,6 +41,7 @@ function fixture() {
     "HordeSpawns",
     "RangedWeapon",
     "GorePhysics",
+    "PrincePose",
     "WhipEffects",
     "Whip"
   ]) {
@@ -131,7 +132,8 @@ function fixture() {
     visible: true,
     swordDrawn: false,
     hasWhip: true,
-    whipEquipped: false,
+    activeWeapon: "minigun",
+    minigunEquipped: true,
     action: "stand",
     health: 10,
     sword: { visible: false },
@@ -184,6 +186,7 @@ function fixture() {
   placeKid(1);
   const ctrlKey = { isDown: false };
   const fireKey = { isDown: false };
+  const whipKey = { isDown: false };
   const delegate = {
     game,
     level,
@@ -191,6 +194,7 @@ function fixture() {
     enemies: [],
     weaponCtrlKey: ctrlKey,
     weaponFireKey: fireKey,
+    whipKey,
     ui: { showText() {}, setOpponentLive() {} },
     bloodEffects: {
       hits: [],
@@ -201,8 +205,7 @@ function fixture() {
   };
   game.state = { getCurrentState: () => delegate };
   const whip = new PrinceJS.Whip(delegate, 1);
-  delegate.weapons = [whip];
-  whip.equip();
+  delegate.weapons = [];
   const guard = (column, row = 1, room = 1, direction = -1) => {
     const enemy = new PrinceJS.Enemy(
       game,
@@ -252,6 +255,7 @@ function fixture() {
     tickEnemies,
     ctrlKey,
     fireKey,
+    whipKey,
     makeLedge,
     sounds,
     visuals
@@ -284,6 +288,9 @@ test("level two's coiled whip is beside the actual arrival door, visible and not
   f.kid.charX = 4 * 14 + 7;
   assert.equal(whip.checkPickup(), true);
   assert.equal(f.kid.hasWhip, true);
+  assert.equal(f.kid.activeWeapon, "minigun");
+  assert.equal(f.kid.minigunEquipped, true);
+  assert.equal(f.kid.specialAction, undefined);
   assert.equal(whip.effects.ground.visible, false);
   assert.equal(whip.checkPickup(), false);
 });
@@ -296,13 +303,13 @@ test("automatically owned whips hide their pickup without playing collection eff
   assert.equal(f.sounds.length, 0);
 });
 
-test("held CTRL draws, cracks repeatedly and deals one native HP per swing while standing still", () => {
+test("held X draws, cracks repeatedly and deals one native HP per swing without changing the selected weapon", () => {
   const f = fixture();
   const enemy = f.guard(3);
   const initial = enemy.health;
   const x = f.kid.charX;
-  f.ctrlKey.isDown = true;
-  f.advance(0.3);
+  f.whipKey.isDown = true;
+  f.advance(0.15);
   assert.equal(f.whip.actionStage, "drawing");
   assert.equal(enemy.health, initial);
   assert.equal(f.kid.specialAction.owner, f.whip);
@@ -314,17 +321,19 @@ test("held CTRL draws, cracks repeatedly and deals one native HP per swing while
   f.advance(0.25);
   assert.equal(enemy.health, initial - 2);
   assert.equal(f.kid.charX, x);
+  assert.equal(f.kid.activeWeapon, "minigun");
+  assert.equal(f.kid.minigunEquipped, true);
   assert.equal(f.delegate.bloodEffects.hits.length, 2);
 });
 
-test("F shares the whip trigger and release holsters it before unlocking movement", () => {
+test("releasing X holsters the whip before unlocking movement", () => {
   const f = fixture();
-  f.fireKey.isDown = true;
+  f.whipKey.isDown = true;
   f.advance(0.55);
   assert.equal(f.whip.actionStage, "cracking");
   assert.equal(f.whip.effects.pose.visible, true);
   assert.ok(f.kid.cropRect);
-  f.fireKey.isDown = false;
+  f.whipKey.isDown = false;
   f.advance(0.1);
   assert.equal(f.whip.actionStage, "holstering");
   assert.equal(f.kid.specialAction.owner, f.whip);
@@ -333,6 +342,74 @@ test("F shares the whip trigger and release holsters it before unlocking movemen
   assert.equal(f.kid.specialAction, null);
   assert.equal(f.kid.cropRect, null);
   assert.equal(f.whip.effects.pose.visible, false);
+  assert.equal(f.kid.activeWeapon, "minigun");
+});
+
+test("a quick X tap completes one strike and stows the whip with any main weapon selected", () => {
+  for (let id of ["twinTorches", "molotov", "minigun", "rocketLauncher"]) {
+    const f = fixture();
+    const enemy = f.guard(3);
+    f.kid.activeWeapon = id;
+    f.kid[id + "Equipped"] = true;
+    f.whipKey.isDown = true;
+    f.advance(0.02);
+    f.whipKey.isDown = false;
+    f.advance(0.85);
+    assert.equal(enemy.health, 2);
+    assert.equal(f.whip.cracks, 1);
+    assert.equal(f.whip.actionStage, "hidden");
+    assert.equal(f.kid.activeWeapon, id);
+    assert.equal(f.kid[id + "Equipped"], true);
+    assert.equal(f.kid.specialAction, null);
+    assert.equal(f.kid.cropRect, null);
+  }
+});
+
+test("Ctrl, F and the shared weapon action cannot trigger the standalone whip", () => {
+  const f = fixture();
+  const enemy = f.guard(3);
+  f.ctrlKey.isDown = f.fireKey.isDown = true;
+  f.kid.keyWeaponAction = () => true;
+  f.advance(1);
+  assert.equal(f.whip.actionStage, "hidden");
+  assert.equal(f.whip.cracks, 0);
+  assert.equal(enemy.health, 3);
+  assert.equal(f.kid.activeWeapon, "minigun");
+});
+
+test("X cannot use an unowned whip or interrupt another action, a fall or a jump", () => {
+  for (let state of [
+    { hasWhip: false },
+    { specialAction: { owner: {}, type: "minigun" } },
+    { specialAction: { owner: { actionStage: "holstering" }, type: "minigun" } },
+    { specialAction: { owner: {}, type: "jetpack" } },
+    { inFallDown: true, action: "freefall" },
+    { inJumpUp: true, action: "highjump" }
+  ]) {
+    const f = fixture();
+    Object.assign(f.kid, state);
+    f.whipKey.isDown = true;
+    f.advance(1);
+    assert.equal(f.whip.cracks, 0);
+    assert.equal(f.whip.actionStage, "hidden");
+    assert.equal(f.kid.specialAction, state.specialAction);
+  }
+});
+
+test("pressing X again during stowing waits for the complete animation", () => {
+  const f = fixture();
+  f.whipKey.isDown = true;
+  f.advance(0.5);
+  f.whipKey.isDown = false;
+  f.advance(0.02);
+  f.whipKey.isDown = true;
+  f.advance(0.1);
+  assert.equal(f.whip.actionStage, "holstering");
+  assert.equal(f.whip.cracks, 1);
+  assert.equal(f.kid.specialAction.owner, f.whip);
+  f.advance(0.12);
+  assert.equal(f.whip.actionStage, "drawing");
+  assert.equal(f.whip.cracks, 1);
 });
 
 test("a whip crack cannot damage enemies through a wall, a closed gate, a ceiling or an unlinked room", () => {
@@ -378,6 +455,74 @@ test("the cord wraps the open ledge and physically drags an upper guard into the
   assert.equal(enemy.whipState.phase, "falling");
   assert.equal(enemy.charBlockX, 4);
   assert.equal(f.level.getTileAt(enemy.charBlockX, 0, enemy.room).isSpace(), true);
+});
+
+test("standing directly beneath a guard catches his ankle around either ledge in either facing direction", () => {
+  for (let ledgeDirection of [-1, 1]) {
+    for (let face of [-1, 1]) {
+      for (let offset of [-18, 0, 18]) {
+        const f = fixture();
+        for (let column = 0; column < 10; column++) {
+          f.setTile(1, column, 0, (column - 3) * ledgeDirection <= 0 ? 1 : 0);
+        }
+        f.placeKid(3, 1, 1, face);
+        f.kid.charX += (offset * 140) / 320;
+        const enemy = f.guard(3, 0);
+        const snag = f.whip.findSnag(enemy);
+        assert.ok(snag, `ledge ${ledgeDirection}, facing ${face}, offset ${offset}`);
+        assert.equal(snag.gap.column, 3 + ledgeDirection);
+        const kid = f.whip.position(f.kid);
+        let previous = { x: kid.x + face * 7, y: kid.y - 25, room: kid.room };
+        for (let point of [...snag.route, { x: snag.foot.x, y: snag.foot.y - 8, room: snag.foot.room }]) {
+          assert.ok(f.whip.lineClear(previous, point), "every cord segment clears the solid floor");
+          previous = point;
+        }
+        f.whipKey.isDown = true;
+        f.advance(0.7);
+        assert.equal(enemy.whipState.phase, "pulling");
+        assert.equal(enemy.health, 3);
+        f.whipKey.isDown = false;
+        for (let i = 0; i < 30 && enemy.whipState.phase !== "recovering"; i++) {
+          f.tickEnemies();
+        }
+        assert.equal(enemy.whipState.phase, "recovering");
+        assert.equal(enemy.charBlockX, snag.gap.column);
+        assert.equal(enemy.charBlockY, 1);
+        assert.equal(enemy.charFrame, 35);
+        assert.equal(enemy.health, 2);
+        assert.equal(enemy.sword.visible, false);
+        f.tickEnemies(20);
+        assert.equal(enemy.whipState, undefined);
+        assert.equal(enemy.health, 2);
+      }
+    }
+  }
+});
+
+test("a cast from beneath the guard cannot wrap through a wall or closed gate below the lip", () => {
+  for (let element of [20, 4]) {
+    const f = fixture();
+    const enemy = f.makeLedge();
+    f.placeKid(element === 4 ? 2 : 3);
+    for (let column = 0; column < 3; column++) {
+      f.setTile(1, column, 0, 1);
+    }
+    f.setTile(1, element === 4 ? 2 : 4, 1, element);
+    assert.equal(f.whip.findSnag(enemy) === null, true);
+    f.whip.attack();
+    assert.equal(enemy.whipState, undefined);
+    assert.equal(enemy.health, 3);
+  }
+});
+
+test("routing around a ledge cannot extend the cord beyond its reach", () => {
+  const f = fixture();
+  for (let column = 0; column <= 6; column++) {
+    f.setTile(1, column, 0, 1);
+  }
+  f.placeKid(4);
+  const enemy = f.guard(6, 0);
+  assert.equal(f.whip.findSnag(enemy), null);
 });
 
 test("a short pulled fall lands face first, loses exactly one HP and cannot attack until its recovery finishes", () => {
@@ -565,6 +710,36 @@ test("room seven in the actual second level provides a reachable ledge pull and 
   assert.equal(enemy.charBlockY, 1);
 });
 
+test("the Prince directly below room sixteen's upper guard pulls him around the actual floor into the right gap", () => {
+  const f = fixture();
+  const json = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/maps/level2.json")));
+  const data = json.room.find((room) => room.id === 16);
+  const gridIndex = json.room.indexOf(data);
+  f.level.rooms[16] = {
+    x: gridIndex % json.size.width,
+    y: Math.floor(gridIndex / json.size.width),
+    links: { left: -1, right: -1, up: -1, down: -1 },
+    tiles: []
+  };
+  data.tile.forEach((tile, i) => f.setTile(16, i % 10, Math.floor(i / 10), tile.element));
+  f.placeKid(5, 1, 16, 1);
+  const enemy = f.guard(5, 0, 16, 1);
+  const snag = f.whip.findSnag(enemy);
+  assert.ok(snag);
+  assert.equal(snag.gap.column, 6);
+  assert.equal(snag.route.length, 2);
+  f.whip.attack();
+  for (let i = 0; i < 30 && enemy.whipState.phase !== "recovering"; i++) {
+    f.tickEnemies();
+  }
+  assert.equal(enemy.alive, true);
+  assert.equal(enemy.health, 2);
+  assert.equal(enemy.whipState.phase, "recovering");
+  assert.equal(enemy.charFrame, 35);
+  assert.equal(enemy.charBlockX, 6);
+  assert.equal(enemy.charBlockY, 1);
+});
+
 test("active choppers can kill a dragged falling guard before he lands", () => {
   const f = fixture();
   const enemy = f.makeLedge();
@@ -623,7 +798,7 @@ test("losing the floor again while recovering does not apply the same pull's lan
 
 test("death, another special action or a hit interrupt the Prince's whip without leaving movement locked", () => {
   const f = fixture();
-  f.ctrlKey.isDown = true;
+  f.whipKey.isDown = true;
   f.advance(0.55);
   assert.equal(f.kid.specialAction.owner, f.whip);
   f.kid.action = "bump";
@@ -639,7 +814,7 @@ test("destroying the controller restores native actors, crops and graphics", () 
   const enemy = f.makeLedge();
   const originalLand = enemy.land;
   f.whip.attack();
-  f.ctrlKey.isDown = true;
+  f.whipKey.isDown = true;
   f.advance(0.55);
   f.whip.destroy();
   assert.equal(enemy.whipState, undefined);

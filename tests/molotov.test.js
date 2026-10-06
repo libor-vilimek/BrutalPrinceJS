@@ -28,6 +28,7 @@ function fixture() {
     "GorePhysics",
     "MolotovBallistics",
     "Molotov",
+    "PrincePose",
     "MolotovEffects"
   ]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "src", file + ".js"), "utf8"), context);

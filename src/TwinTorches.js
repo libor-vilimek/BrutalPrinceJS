@@ -25,7 +25,8 @@ PrinceJS.TwinTorches = function (delegate) {
 PrinceJS.TwinTorches.REACH = 76;
 PrinceJS.TwinTorches.DRAW_DURATION = 0.42;
 PrinceJS.TwinTorches.HOLSTER_DURATION = 0.26;
-PrinceJS.TwinTorches.INTRO_DURATION = 1.05;
+PrinceJS.TwinTorches.INTRO_DURATION = 1.5;
+PrinceJS.TwinTorches.INTRO_CAPTURES = [0.34, 0.94];
 
 PrinceJS.TwinTorches.prototype = {
   canSelect: function () {
@@ -156,15 +157,16 @@ PrinceJS.TwinTorches.prototype = {
     this.drawProgress = 0;
     if (stage === "intro") {
       this.introStartX = this.kid.charX;
-      this.introStep = this.safeIntroStep();
+      this.introSteps = this.introTorches.map((torch) => this.safeIntroStep(torch));
     }
     return true;
   },
 
-  safeIntroStep: function () {
+  safeIntroStep: function (torch) {
     let room = this.level.rooms[this.kid.room];
     let start = this.kid.baseX + PrinceJS.Utils.convertX(this.kid.charX);
-    let distance = Math.max(-24, Math.min(24, this.introTorches[1].x - 24 - start));
+    // Bring the shoulder beside each socket before reaching for its handle.
+    let distance = torch.x - 2 * this.kid.charFace - start;
     for (let i = 0; i <= Math.abs(distance); i++) {
       let x = start + Math.sign(distance) * i;
       let column = Math.floor((x - room.x * PrinceJS.ROOM_WIDTH) / PrinceJS.BLOCK_WIDTH);
@@ -222,6 +224,7 @@ PrinceJS.TwinTorches.prototype = {
   },
 
   beginHolster: function () {
+    this.holsterFromSpin = this.actionStage === "spinning";
     this.actionStage = "holstering";
     this.holsterProgress = this.drawProgress;
     this.elapsed = 0;
@@ -298,11 +301,21 @@ PrinceJS.TwinTorches.prototype = {
 
   updateIntro: function (delta) {
     this.elapsed += delta;
-    let step = Math.max(0, Math.min(1, (this.elapsed - 0.32) / 0.22));
-    let returnStep = Math.max(0, Math.min(1, (this.elapsed - 0.84) / 0.2));
-    this.kid.charX = this.introStartX + this.introStep * step * (1 - returnStep);
+    let ease = (start, duration) => {
+      let amount = Math.max(0, Math.min(1, (this.elapsed - start) / duration));
+      return amount * amount * (3 - 2 * amount);
+    };
+    let first = ease(0, 0.22);
+    let second = ease(0.56, 0.22);
+    let back = ease(1.18, 0.32);
+    this.kid.charX =
+      this.introStartX + (this.introSteps[0] * first + (this.introSteps[1] - this.introSteps[0]) * second) * (1 - back);
+    let walking = this.elapsed < 0.22 || (this.elapsed >= 0.56 && this.elapsed < 0.78) || this.elapsed >= 1.18;
+    this.kid.setSpecialActionFrame(
+      walking ? [121, 122, 123, 124, 123, 122, 132][Math.floor(this.elapsed * 24) % 7] : 15
+    );
     this.kid.updateBlockXY();
-    let captures = [0.22, 0.62];
+    let captures = PrinceJS.TwinTorches.INTRO_CAPTURES;
     for (let i = 0; i < this.introTorches.length; i++) {
       let torch = this.introTorches[i];
       if (!torch.captured && this.elapsed >= captures[i]) {
