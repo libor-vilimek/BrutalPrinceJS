@@ -145,20 +145,26 @@ function fixture() {
   return { PrinceJS, game, kid, level, delegate, gun, key, enemy, bullet, setTile };
 }
 
-test("level 1 minigun waits on solid ground past the loose landing and cannot be collected upstairs or in midair", () => {
+test("level 1 minigun waits on the left of the room below and requires a grounded pickup", () => {
   const f = fixture();
   const map = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/maps/level1.json"), "utf8"));
-  map.room
-    .find((room) => room.id === map.prince.room)
-    .tile.forEach((tile, i) => f.setTile(1, i % 10, Math.floor(i / 10), tile.element));
+  for (const room of [1, 2]) {
+    map.room
+      .find((data) => data.id === room)
+      .tile.forEach((tile, i) => f.setTile(room, i % 10, Math.floor(i / 10), tile.element));
+  }
+  Object.assign(f.level.rooms[2], { x: 0, y: 1 });
+  f.level.rooms[1].links.down = 2;
+  f.level.rooms[2].links.up = 1;
   f.kid.charBlockY = 0;
   f.level.number = 1;
   const pickup = f.gun.findPickup(1);
-  assert.equal(pickup.worldX, 240);
-  assert.equal(pickup.worldY, 182);
-  assert.equal(f.level.getTileAt(7, 2, 1).element, f.PrinceJS.Level.TILE_FLOOR);
+  assert.equal(pickup.room, 2);
+  assert.equal(pickup.worldX, 48);
+  assert.equal(pickup.worldY, 189 + 119);
+  assert.equal(f.level.getTileAt(1, 1, 2).element, f.PrinceJS.Level.TILE_FLOOR);
   f.gun.pickup = pickup;
-  f.kid.charX = 105;
+  f.kid.charX = 21;
   f.kid.charY = 53;
   f.gun.checkPickup();
   assert.equal(pickup.collected, false);
@@ -166,6 +172,11 @@ test("level 1 minigun waits on solid ground past the loose landing and cannot be
   f.gun.checkPickup();
   assert.equal(pickup.collected, false);
   f.kid.charY = 179;
+  f.gun.checkPickup();
+  assert.equal(pickup.collected, false, "the entire starting screen contains no gun to collect");
+  f.kid.room = 2;
+  f.kid.baseY = 189 + 3;
+  f.kid.charY = 116;
   f.kid.inFallDown = true;
   f.gun.checkPickup();
   assert.equal(pickup.collected, false);

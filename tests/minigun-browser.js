@@ -88,16 +88,20 @@ async function combatChecks() {
     check(!state.rocketLauncher && state.weapons.length === 1, "Mission one has no rocket launcher or rocket graphics");
     state.selectWeapon("rocketLauncher");
     check(!state.kid.hasRocketLauncher && !state.kid.rocketLauncherEquipped, "Rocket selection cannot unlock it early");
-    check(state.minigun.pickup.worldY === state.kid.baseY + 179, "Minigun is on the lower landing ledge");
+    const below = state.level.rooms[state.kid.room].links.down;
+    const secondRoom = state.level.rooms[below];
+    check(state.minigun.pickup.room === below, "Minigun waits in the second room below the starting screen");
     check(
-      state.minigun.pickup.worldX === state.kid.baseX + 240 && state.level.getTileAt(7, 2, 1).element === 1,
-      "Minigun is clearly positioned on solid ground past the falling board"
+      state.minigun.pickup.worldX === secondRoom.x * 320 + 48 &&
+        state.minigun.pickup.worldY === secondRoom.y * 189 + 119 &&
+        state.level.getTileAt(1, 1, below).element === 1,
+      "Minigun is clearly positioned on plain floor at the left of the second room"
     );
     check(
       state.molotov.pickup.worldY === state.kid.baseY + 116,
       "Only the molotov remains on the upper starting floor"
     );
-    await jumpToFirstMinigun(state);
+    await collectWeapon(state.minigun);
     check(!state.minigun.effects.weapon.visible, "Collected minigun stays hidden until fire is held");
     placeKid(21, 42, 0, 1);
     const guard = state.enemies.find((enemy) => enemy.room === 21);
@@ -296,7 +300,7 @@ async function collectWeapon(weapon) {
   check(gameState().kid[weapon.spec.owned], "Walking over the " + weapon.spec.id + " equips it");
 }
 
-async function jumpToFirstMinigun(state) {
+async function jumpToFirstLanding(state) {
   const kid = state.kid;
   const keyR = kid.keyR;
   const keyU = kid.keyU;
@@ -311,28 +315,168 @@ async function jumpToFirstMinigun(state) {
     }
     check(
       kid.alive && kid.charBlockY === 2 && !kid.hasMinigun,
-      "The first real jump lands below, with the minigun visible farther right " +
+      "The first real jump lands on the starting screen's lower platform without a gun " +
         JSON.stringify({ x: kid.charX, y: kid.charY, action: kid.action })
     );
-    await walkUntil(() => kid.hasMinigun, "Running past the falling board collects the minigun on solid ground");
-    await pause(600);
   } finally {
     kid.keyR = keyR;
     kid.keyU = keyU;
   }
 }
 
-async function walkUntil(predicate, description) {
-  const kid = gameState().kid;
-  const keyR = kid.keyR;
-  kid.keyR = () => true;
+async function prepareOpeningEncounter() {
+  const state = await freshLevel(1);
+  const kid = state.kid;
+  const pickup = state.molotov.pickup;
+  const room = state.level.rooms[pickup.room];
+  const row = Math.floor((pickup.worldY - room.y * 189) / 63);
+  placeKid(pickup.room, ((pickup.worldX - room.x * 320) * 140) / 320, row, 1);
+  await pause(450);
+  check(kid.hasMolotov && !kid.hasMinigun, "Only the molotov is collected on the first screen");
+  await jumpToFirstLanding(state);
+  await walkUntil(() => kid.charX >= 105, "Crossing the loose floor reaches the safe ledge beside the shaft");
+  for (let i = 0; i < 30 && state.level.getTileAt(6, 2, 1).element !== 0; i++) {
+    await pause(80);
+  }
+  check(state.level.getTileAt(6, 2, 1).element === 0, "The real loose board opens the shaft into room two");
+  // Align the native standing feet with tile seven before the ledge animation.
+  placeKid(1, 115, 2, 1);
+  const keyS = kid.keyS;
+  kid.keyS = () => true;
   try {
-    for (let i = 0; i < 40 && !predicate(); i++) {
+    kid.climbdown();
+    for (let i = 0; i < 35 && !["hang", "hangstraight"].includes(kid.action); i++) {
+      await pause(80);
+    }
+    check(
+      ["hang", "hangstraight"].includes(kid.action),
+      "The Prince hangs above the first encounter using a real climb-down"
+    );
+    const targets = state.enemies.filter((enemy) => enemy.room === state.minigun.pickup.room);
+    check(
+      targets.length === 2 && targets.every((enemy) => enemy.alive && enemy.health === 2),
+      "Only two guards wait under the drop"
+    );
+    return { state, targets, keyS };
+  } catch (error) {
+    kid.keyS = keyS;
+    throw error;
+  }
+}
+
+async function openingChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  let prepared;
+  let soundPlay;
+  try {
+    await ready();
+    prepared = await prepareOpeningEncounter();
+    const { state, targets } = prepared;
+    const heard = [];
+    soundPlay = testGame.sound.play;
+    testGame.sound.play = function (key, ...args) {
+      heard.push(key);
+      return soundPlay.call(this, key, ...args);
+    };
+    state.weaponCtrlKey.onDown.dispatch();
+    check(state.molotov.throwState && !state.kid.hasMinigun, "Ctrl throws the first molotov before acquiring any gun");
+    for (let i = 0; i < 40 && !state.molotov.fires.length; i++) {
+      await pause(60);
+    }
+    check(
+      state.molotov.fires.some((fire) => fire.room === state.minigun.pickup.room),
+      "The bottle lands on the actual lower-room floor"
+    );
+    for (let i = 0; i < 100 && targets.some((enemy) => enemy.alive); i++) {
+      await pause(60);
+    }
+    check(
+      targets.every((enemy) => !enemy.alive),
+      "The dropped molotov burns both real guards in the room below"
+    );
+    await pause(500);
+    check(!heard.some((key) => ["Victory", "JaffarDead"].includes(key)), "Enemy deaths play no kill jingle");
+    state.kid.keyS = prepared.keyS;
+    state.kid.shiftKey.isDown = false;
+    for (
+      let i = 0;
+      i < 60 && (state.kid.room !== 2 || state.kid.inFallDown || /hang|fall|land/.test(state.kid.action));
+      i++
+    ) {
+      await pause(60);
+    }
+    check(
+      state.kid.alive && state.kid.room === 2 && state.kid.charBlockY === 1 && !state.kid.hasMinigun,
+      "Releasing the ledge lands safely in the second room without collecting the gun early"
+    );
+    await walkUntil(
+      () => state.kid.hasMinigun,
+      "Walking left from the burnt guards picks up the clearly visible minigun",
+      -1
+    );
+    check(!state.minigun.effects.weapon.visible, "The collected gun stays hidden until firing");
+    const shots = state.minigun.effects.shots;
+    state.weaponCtrlKey.isDown = true;
+    await pause(850);
+    state.weaponCtrlKey.isDown = false;
+    check(state.minigun.effects.shots > shots, "Ctrl now draws and fires the newly collected minigun");
+    await pause(400);
+    report("ALL OPENING PROGRESSION CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    if (prepared) {
+      prepared.state.kid.keyS = prepared.keyS;
+    }
+    if (soundPlay) {
+      testGame.sound.play = soundPlay;
+    }
+    gameState().weaponCtrlKey.isDown = false;
+    busy = false;
+  }
+}
+
+async function openingPreview() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  let prepared;
+  try {
+    await ready();
+    prepared = await prepareOpeningEncounter();
+    await watchCamera(prepared.state, () => !prepared.state.roomCamera.transition);
+    testGame.paused = true;
+    report(
+      "Opening: molotov first, two guards beneath the shaft, and the glowing minigun on clear floor to their left. Hold Shift when resuming to keep hanging; Ctrl drops a bottle."
+    );
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    if (prepared) {
+      prepared.state.kid.keyS = prepared.keyS;
+    }
+    busy = false;
+  }
+}
+
+async function walkUntil(predicate, description, direction = 1) {
+  const kid = gameState().kid;
+  const key = direction === -1 ? "keyL" : "keyR";
+  const originalKey = kid[key];
+  kid[key] = () => true;
+  try {
+    for (let i = 0; i < 80 && !predicate(); i++) {
       await pause(50);
     }
     check(predicate(), description);
   } finally {
-    kid.keyR = keyR;
+    kid[key] = originalKey;
   }
   await pause(300);
 }
@@ -547,6 +691,11 @@ async function goreChecks() {
       "Blood settles across all ten floor depth layers"
     );
     check(state.bloodEffects.foregroundStainCount > 0, "Nearby foreground masonry catches blood drips");
+    check(state.bloodEffects.masonryCounts.pillar > 0, "Blood spatters the walk-through pillar faces");
+    check(
+      state.bloodEffects.masonryCounts.above > 0 && state.bloodEffects.masonryCounts.below > 0,
+      "Blood reaches real masonry both above and below the walking floor"
+    );
     const pieces = state.enemyDeathEffects.parts.map((piece) => ({ piece, x: piece.x, y: piece.y }));
     check(
       pieces.every(({ piece }) => piece.settled),
@@ -554,6 +703,13 @@ async function goreChecks() {
     );
     const stains = state.bloodEffects.stainCount;
     const decalLayers = [...state.bloodEffects.decalRooms.values()];
+    check(
+      decalLayers.every((layer) => layer.sprite.parent === state.level.front) &&
+        decalLayers.every((layer) =>
+          [...layer.floorDepths.values()].every((depth) => depth.sprite.parent === state.level.back)
+        ),
+      "Wall and pillar stains render over stone while floor stains stay below actors"
+    );
     const bloodImages = decalLayers
       .flatMap((layer) => [layer, ...layer.floorDepths.values()])
       .map((layer) => ({
@@ -637,7 +793,7 @@ async function deathPreview(weapon, settled = false) {
     testGame.paused = true;
     report(
       settled
-        ? "Permanent blood: ten depth layers on the floor, splashes and drips on nearby front masonry. Stains retain identical pixels when revisiting rooms."
+        ? "Permanent blood: ten floor depths, irregular splashes and drips on pillars and walls above/below the floor. All stains retain identical pixels when revisiting rooms."
         : weapon === "minigun"
           ? "Five minigun deaths: flying face hit, torn arm, waist split, spinning head and leg collapse. Resume to see fragments land and stains persist."
           : "Rocket blast: native heads, torsos, arms and legs tumble through the corridor with blood trails. Resume to see permanent floor and wall stains."
@@ -1041,11 +1197,13 @@ document.getElementById("boundary-preview").addEventListener("click", async () =
   await watchCamera(state, () => !state.roomCamera.transition);
   testGame.paused = true;
   output.textContent =
-    "Areas without room data stay empty. The minigun is on solid ground to the right of the loose board; the molotov remains upstairs.";
+    "The starting screen has only the molotov. Drop through the loose-floor shaft to the two guards and the minigun in the next room below.";
 });
 document.getElementById("run").addEventListener("click", combatChecks);
 document.getElementById("features").addEventListener("click", featureChecks);
 document.getElementById("actions").addEventListener("click", actionChecks);
+document.getElementById("opening").addEventListener("click", openingChecks);
+document.getElementById("opening-preview").addEventListener("click", openingPreview);
 document.getElementById("gore").addEventListener("click", goreChecks);
 document.getElementById("minigun-deaths").addEventListener("click", () => deathPreview("minigun"));
 document.getElementById("rocket-deaths").addEventListener("click", () => deathPreview("rocketLauncher"));

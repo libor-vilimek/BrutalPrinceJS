@@ -100,17 +100,12 @@ PrinceJS.Fighter.prototype.CMD_DIE = function (data) {
   this.swordDrawn = false;
   this.showSplash();
   this.proceedOnDead();
-  if (this.charName !== "kid") {
+  if (this.baseCharName === "jaffar") {
     PrinceJS.Utils.delayed(() => {
       if (!this.game) {
         return;
       }
-      if (this.baseCharName === "jaffar") {
-        this.game.sound.play("JaffarDead");
-        PrinceJS.Utils.flashWhiteVizierVictory(this.game);
-      } else if (this.baseCharName !== "shadow") {
-        this.game.sound.play("Victory");
-      }
+      PrinceJS.Utils.flashWhiteVizierVictory(this.game);
     }, 200);
   }
 };

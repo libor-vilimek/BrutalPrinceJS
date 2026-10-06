@@ -64,7 +64,38 @@ test("changing the HUD opponent preserves enemy damage and story death listeners
   assert.equal(ui.oppHPActive, 0);
 });
 
-test("an enemy death queued before a level change cannot use the destroyed game's sound", () => {
+test("enemy deaths dispatch their callbacks silently even when many guards die together", () => {
+  const pending = [];
+  const played = [];
+  let deaths = 0;
+  let bossFlashes = 0;
+  const PrinceJS = {
+    Actor: function () {},
+    Utils: { delayed: (fn) => pending.push(fn), flashWhiteVizierVictory: () => bossFlashes++ }
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "src", "Fighter.js"), "utf8"), { PrinceJS });
+  for (const type of [...Array(30).fill("guard"), "shadow", "jaffar"]) {
+    const enemy = {
+      charName: type === "guard" ? "guard-1" : type,
+      baseCharName: type,
+      game: { sound: { play: (name) => played.push(name) } },
+      showSplash() {},
+      proceedOnDead() {
+        deaths++;
+      }
+    };
+    PrinceJS.Fighter.prototype.CMD_DIE.call(enemy);
+    assert.equal(enemy.alive, false);
+    assert.equal(enemy.swordDrawn, false);
+  }
+  pending.forEach((fn) => fn());
+  assert.equal(deaths, 32);
+  assert.equal(played.length, 0);
+  assert.equal(pending.length, 1, "ordinary kills schedule no audio callbacks");
+  assert.equal(bossFlashes, 1, "the story victory flash still runs");
+});
+
+test("a boss death queued before a level change cannot use the destroyed game", () => {
   let delayed;
   const PrinceJS = {
     Actor: function () {},
@@ -72,8 +103,8 @@ test("an enemy death queued before a level change cannot use the destroyed game'
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "src", "Fighter.js"), "utf8"), { PrinceJS });
   const enemy = {
-    charName: "guard-1",
-    baseCharName: "guard",
+    charName: "jaffar",
+    baseCharName: "jaffar",
     game: {},
     showSplash() {},
     proceedOnDead() {}

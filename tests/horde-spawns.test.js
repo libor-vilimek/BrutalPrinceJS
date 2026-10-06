@@ -152,6 +152,32 @@ test("reinforcements are reproducible, preserve original guard data, and stop af
   }
 });
 
+test("mission one opens with two molotov targets under the shaft and a clear approach to the minigun", () => {
+  const { PrinceJS, level, json } = fixture(1);
+  const below = level.rooms[json.prince.room].links.down;
+  assert.equal(below, 2);
+  const guards = PrinceJS.HordeSpawns.create(level, json);
+  const intro = guards.filter((guard) => guard.room === below);
+  assert.equal(intro.length, 2);
+  assert.deepEqual(
+    Array.from(intro, (guard) => guard.location),
+    [16, 17]
+  );
+  assert.ok(intro.every((guard) => guard.skill === 0));
+  assert.ok(
+    intro.every((guard) => guard.health === 2),
+    "opening guards die before hit reactions carry them out of the fire"
+  );
+  assert.ok(guards.filter((guard) => guard.room !== below).every((guard) => guard.health === undefined));
+  assert.equal(
+    level.getTileAt(6, 0, below).element,
+    PrinceJS.Level.TILE_SPACE,
+    "the bottle has an open shaft above its targets"
+  );
+  assert.equal(level.getTileAt(1, 1, below).element, PrinceJS.Level.TILE_FLOOR, "the gun waits on unobstructed floor");
+  assert.ok(!guards.some((guard) => guard.room === json.prince.room), "the molotov's starting floor remains peaceful");
+});
+
 function battleFixture() {
   const { PrinceJS, level, json } = fixture(1);
   const state = Object.create(PrinceJS.Game.prototype);
@@ -163,6 +189,7 @@ function battleFixture() {
     charBlockX: 1,
     charBlockY: 0,
     alive: true,
+    hasMinigun: true,
     opponent: null
   });
   const enemy = (charX, options = {}) =>
@@ -256,6 +283,26 @@ test("starting room stays safe until first exit and nearby guards stop chasing d
   state.checkForOpponent(11);
   assert.equal(guard.opponent, null);
   assert.equal(kid.opponent, null);
+});
+
+test("mission one's larger hordes wait until the minigun is collected", () => {
+  const { level, state, kid, enemy } = battleFixture();
+  const guard = enemy(98, { room: 2, baseX: level.rooms[2].x * 320, charBlockY: 1 });
+  state.enemies = [guard];
+  Object.assign(kid, { room: 2, baseX: level.rooms[2].x * 320, charBlockY: 1, hasMinigun: false });
+  state.checkForOpponent(2);
+  assert.equal(state.hordeEngaged, false);
+  assert.equal(guard.opponent, null);
+  assert.equal(kid.opponent, null);
+  kid.hasMinigun = true;
+  state.checkForOpponent(2);
+  assert.equal(state.hordeEngaged, true);
+  assert.equal(guard.opponent, kid);
+  state.hordeEngaged = false;
+  state.level.number = 2;
+  kid.hasMinigun = false;
+  state.checkForOpponent(2);
+  assert.equal(state.hordeEngaged, true, "mission two does not wait for a new gun pickup");
 });
 
 test("later missions keep the original inactive story-character selection", () => {

@@ -25,6 +25,7 @@ PrinceJS.HordeSpawns = {
     }
     let spawnColumn = (json.prince.location + (json.prince.bias || 0)) % 10;
     let spawnX = spawnRoom.x * PrinceJS.ROOM_WIDTH + spawnColumn * PrinceJS.BLOCK_WIDTH + 16;
+    let introRoom = level.number === 1 ? spawnRoom.links.down : null;
     let guards = [];
     let occupied = json.guards.map((guard) => {
       let room = level.rooms[guard.room];
@@ -53,6 +54,11 @@ PrinceJS.HordeSpawns = {
       }
       for (let row = 0; row < 3; row++) {
         for (let column = 0; column < 10; column++) {
+          // A small first encounter directly beneath the loose-floor shaft gives
+          // the hanging molotov a purpose before the minigun pickup on the left.
+          if (roomId === introRoom && (row !== 1 || ![6, 7].includes(column))) {
+            continue;
+          }
           let tile = level.getTileAt(column, row, roomId);
           if (!safeFloors.includes(tile.element)) {
             continue;
@@ -74,7 +80,8 @@ PrinceJS.HordeSpawns = {
             room: roomId,
             location: row * 10 + column,
             direction: x > spawnX ? -1 : 1,
-            skill: (column + row + roomId) % 4,
+            skill: roomId === introRoom ? 0 : (column + row + roomId) % 4,
+            health: roomId === introRoom ? 2 : undefined,
             colors: 1 + ((column + row * 3 + roomId) % 7),
             type: "guard",
             sneak: false,

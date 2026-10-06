@@ -28,12 +28,15 @@ PrinceJS.Minigun.prototype.constructor = PrinceJS.Minigun;
 PrinceJS.Minigun.prototype.findPickup = function (direction) {
   let pickup = PrinceJS.RangedWeapon.prototype.findPickup.call(this, direction);
   if (this.level.number === 1 && this.kid.room === 1) {
-    let tile = this.level.getTileAt(7, 2, this.kid.room);
-    if (tile.isSafeWalkable() && !tile.isBarrier()) {
-      let room = this.level.rooms[this.kid.room];
-      // Keep the weapon visible on solid ground beyond the loose landing board.
-      pickup.worldX = room.x * PrinceJS.ROOM_WIDTH + 7 * PrinceJS.BLOCK_WIDTH + 16;
-      pickup.worldY = room.y * PrinceJS.ROOM_HEIGHT + PrinceJS.Utils.convertBlockYtoY(2) + 3;
+    let below = this.level.rooms[this.kid.room].links.down;
+    let room = this.level.rooms[below];
+    let tile = room && this.level.getTileAt(1, 1, below);
+    if (tile && tile.element === PrinceJS.Level.TILE_FLOOR) {
+      // Keep the gun on clear floor at the left of the lower room, away from
+      // the landing, loose board and pillar fronts.
+      pickup.room = below;
+      pickup.worldX = room.x * PrinceJS.ROOM_WIDTH + PrinceJS.BLOCK_WIDTH + 16;
+      pickup.worldY = room.y * PrinceJS.ROOM_HEIGHT + PrinceJS.Utils.convertBlockYtoY(1) + 3;
     }
   }
   return pickup;

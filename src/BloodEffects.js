@@ -11,6 +11,7 @@ PrinceJS.BloodEffects = function (delegate) {
   this.depthCounts = Array(10).fill(0);
   this.depthCursor = 0;
   this.foregroundStainCount = 0;
+  this.masonryCounts = { pillar: 0, above: 0, below: 0 };
   this.drawnPixelCount = 0;
   this.textureMasks = new WeakMap();
   this.maskBitmap = null;
@@ -34,11 +35,20 @@ PrinceJS.BloodEffects.prototype = {
       x = Math.max(left + 1, Math.min(x, left + bounds.width - 1));
       y = Math.max(top + 2, Math.min(y, top + bounds.height - 2));
     }
+    let direction = rocket ? Math.sign(x - impact.x) || impact.direction : impact.direction;
     this.burst(x, y, enemy.room, {
-      direction: rocket ? Math.sign(x - impact.x) || impact.direction : impact.direction,
+      direction,
       count: rocket ? 24 : 11,
       strength: rocket ? 1.65 : 1
     });
+    let room = this.level.rooms[enemy.room];
+    if (room) {
+      let row = Number.isFinite(enemy.charBlockY)
+        ? enemy.charBlockY
+        : Math.floor((y - room.y * PrinceJS.ROOM_HEIGHT) / PrinceJS.BLOCK_HEIGHT);
+      let floorY = room.y * PrinceJS.ROOM_HEIGHT + (row + 1) * PrinceJS.BLOCK_HEIGHT - 7;
+      this.splashMasonry(x, y, enemy.room, floorY, direction, rocket ? 1.65 : 1);
+    }
   },
 
   burst: function (x, y, room, options = {}) {
@@ -89,6 +99,11 @@ PrinceJS.BloodEffects.prototype = {
     let sprite = this.game.add.sprite(x, y, bitmap);
     sprite.smoothed = false;
     sprite.z = 30.5;
+    if (this.level.front && this.level.front.add) {
+      // Phaser sort rewrites world z values to child indices. Keeping ink inside
+      // the terrain group guarantees it stays above stone even in crowded rooms.
+      this.level.front.add(sprite);
+    }
     layer = {
       bitmap,
       sprite,
@@ -102,7 +117,7 @@ PrinceJS.BloodEffects.prototype = {
       revision: 0
     };
     this.decalRooms.set(id, layer);
-    if (this.game.world && this.game.world.sort) {
+    if (!this.level.front && this.game.world && this.game.world.sort) {
       this.game.world.sort("z");
     }
     return layer;
@@ -117,9 +132,19 @@ PrinceJS.BloodEffects.prototype = {
       sprite.smoothed = false;
       // Floor blood is behind feet and bodies; blood on tile fronts is above them.
       sprite.z = 19.5 + depth * 0.01;
+      if (this.level.back && this.level.back.add) {
+        sprite.bloodDepth = depth;
+        this.level.back.add(sprite);
+        let index = this.level.back.children.findIndex(
+          (child) => child !== sprite && child.bloodDepth !== undefined && child.bloodDepth > depth
+        );
+        if (index >= 0) {
+          this.level.back.setChildIndex(sprite, index);
+        }
+      }
       floor = { bitmap, sprite, depthLayer: depth, revision: 0, drawnPixelCount: 0 };
       layer.floorDepths.set(depth, floor);
-      if (this.game.world && this.game.world.sort) {
+      if (!this.level.back && this.game.world && this.game.world.sort) {
         this.game.world.sort("z");
       }
     }
@@ -174,9 +199,9 @@ PrinceJS.BloodEffects.prototype = {
     return mask;
   },
 
-  terrain: function (contact) {
+  terrain: function (contact, radius = 36, verticalRadius = 20) {
     let result = { sprites: [], fallback: [] };
-    let addSprite = (sprite, x, y, foreground) => {
+    let addSprite = (sprite, x, y, foreground, tile) => {
       if (!sprite || sprite.visible === false || sprite.exists === false) {
         return false;
       }
@@ -190,16 +215,22 @@ PrinceJS.BloodEffects.prototype = {
           scaleX,
           scaleY,
           mask,
-          foreground
+          foreground,
+          tile
         });
       }
       let found = !!mask;
       for (let child of sprite.children || []) {
-        found = addSprite(child, x + child.x, y + child.y, foreground) || found;
+        found = addSprite(child, x + child.x, y + child.y, foreground, tile) || found;
       }
       return found;
     };
-    for (let id of this.physics.nearbyRooms({ room: contact.room, x: contact.x, y: contact.y, radius: 36 })) {
+    for (let id of this.physics.nearbyRooms({
+      room: contact.room,
+      x: contact.x,
+      y: contact.y,
+      radius: Math.max(radius, verticalRadius)
+    })) {
       let room = this.level.rooms[id];
       for (let tile of room.tiles) {
         if (!tile || tile === this.level.dummyWall || tile.element === PrinceJS.Level.TILE_SPACE) {
@@ -207,11 +238,16 @@ PrinceJS.BloodEffects.prototype = {
         }
         let x = room.x * PrinceJS.ROOM_WIDTH + tile.roomX * PrinceJS.BLOCK_WIDTH;
         let y = room.y * PrinceJS.ROOM_HEIGHT + tile.roomY * PrinceJS.BLOCK_HEIGHT - 13;
-        if (x > contact.x + 36 || x + 60 < contact.x - 36 || y > contact.y + 20 || y + 79 < contact.y - 20) {
+        if (
+          x > contact.x + radius ||
+          x + 60 < contact.x - radius ||
+          y > contact.y + verticalRadius ||
+          y + 79 < contact.y - verticalRadius
+        ) {
           continue;
         }
-        let native = addSprite(tile.back, x, y, false);
-        native = addSprite(tile.front, x, y, true) || native;
+        let native = addSprite(tile.back, x, y, false, tile);
+        native = addSprite(tile.front, x, y, true, tile) || native;
         if (!native) {
           // Geometry remains useful for editor/test levels that have no texture atlas.
           result.fallback.push({ tile, x, y: y + 13 });
@@ -301,6 +337,119 @@ PrinceJS.BloodEffects.prototype = {
       }
     }
     return counts;
+  },
+
+  splashMasonry: function (x, y, room, floorY, direction, strength) {
+    // Pillars are walk-through scenery. Project a little spray onto their native
+    // artwork and the stone courses above/below the floor, without adding barriers.
+    let reach = Math.min(112, 78 * strength + 12);
+    let terrain = this.terrain({ x, y, room }, reach, reach);
+    let surfaces = new Map();
+    for (let entry of [...terrain.sprites, ...terrain.fallback]) {
+      let tile = entry.tile;
+      if (
+        ![
+          PrinceJS.Level.TILE_PILLAR,
+          PrinceJS.Level.TILE_BOTTOM_BIG_PILLAR,
+          PrinceJS.Level.TILE_TOP_BIG_PILLAR,
+          PrinceJS.Level.TILE_LATTICE_PILLAR,
+          PrinceJS.Level.TILE_WALL
+        ].includes(tile.element)
+      ) {
+        continue;
+      }
+      if (!surfaces.has(tile)) {
+        surfaces.set(tile, { sprites: [], fallback: [] });
+      }
+      surfaces.get(tile)[entry.mask ? "sprites" : "fallback"].push(entry);
+    }
+    direction = Math.sign(direction) || 1;
+    let targets = {
+      pillar: { x: x + direction * 14, y: y + (Math.random() - 0.5) * 14 },
+      above: { x: x + direction * (14 + Math.random() * 20), y: y - 28 - Math.random() * 18 },
+      below: { x: x + direction * (14 + Math.random() * 20), y: floorY + 16 + Math.random() * 14 }
+    };
+    let nearest = {};
+    for (let [tile, surface] of surfaces) {
+      let tileRoom = this.level.rooms[tile.room];
+      let left = tileRoom.x * PrinceJS.ROOM_WIDTH + tile.roomX * PrinceJS.BLOCK_WIDTH;
+      let top = tileRoom.y * PrinceJS.ROOM_HEIGHT + tile.roomY * PrinceJS.BLOCK_HEIGHT;
+      let kind = "pillar";
+      if (tile.element === PrinceJS.Level.TILE_WALL) {
+        let floorTop = floorY - PrinceJS.BLOCK_HEIGHT + 7;
+        if (top === floorTop) {
+          continue;
+        }
+        kind = top < floorTop ? "above" : "below";
+      }
+      let target = targets[kind];
+      let bottom = kind === "pillar" && tile.isWalkable() ? top + 47 : top + 66;
+      for (let py = Math.ceil(Math.max(top - 13, y - reach)); py < Math.min(bottom, y + reach); py += 2) {
+        for (let px = Math.ceil(Math.max(left, x - reach)); px < Math.min(left + 60, x + reach); px += 2) {
+          if ((px - x) ** 2 + (py - y) ** 2 > reach ** 2 || !this.materialAt(surface, px, py)) {
+            continue;
+          }
+          let score = (px - target.x) ** 2 + (py - target.y) ** 2 + (direction * (px - x) < -8 ? 144 : 0);
+          if (!nearest[kind] || score < nearest[kind].score) {
+            nearest[kind] = { x: px, y: py, tile, terrain: surface, score };
+          }
+        }
+      }
+    }
+    for (let kind of Object.keys(nearest)) {
+      this.masonryStain(nearest[kind], kind, strength);
+    }
+  },
+
+  masonryStain: function (contact, kind, strength) {
+    let layer = this.roomDecals(contact.tile.room);
+    // Move the center a few pixels inside the visible face so narrow pillars
+    // get a small rounded splash instead of only half a mark at their edge.
+    for (let axis of ["x", "y"]) {
+      let opaque = (offset) =>
+        this.materialAt(
+          contact.terrain,
+          contact.x + (axis === "x" ? offset : 0),
+          contact.y + (axis === "y" ? offset : 0)
+        );
+      if (!opaque(-3) && opaque(3)) {
+        contact[axis] += 3;
+      } else if (!opaque(3) && opaque(-3)) {
+        contact[axis] -= 3;
+      }
+    }
+    let pixels = 0;
+    let draw = (dx, dy, width, height, color) => {
+      let counts = this.paint(layer, contact.terrain, contact.x + dx, contact.y + dy, width, height, color);
+      pixels += counts.foreground;
+    };
+    let radius = Math.min(5, 3 + Math.floor(strength));
+    for (let dy = -radius; dy <= radius; dy++) {
+      let width = Math.max(2, Math.round(Math.sqrt(radius * radius - dy * dy) * 2));
+      let dx = -Math.floor(width / 2) + (dy % 3 === 0 ? 1 : 0);
+      draw(dx, dy, width, 1, "#65121e");
+      if (width > 3 && Math.abs(dy) < radius - 1) {
+        draw(dx + 1, dy, width - 2, 1, "#a42630");
+      }
+    }
+    draw(-1, -2, 2, 2, "#d5423c");
+    draw(-2, radius - 1, 2, 5 + Math.floor(Math.random() * 6), "#761421");
+    draw(2, radius, 1, 3 + Math.floor(Math.random() * 5), "#a12630");
+    for (let i = 0; i < 5; i++) {
+      let dx = Math.round((Math.random() - 0.5) * 22);
+      let dy = Math.round((Math.random() - 0.5) * 18);
+      draw(dx, dy, (i % 2) + 1, i % 3 === 0 ? 2 : 1, i % 2 ? "#b63036" : "#7f1926");
+    }
+    if (pixels) {
+      layer.stainCount++;
+      layer.foregroundStainCount++;
+      layer.revision++;
+      layer.drawnPixelCount += pixels;
+      this.stainCount++;
+      this.foregroundStainCount++;
+      this.drawnPixelCount += pixels;
+      this.masonryCounts[kind]++;
+    }
   },
 
   stain: function (contact, particle) {
@@ -429,6 +578,7 @@ PrinceJS.BloodEffects.prototype = {
     this.stainCount = 0;
     this.depthCounts.fill(0);
     this.foregroundStainCount = this.drawnPixelCount = 0;
+    this.masonryCounts = { pillar: 0, above: 0, below: 0 };
     this.textureMasks = new WeakMap();
     if (this.maskBitmap) {
       this.maskBitmap.destroy();

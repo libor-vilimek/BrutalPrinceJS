@@ -69,6 +69,9 @@ PrinceJS.Game.prototype = {
         i + 1
       );
       enemy.reinforcement = data.reinforcement === true;
+      if (data.health !== undefined) {
+        enemy.health = data.health;
+      }
       if (enemy.reinforcement) {
         PrinceJS.HordeSpawns.place(enemy, data.location);
       }
@@ -997,7 +1000,7 @@ PrinceJS.Game.prototype = {
   },
 
   checkHordeOpponents: function (room) {
-    if (this.kid.room !== this.spawnRoom) {
+    if (this.kid.room !== this.spawnRoom && (this.level.number !== 1 || this.kid.hasMinigun)) {
       this.hordeEngaged = true;
     }
     let currentEnemy = null;

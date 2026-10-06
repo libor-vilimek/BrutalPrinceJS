@@ -344,6 +344,201 @@ test("native wall and gate splashes stay above their opaque fronts and leave bla
   }
 });
 
+test("enemy hits splatter native pillars and masonry above and below the walking floor", () => {
+  const f = fixture();
+  const pillar = f.setTile(1, 4, 1, 3);
+  for (const row of [0, 2]) {
+    for (let column = 3; column <= 5; column++) {
+      f.setTile(1, column, row, 20);
+    }
+  }
+  const native = nativeTerrain(f);
+  f.blood.hit({ room: 1, charBlockY: 1, charName: "guard-2" }, { x: 118, y: 90, direction: 1, weapon: "minigun" });
+  assert.equal(f.blood.particles.length, 11, "the original airborne spray remains intact");
+  assert.equal(f.blood.masonryCounts.pillar, 1);
+  assert.equal(f.blood.masonryCounts.above, 1);
+  assert.equal(f.blood.masonryCounts.below, 1);
+  const layer = f.blood.decalRooms.get(1);
+  const painted = layer.bitmap.draws.map((draw) => ({ ...draw, x: draw.x + layer.x, y: draw.y + layer.y }));
+  assert.ok(
+    painted.some((draw) => draw.x >= 136 && draw.x < 155 && draw.y > 70 && draw.y < 110),
+    "pillar shaft catches the spray"
+  );
+  assert.ok(
+    painted.some((draw) => draw.y < 63),
+    "upper wall catches upward flecks"
+  );
+  assert.ok(
+    painted.some((draw) => draw.y > 130),
+    "lower wall catches splashes below the floor lip"
+  );
+  assert.ok(
+    painted.some((draw) => draw.color === "#d5423c"),
+    "splashes have small fresh highlights"
+  );
+  assert.equal(layer.floorDepths.size, 0, "masonry ink uses the foreground cache");
+  assertNativePaint(layer, native);
+  const piece = { room: 1, x: 146, y: 90, vx: 200, vy: 0, radius: 1 };
+  const movement = f.physics.step(piece, 0.15, { gravity: 0 });
+  assert.equal(piece.x, 176);
+  assert.ok(
+    movement.contacts.every((contact) => contact.tile !== pillar),
+    "decorative pillars remain walk-through"
+  );
+  assert.ok(layer.sprite.z > 30, "blood appears over the pillar's visible foreground face");
+});
+
+test("small and tall pillars receive clipped splashes in either firing direction", () => {
+  for (const element of [3, 8, 9]) {
+    for (const direction of [-1, 1]) {
+      const f = fixture();
+      f.setTile(1, 4, 1, element);
+      const native = nativeTerrain(f);
+      f.blood.hit(
+        { room: 1, charBlockY: 1, charName: "guard-2" },
+        { x: direction === 1 ? 118 : 188, y: 90, direction, weapon: "rocketLauncher" }
+      );
+      assert.equal(f.blood.masonryCounts.pillar, 1, `pillar ${element}, direction ${direction}`);
+      assertNativePaint(f.blood.decalRooms.get(1), native);
+    }
+  }
+});
+
+test("a decorative tile with an empty native frame receives no floating masonry stain", () => {
+  const f = fixture();
+  f.setTile(1, 4, 1, 25);
+  nativeTerrain(f);
+  f.blood.hit({ room: 1, charBlockY: 1, charName: "guard-2" }, { x: 118, y: 90, direction: 1, weapon: "minigun" });
+  assert.equal(f.blood.masonryCounts.pillar, 0);
+  assert.equal(f.bitmaps.length, 0);
+});
+
+test("masonry spray follows real room links and never paints an unlinked neighboring room", () => {
+  for (const linked of [true, false]) {
+    const f = fixture();
+    f.setTile(3, 3, 0, 20);
+    if (!linked) {
+      f.level.rooms[1].links.down = -1;
+    }
+    const native = nativeTerrain(f);
+    f.blood.hit({ room: 1, charBlockY: 2, charName: "guard-2" }, { x: 112, y: 164, direction: 1, weapon: "minigun" });
+    assert.equal(f.blood.decalRooms.has(3), linked);
+    assert.equal(f.blood.masonryCounts.below, linked ? 1 : 0);
+    if (linked) {
+      assertNativePaint(f.blood.decalRooms.get(3), native);
+    } else {
+      assert.equal(f.bitmaps.length, 0, "empty map margins receive no artificial stone or ink");
+    }
+  }
+});
+
+test("pillar and wall splashes keep identical pixels after settling and revisiting rooms", () => {
+  const f = fixture();
+  f.setTile(1, 4, 1, 3);
+  f.setTile(1, 4, 0, 20);
+  f.setTile(1, 4, 2, 20);
+  nativeTerrain(f);
+  f.blood.hit({ room: 1, charBlockY: 1, charName: "guard-2" }, { x: 118, y: 90, direction: 1, weapon: "minigun" });
+  f.advance(3);
+  const layer = f.blood.decalRooms.get(1);
+  const bitmap = layer.bitmap;
+  const pixels = JSON.stringify(f.bitmaps.map(({ draws }) => draws));
+  const revision = layer.revision;
+  f.delegate.currentRoom = 2;
+  f.advance(5);
+  f.delegate.currentRoom = 1;
+  f.advance(5);
+  assert.equal(f.blood.decalRooms.get(1), layer);
+  assert.equal(layer.bitmap, bitmap);
+  assert.equal(layer.revision, revision);
+  assert.equal(JSON.stringify(f.bitmaps.map(({ draws }) => draws)), pixels);
+  f.blood.destroy();
+  assert.ok(f.bitmaps.every((entry) => entry.destroyed === 1));
+});
+
+test("stone ink stays above native fronts and floor ink below actors when Phaser renumbers world z", () => {
+  const f = fixture();
+  f.setTile(1, 4, 1, 3);
+  f.setTile(1, 4, 0, 20);
+  f.setTile(1, 4, 2, 20);
+  nativeTerrain(f);
+  const group = () => ({
+    children: [],
+    reindex() {
+      this.children.forEach((child, index) => (child.z = index));
+    },
+    add(child) {
+      if (child.parent) {
+        child.parent.children.splice(child.parent.children.indexOf(child), 1);
+        child.parent.reindex();
+      }
+      child.parent = this;
+      this.children.push(child);
+      this.reindex();
+    },
+    setChildIndex(child, index) {
+      this.children.splice(this.children.indexOf(child), 1);
+      this.children.splice(index, 0, child);
+      this.reindex();
+    }
+  });
+  f.level.back = group();
+  f.level.front = group();
+  const world = group();
+  world.sort = function () {
+    this.children.sort((a, b) => a.z - b.z);
+    this.reindex();
+  };
+  world.add(f.level.back);
+  f.level.back.z = 10;
+  for (let i = 0; i < 60; i++) {
+    const actor = {};
+    world.add(actor);
+    actor.z = 20;
+  }
+  world.add(f.level.front);
+  f.level.front.z = 30;
+  world.sort();
+  assert.ok(f.level.front.z > 30.5, "crowded rooms overwrite the initial foreground z value");
+  for (const room of f.level.rooms.filter(Boolean)) {
+    for (const tile of room.tiles.filter((tile) => tile.back)) {
+      f.level.back.add(tile.back);
+      f.level.front.add(tile.front);
+    }
+  }
+  f.game.world = world;
+  const createSprite = f.game.add.sprite;
+  f.game.add.sprite = (x, y, bitmap) => {
+    const sprite = createSprite(x, y, bitmap);
+    world.add(sprite);
+    return sprite;
+  };
+  f.blood.hit({ room: 1, charBlockY: 1, charName: "guard-2" }, { x: 118, y: 90, direction: 1, weapon: "minigun" });
+  f.advance(3);
+  const layer = f.blood.decalRooms.get(1);
+  assert.equal(layer.sprite.parent, f.level.front);
+  assert.equal(f.level.front.children.at(-1), layer.sprite);
+  assert.ok(layer.floorDepths.size > 0);
+  assert.ok([...layer.floorDepths.values()].every((depth) => depth.sprite.parent === f.level.back));
+  const depths = f.level.back.children
+    .filter((child) => child.bloodDepth !== undefined)
+    .map((child) => child.bloodDepth);
+  assert.deepEqual(
+    depths,
+    [...depths].sort((a, b) => a - b)
+  );
+  const corpse = {};
+  world.add(corpse);
+  corpse.z = 21;
+  world.sort();
+  assert.equal(f.level.front.children.at(-1), layer.sprite, "later effects cannot hide stone stains");
+  assert.ok(
+    f.sprites.every((sprite) => !world.children.includes(sprite)),
+    "ink stays anchored to its terrain group"
+  );
+  assert.ok(f.level.back.z < corpse.z && f.level.front.z > corpse.z);
+});
+
 test("level cleanup releases all ten depth textures, foreground ink and native alpha readback canvas", () => {
   const f = fixture();
   const native = nativeTerrain(f);
