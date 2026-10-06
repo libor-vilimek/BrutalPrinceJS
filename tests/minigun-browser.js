@@ -603,6 +603,166 @@ async function actionChecks() {
   }
 }
 
+function cameraSample(state) {
+  return {
+    x: testGame.camera.x,
+    y: testGame.camera.y,
+    room: state.kid.room,
+    kidX: state.kid.baseX + (state.kid.charX * 320) / 140,
+    hudX: state.ui.layer.worldTransform.tx,
+    hudY: state.ui.layer.worldTransform.ty
+  };
+}
+
+async function watchCamera(state, until, timeout = 4500) {
+  const samples = [cameraSample(state)];
+  const deadline = window.performance.now() + timeout;
+  while (!until()) {
+    if (window.performance.now() > deadline) {
+      throw new Error("Camera travel timed out: " + JSON.stringify(samples.at(-1)));
+    }
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    samples.push(cameraSample(state));
+  }
+  return samples;
+}
+
+function checkHorizontalSamples(samples, description) {
+  check(
+    samples.every((sample, i) => i === 0 || Math.abs(sample.x - samples[i - 1].x) < 80),
+    description + ": no room-width camera jump"
+  );
+  check(
+    samples.every((sample) => sample.y === samples[0].y),
+    description + ": vertical camera stays fixed"
+  );
+  check(
+    samples.every(
+      (sample) => Math.abs(sample.hudX - samples[0].hudX) < 2 && Math.abs(sample.hudY - samples[0].hudY) < 2
+    ),
+    description + ": health display stays fixed on screen"
+  );
+}
+
+function cameraControls(kid) {
+  const originals = { keyL: kid.keyL, keyR: kid.keyR, keyU: kid.keyU, keyD: kid.keyD };
+  const held = { left: false, right: false, up: false, down: false };
+  kid.keyL = () => held.left;
+  kid.keyR = () => held.right;
+  kid.keyU = () => held.up;
+  kid.keyD = () => held.down;
+  held.restore = () => Object.assign(kid, originals);
+  return held;
+}
+
+async function cameraChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  let controls;
+  try {
+    await ready();
+    let state = await freshLevel(1);
+    quietEnemies(state);
+    placeKid(2, 98, 1, 1);
+    controls = cameraControls(state.kid);
+    controls.right = true;
+    const right = await watchCamera(state, () => state.kid.room === 3);
+    const origin = state.level.rooms[2].x * 640;
+    check(
+      right.some((sample) => sample.room === 2 && sample.x > origin + 10),
+      "Camera reveals the right neighbor before the Prince crosses the boundary"
+    );
+    checkHorizontalSamples(right, "Running right through a room boundary");
+    controls.right = false;
+    controls.left = true;
+    const left = await watchCamera(state, () => state.kid.room === 2 && state.kid.charX < 60);
+    check(left.at(-1).x < left[0].x, "Camera follows the Prince back to the left");
+    checkHorizontalSamples(left, "Running left through a room boundary");
+    controls.restore();
+
+    state = await freshLevel(1);
+    quietEnemies(state);
+    placeKid(2, 105, 1, 1);
+    check(state.jetpack.toggle(), "Jetpack activates for the scrolling flight check");
+    controls = cameraControls(state.kid);
+    controls.right = true;
+    const flightRight = await watchCamera(state, () => state.kid.room === 3);
+    checkHorizontalSamples(flightRight, "Flying right through a room boundary");
+    controls.right = false;
+    controls.left = true;
+    const flightLeft = await watchCamera(state, () => state.kid.room === 2 && state.kid.charX < 100);
+    checkHorizontalSamples(flightLeft, "Flying left through a room boundary");
+    check(state.jetpack.active && state.kid.alive, "Jetpack remains active across horizontal room travel");
+    controls.restore();
+
+    // An existing open shaft joins room 22's bottom row to room 15's top row.
+    placeKid(22, 49, 2, 1);
+    check(state.jetpack.toggle(), "Jetpack activates in the existing vertical shaft");
+    controls = cameraControls(state.kid);
+    controls.down = true;
+    const down = await watchCamera(state, () => state.kid.room === 15);
+    check(
+      down.every((sample) => sample.y === 0 || sample.y === 378) && down.at(-1).y === 378,
+      "Flying down still cuts directly to the next floor"
+    );
+    controls.down = false;
+    controls.up = true;
+    const up = await watchCamera(state, () => state.kid.room === 22);
+    check(
+      up.every((sample) => sample.y === 378 || sample.y === 0) && up.at(-1).y === 0,
+      "Flying up still cuts directly to the previous floor"
+    );
+    controls.restore();
+    controls = null;
+
+    state = await freshLevel(1);
+    quietEnemies(state);
+    check(state.roomCamera.room === state.kid.room, "Restart resets the camera to the new starting room");
+    check(state.ui.layer.fixedToCamera, "HUD retains Phaser's camera attachment after restart");
+    report("ALL CAMERA CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    if (controls) {
+      controls.restore();
+    }
+    busy = false;
+  }
+}
+
+async function cameraPreview() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  let controls;
+  try {
+    await ready();
+    const state = await freshLevel(1);
+    quietEnemies(state);
+    placeKid(2, 98, 1, 1);
+    controls = cameraControls(state.kid);
+    controls.right = true;
+    await watchCamera(state, () => state.kid.room === 3 && state.kid.charX > 50);
+    controls.restore();
+    controls = null;
+    testGame.paused = true;
+    output.textContent = "Smooth scrolling preview paused between rooms 2 and 3. Resume game to continue.";
+  } catch (error) {
+    output.textContent = "FAIL: " + error.message;
+  } finally {
+    if (controls) {
+      controls.restore();
+    }
+    busy = false;
+  }
+}
+
+document.getElementById("camera").addEventListener("click", cameraChecks);
+document.getElementById("scroll-preview").addEventListener("click", cameraPreview);
 document.getElementById("run").addEventListener("click", combatChecks);
 document.getElementById("features").addEventListener("click", featureChecks);
 document.getElementById("actions").addEventListener("click", actionChecks);

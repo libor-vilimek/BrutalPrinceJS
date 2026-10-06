@@ -343,8 +343,12 @@ PrinceJS.Level.prototype = {
     }
   },
 
-  checkGates: function (room, prevRoom) {
+  checkGates: function (room, prevRoom, visibleRooms = []) {
     let gates = this.getGatesAll(room, prevRoom);
+    for (let visibleRoom of visibleRooms) {
+      gates.push(...this.getGatesAll(visibleRoom));
+    }
+    gates = [...new Set(gates)];
     this.activeGates.forEach((gate) => {
       if (!gates.includes(gate)) {
         gate.isVisible(false);

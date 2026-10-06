@@ -122,6 +122,10 @@ PrinceJS.Game.prototype = {
     PrinceJS.Tile.Gate.reset();
     this.visitedRooms = {};
     this.currentRoom = json.prince.room;
+    this.currentCameraRoom = null;
+    this.previousCameraRoom = null;
+    this.cameraVisibleRooms = null;
+    this.roomCamera = new PrinceJS.RoomCamera(this);
     this.blockCamera = false;
 
     this.weaponFireKey = this.input.keyboard.addKey(Phaser.Keyboard.F);
@@ -176,6 +180,7 @@ PrinceJS.Game.prototype = {
     for (let weapon of this.weapons || []) {
       weapon.update(delta);
     }
+    this.updateCamera(delta);
     if (PrinceJS.Utils.continueGame(this.game)) {
       this.buttonPressed();
       let pos = PrinceJS.Utils.effectivePointer(this.game);
@@ -241,6 +246,7 @@ PrinceJS.Game.prototype = {
     }
     this.weapons = [];
     this.minigun = this.rocketLauncher = null;
+    this.roomCamera = null;
     if (this.weaponAudio) {
       this.weaponAudio.destroy();
       this.weaponAudio = null;
@@ -776,7 +782,7 @@ PrinceJS.Game.prototype = {
   },
 
   handleChop: function (tile) {
-    tile.chop(tile.room === this.currentCameraRoom);
+    tile.chop(this.roomCamera.isRoomVisible(tile.room));
   },
 
   timeUp() {
@@ -843,17 +849,34 @@ PrinceJS.Game.prototype = {
       this.outOfRoom();
       return;
     }
-    if (cameraRoom === 0) {
-      return;
-    }
-    room = cameraRoom || room;
+    // Honor a map's opening camera position; legacy edge notifications no longer move it.
+    room = this.roomCamera.room === null ? cameraRoom || room : room;
     if (this.level.rooms[room]) {
-      this.game.camera.x = this.level.rooms[room].x * PrinceJS.SCREEN_WIDTH * PrinceJS.SCALE_FACTOR;
-      this.game.camera.y = this.level.rooms[room].y * PrinceJS.ROOM_HEIGHT * PrinceJS.SCALE_FACTOR;
+      if (room !== this.currentCameraRoom) {
+        this.roomCamera.setRoom(room);
+        this.previousCameraRoom = this.currentCameraRoom;
+        this.currentCameraRoom = room;
+        this.visitedRooms[room] = true;
+        this.cameraVisibleRooms = null;
+      }
       this.checkForOpponent(room);
-      this.level.checkGates(room, this.currentCameraRoom);
-      this.currentCameraRoom = room;
-      this.visitedRooms[this.currentCameraRoom] = true;
+      this.refreshCameraGates();
+    }
+  },
+
+  updateCamera: function (delta) {
+    if (this.roomCamera && !this.blockCamera) {
+      this.roomCamera.update(delta);
+      this.refreshCameraGates();
+    }
+  },
+
+  refreshCameraGates: function () {
+    let rooms = this.roomCamera.visibleRooms();
+    let key = rooms.join(",");
+    if (key !== this.cameraVisibleRooms) {
+      this.level.checkGates(this.currentCameraRoom, this.previousCameraRoom, rooms);
+      this.cameraVisibleRooms = key;
     }
   },
 

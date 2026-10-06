@@ -31,6 +31,10 @@ Prince of Persia reimplementation written in HTML5 / JavaScript (MS-DOS version)
   - `Plus Button`: Next Level
   - `Any`: Continue Game
 
+## Camera
+
+The camera scrolls smoothly sideways through connected rooms when the Prince approaches either edge of the screen. It stops at the ends of each corridor, while transitions to rooms above or below still cut immediately. The health display stays fixed, and gates and choppers in partially visible adjoining rooms remain audible.
+
 ## Minigun and Rocket Launcher
 
 The Prince starts with 10 health points. Each enemy sword hit removes one point, including when the Prince has no weapon drawn; a surviving hit briefly staggers him before normal movement resumes.
@@ -49,7 +53,7 @@ Rockets leave fiery smoke trails and explode on impact, dealing damage to nearby
 
 The first two missions have 167 and 189 additional soldiers respectively, spread across every room outside the spawn room. Starting rooms and their approaches leave space to collect the weapons. Nearby soldiers react independently; the enemy health display follows the nearest relevant opponent.
 
-Run `npm test` for weapon collision and inventory tests. Open `http://localhost:8080/tests/minigun-browser.html` after starting the local server for the browser playtest.
+Run `npm test` for camera, weapon collision and inventory tests. Open `http://localhost:8080/tests/minigun-browser.html` after starting the local server for the browser playtest, including running and flying through room boundaries in both directions.
 
 ## Play Mobile
 
