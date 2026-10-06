@@ -82,6 +82,23 @@ PrinceJS.Enemy.prototype.CMD_TAP = function (data) {
 };
 
 PrinceJS.Enemy.prototype.updateBehaviour = function () {
+  if (this.isProactiveGuard()) {
+    let state = this.game && this.game.state && this.game.state.getCurrentState();
+    let opponent = state && state.level === this.level ? state.kid : this.opponent;
+    let camera = state && state.level === this.level ? state.roomCamera : null;
+    if (!this.canHuntOpponent(opponent, camera)) {
+      this.opponent = null;
+      this.startFight = false;
+      if (this.alive && this.swordDrawn && ["engarde", "advance", "retreat", "turnengarde"].includes(this.action)) {
+        this.swordDrawn = false;
+        this.stand();
+      }
+      return;
+    }
+    this.opponent = opponent;
+    this.startFight = true;
+    this.meet = true;
+  }
   if (this.opponent === null || !this.alive) {
     return;
   }
@@ -135,11 +152,136 @@ PrinceJS.Enemy.prototype.updateBehaviour = function () {
     }
   } else {
     if (this.canReachOpponent(this.lookBelow) || this.canSeeOpponent(this.lookBelow)) {
-      if (!this.sneakUp || this.facingOpponent()) {
+      if (this.isProactiveGuard() && !this.facingOpponent()) {
+        if (this.action === "stand") {
+          this.turn();
+        }
+      } else if (!this.sneakUp || this.facingOpponent()) {
         this.engarde();
       }
     }
   }
+};
+
+PrinceJS.Enemy.prototype.isProactiveGuard = function () {
+  return ["guard", "fatguard"].includes(this.baseCharName);
+};
+
+PrinceJS.Enemy.prototype.isHuntVisible = function (camera) {
+  if (!this.visible) {
+    return false;
+  }
+  if (!camera) {
+    return true;
+  }
+  if (!camera.isRoomVisible(this.room)) {
+    return false;
+  }
+  let room = this.level.rooms[this.room];
+  let view = camera.camera;
+  if (!view || !camera.scale || !Number.isFinite(camera.viewWidth)) {
+    return true;
+  }
+  let x = room.x * PrinceJS.ROOM_WIDTH + PrinceJS.Utils.convertX(this.charX + (this.charFdx || 0) * this.charFace);
+  let y = room.y * PrinceJS.ROOM_HEIGHT + 3 + this.charY + (this.charFdy || 0);
+  let width = this.width || 32;
+  let height = this.height || 40;
+  let left = x - (this.charFace > 0 ? width - 5 : 0);
+  let top = view.y / camera.scale;
+  let viewLeft = view.x / camera.scale;
+  return (
+    left < viewLeft + camera.viewWidth && left + width > viewLeft && y - height < top + camera.viewHeight && y > top
+  );
+};
+
+PrinceJS.Enemy.prototype.canHuntOpponent = function (opponent, camera) {
+  if (!this.alive || !this.active || !opponent || !opponent.alive || !this.isHuntVisible(camera)) {
+    return false;
+  }
+  return this.hasHuntPath(opponent);
+};
+
+PrinceJS.Enemy.prototype.hasHuntPath = function (opponent) {
+  let room = this.level.rooms[this.room];
+  let targetRoom = opponent && this.level.rooms[opponent.room];
+  if (!room || !targetRoom || room.y * 3 + this.charBlockY !== targetRoom.y * 3 + opponent.charBlockY) {
+    return false;
+  }
+  // Guards walk a continuous floor; they cannot jump gaps or climb to the Prince's ledge.
+  let direction = Math.sign(targetRoom.x * 10 + opponent.charBlockX - room.x * 10 - this.charBlockX) || 1;
+  let roomId = this.room;
+  let column = this.charBlockX;
+  let row = this.charBlockY;
+  let remaining = Math.abs(targetRoom.x * 10 + opponent.charBlockX - room.x * 10 - column) + 1;
+  while (remaining-- > 0) {
+    if (column < 0 || column > 9) {
+      let link = direction < 0 ? "left" : "right";
+      let opposite = direction < 0 ? "right" : "left";
+      let nextId = room.links[link];
+      let next = this.level.rooms[nextId];
+      if (!next || next.y !== room.y || next.x !== room.x + direction || next.links[opposite] !== roomId) {
+        return false;
+      }
+      room = next;
+      roomId = nextId;
+      column = (column + 10) % 10;
+    }
+    let tile = this.level.getTileAt(column, row, roomId);
+    if (!tile || !tile.isSafeWalkable()) {
+      return false;
+    }
+    if (tile.element === PrinceJS.Level.TILE_GATE) {
+      if (!tile.canCross(this.height || 40)) {
+        return false;
+      }
+    } else if (tile.isBarrier()) {
+      return false;
+    }
+    if (roomId === opponent.room && column === opponent.charBlockX) {
+      return true;
+    }
+    column += direction;
+  }
+  return false;
+};
+
+PrinceJS.Enemy.prototype.opponentOnSameLevel = function () {
+  if (!this.isProactiveGuard()) {
+    return PrinceJS.Fighter.prototype.opponentOnSameLevel.call(this);
+  }
+  let room = this.level.rooms[this.room];
+  let targetRoom = this.opponent && this.level.rooms[this.opponent.room];
+  return !!(room && targetRoom && room.y * 3 + this.charBlockY === targetRoom.y * 3 + this.opponent.charBlockY);
+};
+
+PrinceJS.Enemy.prototype.opponentDistance = function () {
+  if (!this.isProactiveGuard()) {
+    return PrinceJS.Fighter.prototype.opponentDistance.call(this);
+  }
+  if (!this.opponentOnSameLevel()) {
+    return -999;
+  }
+  let room = this.level.rooms[this.room];
+  let targetRoom = this.level.rooms[this.opponent.room];
+  let distance = ((targetRoom.x - room.x) * 140 + this.opponent.charX - this.charX) * this.charFace;
+  if (distance >= 0 && this.charFace !== this.opponent.charFace) {
+    distance += 13;
+  }
+  return distance;
+};
+
+PrinceJS.Enemy.prototype.canReachOpponent = function (below = false, turn = false) {
+  if (this.isProactiveGuard()) {
+    return this.hasHuntPath(this.opponent);
+  }
+  return PrinceJS.Fighter.prototype.canReachOpponent.call(this, below, turn);
+};
+
+PrinceJS.Enemy.prototype.canSeeOpponent = function (below = false) {
+  if (this.isProactiveGuard()) {
+    return this.hasHuntPath(this.opponent);
+  }
+  return PrinceJS.Fighter.prototype.canSeeOpponent.call(this, below);
 };
 
 PrinceJS.Enemy.prototype.willStartFight = function () {

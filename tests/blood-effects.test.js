@@ -30,14 +30,31 @@ function fixture() {
     add: {
       bitmapData(width, height) {
         const draws = [];
+        const clears = [];
+        const pixels = new Map();
         const bitmap = {
           width,
           height,
           draws,
+          clears,
+          pixels,
           ctx: {
             fillStyle: "",
             fillRect(x, y, width, height) {
               draws.push({ x, y, width, height, color: this.fillStyle });
+              for (let row = Math.max(0, y); row < Math.min(bitmap.height, y + height); row++) {
+                for (let column = Math.max(0, x); column < Math.min(bitmap.width, x + width); column++) {
+                  pixels.set(row * bitmap.width + column, this.fillStyle);
+                }
+              }
+            },
+            clearRect(x, y, width, height) {
+              clears.push({ x, y, width, height });
+              for (let row = Math.max(0, y); row < Math.min(bitmap.height, y + height); row++) {
+                for (let column = Math.max(0, x); column < Math.min(bitmap.width, x + width); column++) {
+                  pixels.delete(row * bitmap.width + column);
+                }
+              }
             }
           },
           destroyed: 0,
@@ -95,7 +112,7 @@ function fixture() {
   const setTile = (id, column, row, element, posY = 0) => {
     const tile = Object.assign(
       Object.create(element === 4 ? PrinceJS.Tile.Gate.prototype : PrinceJS.Tile.Base.prototype),
-      { room: id, roomX: column, roomY: row, element, posY }
+      { room: id, roomX: column, roomY: row, element, posY, type: 0, key: "dungeon" }
     );
     level.rooms[id].tiles[row * 10 + column] = tile;
     return tile;
@@ -184,6 +201,9 @@ function nativeTerrain(f) {
     };
   };
   f.game.make = {
+    sprite(x, y, key, frame) {
+      return sprite(frame, x, y);
+    },
     bitmapData(width, height) {
       const bitmap = {
         width,
@@ -327,6 +347,101 @@ test("all floor depths and foreground caches retain their identities and pixels 
   assert.equal(layer.revision, revision);
   assert.equal(f.blood.drawnPixelCount, pixels);
   assert.equal(f.blood.stainCount, 30);
+});
+
+test("a falling loose board loses all ten floor lanes and its lip ink while intact stone stays unchanged", () => {
+  const f = fixture();
+  for (let column = 0; column < 10; column++) {
+    f.setTile(1, column, 1, 0);
+  }
+  const loose = f.setTile(1, 3, 1, 11);
+  loose.yTo = 0;
+  f.setTile(1, 7, 1, 1);
+  f.setTile(1, 8, 1, 3);
+  f.setTile(1, 8, 0, 20);
+  f.setTile(1, 8, 2, 20);
+  nativeTerrain(f);
+  f.blood.burst(112, 110, 1, { count: 20, vx: 0, vy: 120 });
+  f.blood.burst(240, 110, 1, { count: 20, vx: 0, vy: 120 });
+  f.blood.hit({ room: 1, charBlockY: 1, charName: "guard-2" }, { x: 250, y: 90, direction: 1, weapon: "minigun" });
+  f.advance(3);
+  const layer = f.blood.decalRooms.get(1);
+  const caches = [layer, ...layer.floorDepths.values()];
+  const leftInk = (cache, pixel) => (pixel % cache.bitmap.width) + layer.x < 180;
+  const retained = caches.map((cache) => [...cache.bitmap.pixels].filter(([pixel]) => !leftInk(cache, pixel)));
+  const textures = caches.map((cache) => cache.bitmap);
+  assert.equal(layer.floorDepths.size, 10);
+  assert.ok(caches.every((cache) => [...cache.bitmap.pixels.keys()].some((pixel) => leftInk(cache, pixel))));
+  assert.ok(
+    retained.every((pixels) => pixels.length > 0),
+    "the other floor and pillar/wall marks are visible"
+  );
+  f.level.game = f.game;
+  f.level.delegate = f.delegate;
+  f.delegate.bloodEffects = f.blood;
+  f.level.back = f.level.front = { add() {} };
+  f.level.floorStartFall(loose);
+  assert.equal(f.level.getTileAt(3, 1, 1).element, 0, "the original board becomes an actual shaft");
+  assert.equal(loose.room, 3, "the falling tile's destination changes after the replacement hook");
+  assert.equal(f.blood.surfacePixels.has(loose), false);
+  for (let i = 0; i < caches.length; i++) {
+    assert.equal(caches[i].bitmap, textures[i], "textures are reused instead of rebuilt");
+    assert.equal(
+      [...caches[i].bitmap.pixels.keys()].some((pixel) => leftInk(caches[i], pixel)),
+      false
+    );
+    assert.deepEqual([...caches[i].bitmap.pixels], retained[i], "unaffected pixels keep their exact colors");
+    assert.ok(caches[i].bitmap.clears.every((clear) => clear.height === 1 && clear.width < 32));
+  }
+  const after = caches.map((cache) => JSON.stringify([...cache.bitmap.pixels]));
+  const clears = caches.map((cache) => cache.bitmap.clears.length);
+  f.blood.removeSurface(loose);
+  f.delegate.currentRoom = 2;
+  f.advance(5);
+  f.delegate.currentRoom = 1;
+  f.advance(5);
+  assert.deepEqual(
+    caches.map((cache) => JSON.stringify([...cache.bitmap.pixels])),
+    after
+  );
+  assert.deepEqual(
+    caches.map((cache) => cache.bitmap.clears.length),
+    clears,
+    "settled caches do no further erasing"
+  );
+});
+
+test("replacing a floor removes its overhang ink from a linked room's cache without clearing the room", () => {
+  const f = fixture();
+  const loose = f.setTile(1, 9, 1, 11);
+  nativeTerrain(f);
+  const layer = f.blood.roomDecals(2);
+  const terrain = f.blood.terrain({ room: 2, x: 324, y: 120 });
+  const ownTerrain = (tile) => ({
+    sprites: terrain.sprites.filter((entry) => entry.tile === tile),
+    fallback: []
+  });
+  const intact = f.level.getTileAt(0, 1, 2);
+  f.blood.paint(layer, ownTerrain(loose), 314, 115, 32, 12, "#7a1420");
+  const oldPixels = new Set(layer.bitmap.pixels.keys());
+  assert.ok(oldPixels.size > 0, "native floor artwork overhangs the actual room seam");
+  f.blood.paint(layer, ownTerrain(intact), 326, 115, 24, 12, "#b52c35");
+  const retained = [...layer.bitmap.pixels].filter(([, color]) => color === "#b52c35");
+  assert.ok(
+    retained.some(([pixel]) => oldPixels.has(pixel)),
+    "the intact floor has newer ink at overlapping pixels"
+  );
+  f.level.delegate = f.delegate;
+  f.delegate.bloodEffects = f.blood;
+  f.level.back = f.level.front = { add() {} };
+  const space = { element: 0, back: {}, front: {} };
+  f.level.addTile(9, 1, 1, space);
+  assert.equal(f.blood.decalRooms.get(2), layer);
+  assert.deepEqual([...layer.bitmap.pixels], retained);
+  assert.ok(layer.bitmap.clears.length > 0);
+  f.blood.destroy();
+  assert.equal(f.blood.surfacePixels.size, 0);
+  assert.equal(layer.pixelOwners.size, 0);
 });
 
 test("native wall and gate splashes stay above their opaque fronts and leave black pixels unpainted", () => {

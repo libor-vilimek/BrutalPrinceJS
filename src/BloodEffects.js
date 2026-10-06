@@ -7,6 +7,7 @@ PrinceJS.BloodEffects = function (delegate) {
   this.physics = new PrinceJS.GorePhysics(this.level);
   this.particles = [];
   this.decalRooms = new Map();
+  this.surfacePixels = new Map();
   this.stainCount = 0;
   this.depthCounts = Array(10).fill(0);
   this.depthCursor = 0;
@@ -112,6 +113,7 @@ PrinceJS.BloodEffects.prototype = {
       stainCount: 0,
       depthCounts: Array(10).fill(0),
       floorDepths: new Map(),
+      pixelOwners: new Map(),
       foregroundStainCount: 0,
       drawnPixelCount: 0,
       revision: 0
@@ -142,7 +144,7 @@ PrinceJS.BloodEffects.prototype = {
           this.level.back.setChildIndex(sprite, index);
         }
       }
-      floor = { bitmap, sprite, depthLayer: depth, revision: 0, drawnPixelCount: 0 };
+      floor = { bitmap, sprite, depthLayer: depth, revision: 0, drawnPixelCount: 0, pixelOwners: new Map() };
       layer.floorDepths.set(depth, floor);
       if (!this.level.back && this.game.world && this.game.world.sort) {
         this.game.world.sort("z");
@@ -258,7 +260,12 @@ PrinceJS.BloodEffects.prototype = {
   },
 
   materialAt: function (terrain, x, y) {
-    let background = false;
+    let surface = this.surfaceAt(terrain, x, y);
+    return surface && surface.material;
+  },
+
+  surfaceAt: function (terrain, x, y) {
+    let background = null;
     for (let sprite of terrain.sprites) {
       let localX = Math.floor((x - sprite.x) / sprite.scaleX);
       let localY = Math.floor((y - sprite.y) / sprite.scaleY);
@@ -270,16 +277,16 @@ PrinceJS.BloodEffects.prototype = {
         sprite.mask.alpha[localY * sprite.mask.width + localX] > 32
       ) {
         if (sprite.foreground) {
-          return "foreground";
+          return { material: "foreground", tile: sprite.tile };
         }
-        background = true;
+        background = background || sprite.tile;
       }
     }
     for (let entry of terrain.fallback) {
       let tile = entry.tile;
       if (tile.element === PrinceJS.Level.TILE_WALL) {
         if (x >= entry.x && x < entry.x + 32 && y >= entry.y && y < entry.y + 63) {
-          return "foreground";
+          return { material: "foreground", tile };
         }
       } else {
         if (tile.isBarrier() && tile.getBounds) {
@@ -288,22 +295,95 @@ PrinceJS.BloodEffects.prototype = {
           let left = room.x * PrinceJS.ROOM_WIDTH + bounds.x;
           let top = room.y * PrinceJS.ROOM_HEIGHT + bounds.y + 3;
           if (x >= left && x < left + bounds.width && y >= top && y < top + bounds.height) {
-            return "foreground";
+            return { material: "foreground", tile };
           }
         }
         if (tile.isWalkable()) {
           let floorY = entry.y + PrinceJS.BLOCK_HEIGHT - 7;
           if (y >= floorY + 7 && y < floorY + 10 && x >= entry.x - 14 && x < entry.x + 18) {
-            return "foreground";
+            return { material: "foreground", tile };
           }
           let left = entry.x - (y - floorY) * 2;
           if (y >= floorY - 6 && y < floorY + 7 && x >= left && x < left + 32) {
-            background = true;
+            background = background || tile;
           }
         }
       }
     }
-    return background ? "background" : null;
+    return background ? { material: "background", tile: background } : null;
+  },
+
+  recordSurfacePixels: function (cache, tile, x, y, width) {
+    if (y < 0 || y >= cache.bitmap.height) {
+      return;
+    }
+    let surfaces = this.surfacePixels.get(tile);
+    if (!surfaces) {
+      surfaces = new Map();
+      this.surfacePixels.set(tile, surfaces);
+    }
+    let pixels = surfaces.get(cache);
+    if (!pixels) {
+      pixels = new Set();
+      surfaces.set(cache, pixels);
+    }
+    for (let column = Math.max(0, x); column < Math.min(cache.bitmap.width, x + width); column++) {
+      let pixel = y * cache.bitmap.width + column;
+      let previous = cache.pixelOwners.get(pixel);
+      if (previous && previous !== tile) {
+        let oldSurfaces = this.surfacePixels.get(previous);
+        let oldPixels = oldSurfaces && oldSurfaces.get(cache);
+        if (oldPixels) {
+          oldPixels.delete(pixel);
+          if (!oldPixels.size) {
+            oldSurfaces.delete(cache);
+            if (!oldSurfaces.size) {
+              this.surfacePixels.delete(previous);
+            }
+          }
+        }
+      }
+      cache.pixelOwners.set(pixel, tile);
+      pixels.add(pixel);
+    }
+  },
+
+  removeSurface: function (tile) {
+    let surfaces = this.surfacePixels.get(tile);
+    if (this.destroyed || !surfaces) {
+      return;
+    }
+    // Erase only this tile's ink, including its foreground lip and any overhang
+    // cached in a neighboring room. Intact surfaces keep their exact pixels.
+    for (let [cache, pixels] of surfaces) {
+      let sorted = [...pixels].sort((a, b) => a - b);
+      for (let i = 0; i < sorted.length; ) {
+        let pixel = sorted[i];
+        let x = pixel % cache.bitmap.width;
+        let y = Math.floor(pixel / cache.bitmap.width);
+        let end = i + 1;
+        while (
+          end < sorted.length &&
+          sorted[end] === sorted[end - 1] + 1 &&
+          Math.floor(sorted[end] / cache.bitmap.width) === y
+        ) {
+          end++;
+        }
+        cache.bitmap.ctx.clearRect(x, y, end - i, 1);
+        for (; i < end; i++) {
+          cache.pixelOwners.delete(sorted[i]);
+        }
+      }
+      cache.bitmap.dirty = true;
+      cache.revision++;
+    }
+    // A floor lane can change without touching its room's foreground cache.
+    for (let layer of this.decalRooms.values()) {
+      if (!surfaces.has(layer) && [...layer.floorDepths.values()].some((floor) => surfaces.has(floor))) {
+        layer.revision++;
+      }
+    }
+    this.surfacePixels.delete(tile);
   },
 
   paint: function (layer, terrain, x, y, width, height, color, depth, foregroundOnly) {
@@ -312,20 +392,27 @@ PrinceJS.BloodEffects.prototype = {
       let start = Math.floor(x);
       let end = start + width;
       for (let column = start; column < end; ) {
-        let material = this.materialAt(terrain, column, row);
+        let surface = this.surfaceAt(terrain, column, row);
+        let material = surface && surface.material;
         if (!material || (foregroundOnly && material !== "foreground")) {
           column++;
           continue;
         }
         let run = column + 1;
-        while (run < end && this.materialAt(terrain, run, row) === material) {
+        while (run < end) {
+          let next = this.surfaceAt(terrain, run, row);
+          if (!next || next.material !== material || next.tile !== surface.tile) {
+            break;
+          }
           run++;
         }
         let floor = material === "background" && depth !== undefined ? this.floorDepth(layer, depth) : null;
-        let bitmap = floor ? floor.bitmap : layer.bitmap;
+        let cache = floor || layer;
+        let bitmap = cache.bitmap;
         bitmap.ctx.fillStyle = color;
         bitmap.ctx.fillRect(column - layer.x, row - layer.y, run - column, 1);
         bitmap.dirty = true;
+        this.recordSurfacePixels(cache, surface.tile, column - layer.x, row - layer.y, run - column);
         let pixels = run - column;
         if (floor) {
           floor.drawnPixelCount += pixels;
@@ -567,14 +654,17 @@ PrinceJS.BloodEffects.prototype = {
     this.particles.length = 0;
     for (let layer of this.decalRooms.values()) {
       for (let floor of layer.floorDepths.values()) {
+        floor.pixelOwners.clear();
         floor.sprite.destroy();
         floor.bitmap.destroy();
       }
       layer.floorDepths.clear();
+      layer.pixelOwners.clear();
       layer.sprite.destroy();
       layer.bitmap.destroy();
     }
     this.decalRooms.clear();
+    this.surfacePixels.clear();
     this.stainCount = 0;
     this.depthCounts.fill(0);
     this.foregroundStainCount = this.drawnPixelCount = 0;

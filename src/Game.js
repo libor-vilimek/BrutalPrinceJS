@@ -137,8 +137,12 @@ PrinceJS.Game.prototype = {
     this.weaponAudio = new PrinceJS.WeaponAudio(this.game);
     this.weaponCtrlKey = this.input.keyboard.addKey(Phaser.Keyboard.CONTROL);
     this.weaponCtrlKey.onDown.add(this.handleWeaponControl, this);
-    this.input.keyboard.addKey(Phaser.Keyboard.ONE).onDown.add(() => this.selectWeapon("minigun"), this);
-    this.input.keyboard.addKey(Phaser.Keyboard.TWO).onDown.add(() => this.selectWeapon("rocketLauncher"), this);
+    this.weaponFireKey.onDown.add(this.handleWeaponControl, this);
+    this.weaponCtrlKey.onUp.add(this.handleWeaponRelease, this);
+    this.weaponFireKey.onUp.add(this.handleWeaponRelease, this);
+    this.input.keyboard.addKey(Phaser.Keyboard.ONE).onDown.add(() => this.selectWeapon("molotov"), this);
+    this.input.keyboard.addKey(Phaser.Keyboard.TWO).onDown.add(() => this.selectWeapon("minigun"), this);
+    this.input.keyboard.addKey(Phaser.Keyboard.THREE).onDown.add(() => this.selectWeapon("rocketLauncher"), this);
     this.minigun = new PrinceJS.Minigun(this, json.prince.direction * (json.prince.reverse || 1));
     this.rocketLauncher = null;
     this.weapons = [this.minigun];
@@ -147,6 +151,9 @@ PrinceJS.Game.prototype = {
       this.weapons.push(this.rocketLauncher);
     }
     this.molotov = this.level.number === 1 ? new PrinceJS.Molotov(this, direction) : null;
+    if (this.molotov) {
+      this.weapons.unshift(this.molotov);
+    }
     this.jetpack = new PrinceJS.Jetpack(this);
     this.input.keyboard.addKey(Phaser.Keyboard.J).onDown.add(this.toggleJetpack, this);
 
@@ -179,9 +186,6 @@ PrinceJS.Game.prototype = {
 
   update: function () {
     const delta = this.game.time.elapsedMS / 1000;
-    if (this.molotov) {
-      this.molotov.update(delta);
-    }
     if (this.jetpack) {
       this.jetpack.update(delta);
     }
@@ -249,17 +253,15 @@ PrinceJS.Game.prototype = {
   },
 
   shutdown: function () {
-    for (let controller of [this.molotov, this.jetpack]) {
-      if (controller) {
-        controller.destroy();
-      }
+    if (this.jetpack) {
+      this.jetpack.destroy();
     }
-    this.molotov = this.jetpack = null;
+    this.jetpack = null;
     for (let weapon of this.weapons || []) {
       weapon.destroy();
     }
     this.weapons = [];
-    this.minigun = this.rocketLauncher = null;
+    this.molotov = this.minigun = this.rocketLauncher = null;
     for (let effects of [this.enemyDeathEffects, this.bloodEffects]) {
       if (effects) {
         effects.destroy();
@@ -279,6 +281,7 @@ PrinceJS.Game.prototype = {
       Phaser.Keyboard.CONTROL,
       Phaser.Keyboard.ONE,
       Phaser.Keyboard.TWO,
+      Phaser.Keyboard.THREE,
       Phaser.Keyboard.J
     ]) {
       this.input.keyboard.removeKey(key);
@@ -288,15 +291,18 @@ PrinceJS.Game.prototype = {
   },
 
   handleWeaponControl: function () {
-    if (["hang", "hangstraight"].includes(this.kid.action)) {
-      if (this.molotov) {
-        this.molotov.throwFromHang();
-      }
-      return;
-    }
     let weapon = (this.weapons || []).find((item) => item.spec.id === this.kid.activeWeapon);
     if (weapon && !this.kid[weapon.spec.equipped]) {
       weapon.equip();
+    }
+    if (weapon === this.molotov && weapon) {
+      weapon.beginCharge();
+    }
+  },
+
+  handleWeaponRelease: function () {
+    if (this.molotov && this.kid.activeWeapon === "molotov" && !this.molotov.triggerDown()) {
+      this.molotov.releaseThrow();
     }
   },
 
@@ -307,12 +313,19 @@ PrinceJS.Game.prototype = {
   },
 
   selectWeapon: function (id) {
-    if (this.kid.specialAction && !(this.weapons || []).includes(this.kid.specialAction.owner)) {
+    let action = this.kid.specialAction;
+    if (
+      action &&
+      (!(this.weapons || []).includes(action.owner) || ["holstering", "throwing"].includes(action.owner.actionStage))
+    ) {
       return;
     }
     let weapon = (this.weapons || []).find((item) => item.spec.id === id);
     if (weapon && this.kid[weapon.spec.owned] && weapon.equip()) {
-      this.ui.showText(weapon.spec.label + " - HOLD CTRL / F TO FIRE", "weapon");
+      this.ui.showText(
+        weapon.spec.label + (id === "molotov" ? " - HOLD CTRL/F, RELEASE" : " - HOLD CTRL / F TO FIRE"),
+        "weapon"
+      );
       this.ui.hideTextTimer = 40;
     }
   },
@@ -1000,29 +1013,34 @@ PrinceJS.Game.prototype = {
   },
 
   checkHordeOpponents: function (room) {
-    if (this.kid.room !== this.spawnRoom && (this.level.number !== 1 || this.kid.hasMinigun)) {
-      this.hordeEngaged = true;
-    }
     let currentEnemy = null;
     let bestPriority = Infinity;
     let bestDistance = Infinity;
     let kidX = this.kid.baseX + PrinceJS.Utils.convertX(this.kid.charX);
 
     for (let enemy of this.enemies) {
-      if (!enemy.alive || !enemy.active || !enemy.visible || (enemy.reinforcement && !this.hordeEngaged)) {
+      if (!enemy.alive || !enemy.active || !enemy.visible) {
         enemy.opponent = null;
         continue;
       }
-      // Every soldier in this room and visible adjoining rooms can react independently.
-      let canReact =
-        this.kid.opponentInSameRoom(enemy, this.kid.room) || this.kid.opponentNearRoom(enemy, this.kid.room, true);
+      // Visible guards react independently as soon as a continuous floor reaches the Prince.
+      let guard = enemy.isProactiveGuard();
+      let canReact = guard
+        ? enemy.canHuntOpponent(this.kid, this.roomCamera)
+        : this.kid.opponentInSameRoom(enemy, this.kid.room) || this.kid.opponentNearRoom(enemy, this.kid.room, true);
       enemy.opponent = canReact ? this.kid : null;
+      if (guard) {
+        enemy.startFight = canReact;
+      }
       if (canReact) {
         enemy.meet = true;
+        this.hordeEngaged = true;
+      } else {
+        continue;
       }
 
       let sameRoom = this.kid.opponentInSameRoom(enemy, room);
-      let nearRoom = this.kid.opponentNearRoom(enemy, room);
+      let nearRoom = guard || this.kid.opponentNearRoom(enemy, room);
       if (!sameRoom && !nearRoom) {
         continue;
       }

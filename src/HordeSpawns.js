@@ -59,6 +59,10 @@ PrinceJS.HordeSpawns = {
           if (roomId === introRoom && (row !== 1 || ![6, 7].includes(column))) {
             continue;
           }
+          // Leave room to reach the left-hand gun before entering the first crowd.
+          if (introRoom > 0 && room.links.left === introRoom && row === 1 && column < 3) {
+            continue;
+          }
           let tile = level.getTileAt(column, row, roomId);
           if (!safeFloors.includes(tile.element)) {
             continue;

@@ -167,7 +167,7 @@ PrinceJS.RangedWeapon.prototype = {
 
   canSelect: function () {
     let action = this.kid.specialAction;
-    if (action && action.owner.actionStage === "holstering") {
+    if (action && ["holstering", "throwing"].includes(action.owner.actionStage)) {
       return false;
     }
     return !action || action.owner === this || (this.delegate.weapons || [this]).includes(action.owner);

@@ -78,6 +78,10 @@ PrinceJS.Level.FLASH_WHITE = 0xffffff;
 PrinceJS.Level.prototype = {
   addTile: function (x, y, room, tile) {
     if (x >= 0 && y >= 0) {
+      let previous = this.rooms[room].tiles[y * 10 + x];
+      if (previous && previous !== tile && this.delegate && this.delegate.bloodEffects) {
+        this.delegate.bloodEffects.removeSurface(previous);
+      }
       this.rooms[room].tiles[y * 10 + x] = tile;
       tile.roomX = x;
       tile.roomY = y;

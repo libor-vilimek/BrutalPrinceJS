@@ -19,6 +19,7 @@ PrinceJS.Kid = function (game, level, location, direction, room) {
   this.rocketLauncherEquipped = false;
   this.activeWeapon = null;
   this.hasMolotov = false;
+  this.molotovEquipped = false;
   this.specialAction = null;
 
   this.allowCrawl = true;

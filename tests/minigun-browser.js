@@ -85,7 +85,10 @@ async function combatChecks() {
     }
     check(!state.kid.hasMinigun && !state.minigun.pickup.collected, "Fresh spawn has a ground pickup");
     check(state.kid.health === 10 && state.ui.playerHPActive === 10, "The Prince and HUD start with ten health");
-    check(!state.rocketLauncher && state.weapons.length === 1, "Mission one has no rocket launcher or rocket graphics");
+    check(
+      !state.rocketLauncher && state.weapons.map((weapon) => weapon.spec.id).join(",") === "molotov,minigun",
+      "Mission one lists molotov first, then minigun, without a rocket launcher"
+    );
     state.selectWeapon("rocketLauncher");
     check(!state.kid.hasRocketLauncher && !state.kid.rocketLauncherEquipped, "Rocket selection cannot unlock it early");
     const below = state.level.rooms[state.kid.room].links.down;
@@ -357,6 +360,10 @@ async function prepareOpeningEncounter() {
       targets.length === 2 && targets.every((enemy) => enemy.alive && enemy.health === 2),
       "Only two guards wait under the drop"
     );
+    check(
+      targets.every((enemy) => enemy.opponent !== kid || !enemy.startFight),
+      "Guards on the lower floor do not hunt the hanging Prince above them"
+    );
     return { state, targets, keyS };
   } catch (error) {
     kid.keyS = keyS;
@@ -382,8 +389,16 @@ async function openingChecks() {
       heard.push(key);
       return soundPlay.call(this, key, ...args);
     };
+    state.weaponCtrlKey.isDown = true;
     state.weaponCtrlKey.onDown.dispatch();
-    check(state.molotov.throwState && !state.kid.hasMinigun, "Ctrl throws the first molotov before acquiring any gun");
+    await pause(100);
+    check(
+      state.molotov.throwState && state.molotov.throwState.phase === "charging" && !state.kid.hasMinigun,
+      "Holding Ctrl readies the first molotov before acquiring any gun"
+    );
+    state.weaponCtrlKey.isDown = false;
+    state.weaponCtrlKey.onUp.dispatch();
+    check(state.molotov.throwState.phase === "throwing", "Releasing Ctrl starts the ignition and throw");
     for (let i = 0; i < 40 && !state.molotov.fires.length; i++) {
       await pause(60);
     }
@@ -428,6 +443,19 @@ async function openingChecks() {
     report("ALL OPENING PROGRESSION CHECKS PASSED");
   } catch (error) {
     report("FAIL: " + error.message);
+    if (prepared) {
+      const kid = prepared.state.kid;
+      report(
+        JSON.stringify({
+          health: kid.health,
+          alive: kid.alive,
+          room: kid.room,
+          x: kid.charX,
+          y: kid.charY,
+          action: kid.action
+        })
+      );
+    }
   } finally {
     if (prepared) {
       prepared.state.kid.keyS = prepared.keyS;
@@ -453,7 +481,7 @@ async function openingPreview() {
     await watchCamera(prepared.state, () => !prepared.state.roomCamera.transition);
     testGame.paused = true;
     report(
-      "Opening: molotov first, two guards beneath the shaft, and the glowing minigun on clear floor to their left. Hold Shift when resuming to keep hanging; Ctrl drops a bottle."
+      "Opening: molotov first, two guards beneath the shaft, and the glowing minigun on clear floor to their left. Hold Shift to keep hanging; hold/release Ctrl for a bottle. Keys 1/2/3 select molotov/minigun/rockets."
     );
   } catch (error) {
     report("FAIL: " + error.message);
@@ -825,6 +853,255 @@ async function prepareMolotov() {
   return { state, keyS };
 }
 
+async function observeMolotovThrow(state, room, x, hold, up = false, direction = 1) {
+  placeKid(room, x, 1, direction);
+  state.selectWeapon("molotov");
+  const kid = state.kid;
+  const keyU = kid.keyU;
+  const shatter = state.molotov.effects.shatter;
+  const impacts = [];
+  let flight;
+  state.molotov.effects.shatter = function (impactX, impactY, burning) {
+    impacts.push({ x: impactX, y: impactY, burning });
+    return shatter.call(this, impactX, impactY, burning);
+  };
+  try {
+    state.weaponCtrlKey.isDown = true;
+    state.weaponCtrlKey.onDown.dispatch();
+    kid.keyU = () => up;
+    const startX = kid.charX;
+    await pause(hold);
+    check(
+      state.molotov.throwState &&
+        state.molotov.throwState.phase === "charging" &&
+        !state.molotov.throwState.lighterLit &&
+        kid.charX === startX,
+      "Held molotov stays unlit and keeps the Prince planted"
+    );
+    const throwState = state.molotov.throwState;
+    const launch = state.molotov.effects.getThrowPoint(throwState);
+    const charge = throwState.charge;
+    state.weaponCtrlKey.isDown = false;
+    state.weaponCtrlKey.onUp.dispatch();
+    check(
+      throwState.phase === "throwing" && throwState.aimUp === up,
+      "Release captures aim and begins the lighting sequence"
+    );
+    for (let i = 0; i < 140 && !impacts.length; i++) {
+      await pause(25);
+      const bottle = state.molotov.bottles[0];
+      if (bottle && !flight) {
+        flight = { vx: bottle.vx, aimUp: bottle.aimUp, charge: bottle.charge };
+      }
+    }
+    check(impacts.length === 1, "The real thrown bottle stops at one environment contact");
+    await pause(350);
+    check(
+      !kid.specialAction && !kid.cropRect && !state.molotov.effects.head.visible,
+      "Throwing restores the native Prince sprite and movement"
+    );
+    return { launch, charge, flight, impact: impacts[0], range: Math.abs(impacts[0].x - launch.x) };
+  } finally {
+    kid.keyU = keyU;
+    state.weaponCtrlKey.isDown = false;
+    state.molotov.effects.shatter = shatter;
+  }
+}
+
+async function chargedMolotovChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    await ready();
+    const state = await freshLevel(1);
+    quietEnemies(state);
+    await collectWeapon(state.molotov);
+    check(
+      state.kid.activeWeapon === "molotov" && state.weapons[0] === state.molotov,
+      "Molotov is the selected first inventory weapon"
+    );
+    await collectWeapon(state.minigun);
+    const keyboard = gameFrame.contentWindow.Phaser.Keyboard;
+    testGame.input.keyboard.addKey(keyboard.ONE).onDown.dispatch();
+    check(state.kid.molotovEquipped && !state.kid.minigunEquipped, "Number 1 selects molotov exclusively");
+    testGame.input.keyboard.addKey(keyboard.TWO).onDown.dispatch();
+    check(state.kid.minigunEquipped && !state.kid.molotovEquipped, "Number 2 selects minigun exclusively");
+    const short = await observeMolotovThrow(state, 20, 28, 100);
+    const long = await observeMolotovThrow(state, 20, 28, 1600);
+    check(
+      short.impact.burning && long.impact.burning && long.range > short.range + 100 && long.charge > short.charge,
+      "A fully charged 30-degree throw travels substantially farther on the real map: " +
+        Math.round(short.range) +
+        " versus " +
+        Math.round(long.range) +
+        " pixels"
+    );
+    const high = await observeMolotovThrow(state, 2, 49, 1600, true);
+    const roof = state.level.rooms[2].y * 189 + 63;
+    check(
+      high.flight &&
+        high.flight.aimUp &&
+        !high.impact.burning &&
+        high.impact.y >= roof &&
+        high.impact.y <= roof + 8 &&
+        !state.molotov.bottles.length,
+      "Holding Up launches a high arc that shatters against the native ceiling without passing through it"
+    );
+    const left = await observeMolotovThrow(state, 20, 98, 800, false, -1);
+    check(
+      left.flight && left.flight.vx < 0 && left.impact.x < left.launch.x,
+      "Facing left mirrors the charged throw correctly"
+    );
+    report("ALL CHARGED MOLOTOV CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    busy = false;
+  }
+}
+
+function placeGuard(enemy, room, location, direction = -1) {
+  enemy.room = room;
+  enemy.charY = (Math.floor(location / 10) + 1) * 63 - 10;
+  enemy.charXVel = enemy.charYVel = 0;
+  enemy.inFallDown = enemy.inJumpUp = false;
+  enemy.opponent = null;
+  enemy.startFight = false;
+  enemy.action = "stand";
+  enemy.swordDrawn = false;
+  if (enemy.charFace !== direction) {
+    enemy.changeFace();
+  }
+  enemy.setActive();
+  enemy.processCommand();
+  enemy.room = room;
+  enemy.updateBase();
+  enemy.charX = (location % 10) * 14 + 14 + (enemy.charFfoot - enemy.charFdx) * enemy.charFace;
+  enemy.updateBlockXY();
+  enemy.updateCharPosition();
+  enemy.updateSwordPosition();
+}
+
+async function worldUpdateChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    await ready();
+    let state = await freshLevel(1);
+    quietEnemies(state);
+    const loose = state.level.getTileAt(6, 2, 1);
+    const stone = state.level.getTileAt(8, 2, 1);
+    const blood = state.bloodEffects;
+    const room = state.level.rooms[1];
+    const floorY = room.y * 189 + 182;
+    for (const tile of [loose, stone]) {
+      for (let depth = 0; depth < 10; depth++) {
+        blood.stain(
+          { room: 1, tile, x: room.x * 320 + tile.roomX * 32 + 16, y: floorY, normalY: -1 },
+          { size: 2, vx: 0, depthLayer: depth }
+        );
+      }
+    }
+    const removed = blood.surfacePixels.get(loose);
+    const retained = blood.surfacePixels.get(stone);
+    check(
+      removed && retained && removed.size > 1,
+      "Blood coats the loose board and intact neighboring stone across multiple layers"
+    );
+    const pixels = (surface) =>
+      [...surface].flatMap(([cache, owned]) =>
+        [...owned].map((pixel) => ({
+          cache,
+          pixel,
+          rgba: [
+            ...cache.bitmap.ctx.getImageData(pixel % cache.bitmap.width, Math.floor(pixel / cache.bitmap.width), 1, 1)
+              .data
+          ]
+        }))
+      );
+    const droppedPixels = pixels(removed);
+    const stonePixels = pixels(retained);
+    loose.shake(true);
+    for (let i = 0; i < 30 && state.level.getTileAt(6, 2, 1) === loose; i++) {
+      await pause(80);
+    }
+    check(
+      state.level.getTileAt(6, 2, 1).element === 0 && !blood.surfacePixels.has(loose),
+      "The native falling-board event removes that board's blood ownership"
+    );
+    check(
+      droppedPixels.every(
+        ({ cache, pixel }) =>
+          cache.bitmap.ctx.getImageData(pixel % cache.bitmap.width, Math.floor(pixel / cache.bitmap.width), 1, 1)
+            .data[3] === 0
+      ),
+      "All blood pixels on the dropped board disappear from every cache"
+    );
+    check(
+      stonePixels.every(({ cache, pixel, rgba }) =>
+        [
+          ...cache.bitmap.ctx.getImageData(pixel % cache.bitmap.width, Math.floor(pixel / cache.bitmap.width), 1, 1)
+            .data
+        ].every((value, i) => value === rgba[i])
+      ),
+      "Blood on intact stone keeps exactly the same pixels"
+    );
+
+    state = await freshLevel(1);
+    quietEnemies(state);
+    const guard = state.enemies.find((enemy) => enemy.room === 2);
+    placeKid(2, 70, 1, -1);
+    placeGuard(guard, 2, 17);
+    const distance = () =>
+      Math.abs(
+        guard.baseX +
+          Math.floor((guard.charX * 320) / 140) -
+          state.kid.baseX -
+          Math.floor((state.kid.charX * 320) / 140)
+      );
+    const before = distance();
+    await pause(1000);
+    check(
+      !state.kid.hasMinigun && guard.opponent === state.kid && guard.startFight && distance() < before - 12,
+      "A visible reachable guard starts hunting an unarmed Prince immediately"
+    );
+
+    state = await freshLevel(2);
+    quietEnemies(state);
+    const blocked = state.enemies.find((enemy) => enemy.baseCharName === "guard");
+    const gate = state.level.getTileAt(5, 1, 13);
+    placeKid(13, 42, 1, 1);
+    gate.drop();
+    await pause(650);
+    placeGuard(blocked, 13, 18);
+    const blockedX = blocked.charX;
+    await pause(700);
+    check(
+      !blocked.startFight && blocked.charX === blockedX,
+      "A closed native gate prevents pursuit through the barrier"
+    );
+    gate.raise();
+    for (let i = 0; i < 50 && !blocked.startFight; i++) {
+      await pause(80);
+    }
+    check(
+      blocked.startFight && blocked.opponent === state.kid,
+      "The guard begins hunting as soon as the raised gate opens a route"
+    );
+    report("ALL PURSUIT AND FALLING BLOOD CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    busy = false;
+  }
+}
+
 async function actionChecks() {
   if (busy) {
     return;
@@ -901,15 +1178,21 @@ async function actionChecks() {
     savedKeys = { kid: state.kid, keyS: prepared.keyS };
     const hangX = state.kid.charX;
     const hangY = state.kid.charY;
+    state.weaponCtrlKey.isDown = true;
     state.weaponCtrlKey.onDown.dispatch();
-    await pause(150);
-    check(state.kid.specialAction && state.kid.specialAction.owner === state.molotov, "Ctrl starts the hanging throw");
-    await pause(430);
+    await pause(100);
+    check(
+      state.kid.specialAction && state.kid.specialAction.owner === state.molotov && !state.molotov.bottles.length,
+      "Holding Ctrl readies an unlit bottle while hanging"
+    );
+    state.weaponCtrlKey.isDown = false;
+    state.weaponCtrlKey.onUp.dispatch();
+    await pause(300);
     check(
       state.kid.charX === hangX && state.kid.charY === hangY,
       "The Prince stays attached during the lighter and bottle sequence"
     );
-    await pause(550);
+    await pause(450);
     check(!state.kid.specialAction && state.kid.alpha === 1, "The quick throw restores the ordinary Prince sprite");
     check(
       state.molotov.bottles.length + state.molotov.fires.length > 0,
@@ -1202,6 +1485,8 @@ document.getElementById("boundary-preview").addEventListener("click", async () =
 document.getElementById("run").addEventListener("click", combatChecks);
 document.getElementById("features").addEventListener("click", featureChecks);
 document.getElementById("actions").addEventListener("click", actionChecks);
+document.getElementById("charged-molotov").addEventListener("click", chargedMolotovChecks);
+document.getElementById("world-updates").addEventListener("click", worldUpdateChecks);
 document.getElementById("opening").addEventListener("click", openingChecks);
 document.getElementById("opening-preview").addEventListener("click", openingPreview);
 document.getElementById("gore").addEventListener("click", goreChecks);
@@ -1220,12 +1505,16 @@ document.getElementById("palace-walls").addEventListener("click", async () => {
 
 document.getElementById("molotov").addEventListener("click", async () => {
   await ready();
-  const { state, keyS } = await prepareMolotov();
+  const state = await freshLevel(1);
+  quietEnemies(state);
+  await collectWeapon(state.molotov);
+  placeKid(20, 42, 1, 1);
+  state.weaponCtrlKey.isDown = true;
   state.weaponCtrlKey.onDown.dispatch();
-  await pause(630);
+  await pause(1600);
   testGame.paused = true;
-  state.kid.keyS = keyS;
-  output.textContent = "Molotov preview paused at ignition. Resume game continues the quick drop below the ledge.";
+  output.textContent =
+    "Molotov fully charged and unlit. Resume game, then Hold / release Ctrl to light and throw. Up selects a 70-degree arc; otherwise 30 degrees. Weapon keys: 1 molotov, 2 minigun, 3 rockets.";
 });
 
 document.getElementById("jetpack").addEventListener("click", async () => {
@@ -1295,6 +1584,8 @@ document.getElementById("toggle").addEventListener("click", () => {
   key.isDown = !key.isDown;
   if (key.isDown) {
     key.onDown.dispatch();
+  } else {
+    key.onUp.dispatch();
   }
 });
 document.getElementById("inspect").addEventListener("click", () => {
