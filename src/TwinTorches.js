@@ -171,13 +171,16 @@ PrinceJS.TwinTorches.prototype = {
   },
 
   safeIntroStep: function (torch) {
-    let room = this.level.rooms[this.kid.room];
     let start = this.kid.baseX + PrinceJS.Utils.convertX(this.kid.charX);
     // Bring the shoulder beside each socket before reaching for its handle.
-    let distance = torch.x - 2 * this.kid.charFace - start;
-    for (let i = 0; i <= Math.abs(distance); i++) {
-      let x = start + Math.sign(distance) * i;
-      let column = Math.floor((x - room.x * PrinceJS.ROOM_WIDTH) / PrinceJS.BLOCK_WIDTH);
+    let distance = ((torch.x - 2 * this.kid.charFace - start) * 140) / 320;
+    let foot = this.kid.charX + (this.kid.charFdx - this.kid.charFfoot) * this.kid.charFace;
+    let steps = Math.max(1, Math.ceil((Math.abs(distance) * 320) / 140));
+    for (let i = 0; i <= steps; i++) {
+      let column = PrinceJS.Utils.convertXtoBlockX(foot + (distance * i) / steps);
+      if (column < 0 || column > 9) {
+        return 0;
+      }
       let tile = this.level.getTileAt(column, this.kid.charBlockY, this.kid.room);
       if (
         !tile.isSafeWalkable() ||
@@ -187,7 +190,7 @@ PrinceJS.TwinTorches.prototype = {
         return 0;
       }
     }
-    return (distance * 140) / 320;
+    return distance;
   },
 
   validAction: function () {
@@ -318,8 +321,13 @@ PrinceJS.TwinTorches.prototype = {
     let back = ease(1.18, 0.32);
     this.kid.charX =
       this.introStartX + (this.introSteps[0] * first + (this.introSteps[1] - this.introSteps[0]) * second) * (1 - back);
-    this.kid.setSpecialActionFrame(PrinceJS.TwinTorches.introMotion(this.elapsed).frame);
+    // This scripted route moves the standing root. Native walk frames include
+    // alternating foot offsets paired with CHX commands we do not execute here.
+    // Resolve the floor/room from the root before applying the visual step, or
+    // frames 125/126 can falsely cross the left room boundary during pickup.
+    this.kid.setSpecialActionFrame(15);
     this.kid.updateBlockXY();
+    this.kid.setSpecialActionFrame(PrinceJS.TwinTorches.introMotion(this.elapsed).frame);
     let captures = PrinceJS.TwinTorches.INTRO_CAPTURES;
     for (let i = 0; i < this.introTorches.length; i++) {
       let torch = this.introTorches[i];

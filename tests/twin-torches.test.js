@@ -149,6 +149,8 @@ function fixture(number = 2, map = null) {
     charFdx: 0,
     charFdy: 0,
     charFfoot: 3,
+    charName: "kid",
+    anims: JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/anims/kid.json"), "utf8")),
     action: "stand",
     actionCode: 0,
     alive: true,
@@ -162,6 +164,7 @@ function fixture(number = 2, map = null) {
     specialAction: null,
     sword: { visible: false },
     keyWeaponAction: () => false,
+    onChangeRoom: { dispatch: (...args) => roomChanges.push(args) },
     onDamageLife: { dispatch: (damage) => damageEvents.push(damage) },
     showSplash() {
       this.splashes = (this.splashes || 0) + 1;
@@ -170,12 +173,10 @@ function fixture(number = 2, map = null) {
     bringAboveOpponent() {},
     crop(rect) {
       this.cropRect = rect;
-    },
-    setSpecialActionFrame(frame) {
-      this.charFrame = frame;
     }
   });
   const damageEvents = [];
+  const roomChanges = [];
   PrinceJS.Utils.flashRedDamage = () => {};
   const key = { isDown: false };
   const ctrlKey = { isDown: false };
@@ -233,7 +234,8 @@ function fixture(number = 2, map = null) {
     enemy,
     sounds,
     ignitions,
-    damageEvents
+    damageEvents,
+    roomChanges
   };
 }
 
@@ -387,6 +389,41 @@ test("walking between wall sockets uses the complete native step without a secon
         assert.ok(Math.abs(x + arm.hand.x * direction - f.weapon.introTorches[index].x) < 0.1);
         assert.equal(f.effects.head.visible, true);
       }
+    }
+  }
+});
+
+test("every native opening frame stays on the starting landing without crossing into a neighboring room", () => {
+  const map = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/maps/level1.json"), "utf8"));
+  for (const [direction, startX] of [
+    [-1, 14],
+    [1, 14],
+    [1, 19]
+  ]) {
+    for (const delta of [1 / 120, 1 / 60, 1 / 30, 0.05]) {
+      const f = fixture(1, map);
+      f.kid.charX = startX;
+      f.kid.charBlockX = 0;
+      f.kid.charFace = direction;
+      const startBaseX = f.kid.baseX;
+      f.weapon.startIntro();
+      for (let time = 0; time < 1.6; time += delta) {
+        f.weapon.update(delta);
+        const context = `direction ${direction}, start ${startX}, delta ${delta}, frame ${f.kid.charFrame}`;
+        assert.equal(f.kid.room, 1, context);
+        assert.equal(f.kid.baseX, startBaseX, context);
+        assert.ok(f.kid.charX >= startX && f.kid.charX < 37, context);
+        assert.equal(f.kid.charBlockY, 1, context);
+        const tile = f.level.getTileAt(f.kid.charBlockX, f.kid.charBlockY, f.kid.room);
+        assert.ok(tile.isSafeWalkable() && !tile.isBarrier(), context);
+        f.kid.checkFloor();
+        assert.equal(f.kid.inFallDown, false, context);
+      }
+      assert.deepEqual(f.roomChanges, []);
+      assert.ok(f.weapon.introDone && f.weapon.introTorches.every((torch) => torch.captured && torch.tile.taken));
+      assert.equal(f.kid.charX, startX);
+      assert.equal(f.kid.charFrame, 15);
+      assert.equal(f.kid.specialAction, null);
     }
   }
 });

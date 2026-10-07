@@ -76,6 +76,18 @@ async function meleeFireChecks() {
       "The real starting sequence removes both wall torches and tucks them away"
     );
     check(!kid.specialAction && !kid.cropRect, "Opening collection restores movement and the native Prince sprite");
+    const start = testGame.cache.getJSON("level").prince;
+    const startRoom = state.level.rooms[start.room];
+    check(
+      kid.room === start.room &&
+        kid.baseX === startRoom.x * 320 &&
+        kid.baseY === startRoom.y * 189 + 3 &&
+        kid.charX === state.twinTorches.introStartX &&
+        kid.charBlockX === 0 &&
+        kid.charBlockY === 1 &&
+        !kid.inFallDown,
+      "The complete opening returns to the real starting landing without drifting through neighboring walls"
+    );
     placeKid(2, 70, 1, 1);
     state.selectWeapon("twinTorches");
     const targets = state.enemies.filter((enemy) => enemy.alive && enemy.baseCharName === "guard").slice(0, 2);
