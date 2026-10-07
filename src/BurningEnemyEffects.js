@@ -90,6 +90,7 @@ PrinceJS.BurningEnemyEffects.prototype = {
     this.movingBurns.push(burn);
     this.suppressNative(burn);
     this.render(burn);
+    this.updateAudio();
     return burn;
   },
 
@@ -330,6 +331,13 @@ PrinceJS.BurningEnemyEffects.prototype = {
     return !burn.settled;
   },
 
+  updateAudio: function () {
+    if (this.delegate.weaponAudio && this.delegate.weaponAudio.updateBurning) {
+      let rooms = this.delegate.roomCamera && this.delegate.roomCamera.visibleRooms();
+      this.delegate.weaponAudio.updateBurning(this.movingBurns, rooms);
+    }
+  },
+
   update: function (delta) {
     if (this.destroyed) {
       return;
@@ -347,6 +355,7 @@ PrinceJS.BurningEnemyEffects.prototype = {
       }
     }
     this.movingBurns = this.movingBurns.filter((burn) => this.step(burn, delta));
+    this.updateAudio();
   },
 
   destroy: function () {
@@ -354,6 +363,9 @@ PrinceJS.BurningEnemyEffects.prototype = {
       return;
     }
     this.destroyed = true;
+    if (this.delegate.weaponAudio && this.delegate.weaponAudio.stopBurning) {
+      this.delegate.weaponAudio.stopBurning();
+    }
     for (let burn of this.burns) {
       let enemy = burn.enemy;
       delete enemy.burningDeath;

@@ -43,20 +43,22 @@ Navazující implementační rozhodnutí: pořadí zbraní je `1` pochodně, `2`
 
 ## Levely a získávání vybavení
 
-| Level                   | Aktuální pravidlo                                                                                                                                                    |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1, startovní obrazovka  | Princ automaticky získá dvě skutečné pochodně ze stěny úvodní animací. Molotov zůstává na původním místě na horní startovní plošině. Minigun na této obrazovce není. |
-| 1, místnost pod startem | Několik nepřátel poskytuje první příležitost použít molotov. Minigun leží dobře viditelně v levé části této místnosti na pevné podlaze, mimo padající část.          |
-| 2                       | Molotov a minigun jsou automaticky vlastněné. Bič je k sebrání u vstupních dveří na začátku levelu.                                                                  |
-| 3                       | Raketomet je dobře viditelný na začátku a je nutné ho sebrat. Molotov a minigun jsou automaticky vlastněné.                                                          |
-| 4 a dál                 | Raketomet je automaticky vlastněný společně s dříve dostupnými zbraněmi.                                                                                             |
-| 1–11                    | Jetpack není dostupný.                                                                                                                                               |
-| 12                      | Jetpack je k sebrání hned u startu. Použij existující grafiku, pokud už je hotová.                                                                                   |
-| 13 a dál                | Jetpack je automaticky vlastněný; není nutné ho znovu sbírat.                                                                                                        |
+| Level                   | Aktuální pravidlo                                                                                                                                                           |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1, startovní obrazovka  | Princ automaticky získá dvě skutečné pochodně ze stěny úvodní animací. Molotov zůstává na původním místě na horní startovní plošině. Minigun na této obrazovce není.        |
+| 1, místnost pod startem | Několik nepřátel poskytuje první příležitost použít molotov. Minigun leží dobře viditelně v pravé části této druhé obrazovky na pevné podlaze, mimo padající část a sloupy. |
+| 2                       | Molotov a minigun jsou automaticky vlastněné. Bič je k sebrání u vstupních dveří; raketomet leží vlevo hned na začátku levelu.                                              |
+| 3                       | Raketomet sebraný v levelu 2 zůstává vlastněný. Pokud ho princ dosud nemá, je k sebrání na začátku. Molotov a minigun jsou automaticky vlastněné.                           |
+| 4 a dál                 | Raketomet je automaticky vlastněný společně s dříve dostupnými zbraněmi.                                                                                                    |
+| 1–11                    | Jetpack není dostupný.                                                                                                                                                      |
+| 12                      | Jetpack je k sebrání hned u startu. Použij existující grafiku, pokud už je hotová.                                                                                          |
+| 13 a dál                | Jetpack je automaticky vlastněný; není nutné ho znovu sbírat.                                                                                                               |
 
-- **LEVEL-01:** Postup raketometu „level 3 sebrat, od levelu 4 automaticky“ uživatel výslovně potvrdil při sepisování tohoto rulesetu. Nahrazuje dřívější automatické vlastnictví od levelu 3.
-- **LEVEL-02:** Minigun v první místnosti pod startem musí být dobře viditelný a dosažitelný po doskoku. Poslední požadované umístění je vlevo, nikoli vpravo.
+- **LEVEL-01:** Raketomet je nově k sebrání vlevo u startu levelu 2. Dřívější pickup na začátku levelu 3 slouží jako další příležitost, pokud ho princ dosud nemá; od levelu 4 je automaticky vlastněný. Již sebraná zbraň při postupu nezmizí.
+- **LEVEL-02:** Minigun v první místnosti pod startem (druhé obrazovce prvního levelu) musí být dobře viditelný a dosažitelný po doskoku. Aktuální umístění je vpravo na pevné podlaze, mimo sloup, který by ho zakrýval.
 - **LEVEL-03:** Vybavení automaticky přidělené v pozdějších levelech nemá vyžadovat další sběr. Samotné vlastnictví jetpacku ještě nespouští let.
+
+Navazující implementační rozhodnutí: při postupu se uloží výbava přinesená do dalšího levelu. Jeho restart tuto výbavu zachová; pickup získaný až během nedokončeného pokusu se znovu objeví podle dosavadních pravidel restartu. Nová hra uloženou výbavu vymaže.
 
 ## Vzhled prince a animace zbraní
 
@@ -95,6 +97,7 @@ Navazující implementační rozhodnutí: pořadí zbraní je `1` pochodně, `2`
 - **GUN-03:** Rakety znatelně zrychlují. Jejich let nesmí mít pouze konstantní lineární rychlost.
 - **GUN-04:** Raketa doletí alespoň do jedné další propojené místnosti a umožní ji probourat i tehdy, když tam ještě není volný průchod. Směr doprava nesmí mít kratší nebo zablokovaný dosah oproti směru doleva.
 - **GUN-05:** Střely a exploze respektují skutečné překážky; otevřená/probouraná místa lze dále používat při pohybu i střelbě.
+- **GUN-06:** Vystřelené nábojnice se trvale kupí a zůstávají po celý level, včetně odchodu z obrazovky a návratu. Kamera ani ořezávání vykreslování je nesmí odstranit. Při zániku podpory spadnou na další skutečnou podlahu; reset levelu hromady vyčistí.
 
 ## Bič
 
@@ -108,14 +111,15 @@ Navazující implementační rozhodnutí: krátký stisk `X` dokončí jeden šv
 
 ## Nouzový kopanec
 
-- **KICK-01:** Otočný kopanec na `C` odhodí blízké nepřátele před princem i za ním. Jejich nárazy srazí další strážce jako domino. Samotný kopanec, nárazy ani zotavování neubírají životy.
+- **KICK-01:** Otočný kopanec na `C` zasahuje jen těsně blízké nepřátele před princem i za ním. Přímo odkopnutý nepřítel může povalit další; ti se už jen svalí dozadu a sami nikoho dalšího nepovalí. Samotný kopanec, nárazy ani zotavování neubírají životy.
 - **KICK-02:** Je-li poblíž dosažitelný nepřítel, `C` umožní zkrátit probíhající animace a ihned zahájit otočný kop. Platí i pro výlez, tasení a schovávání zbraní včetně biče. Jde o výslovnou výjimku z obvyklých blokujících animací; bez nepřítele se tím animace nepřeskakují. Samotná otočka má pomalejší, čitelnou animaci.
 - **KICK-03:** Sražení nepřátelé se chvíli sbírají ze země a nemohou útočit. Domino vyžaduje skutečný kontakt a respektuje stěny, mříže, podlahy a propojení místností.
 - **KICK-04:** Bič zůstává samostatný na `X` se svým dosavadním dosahem, stahováním z hrany a poškozením. Kopanec jej nemění ani nevybírá jinou zbraň.
 - **KICK-05:** Během celé otočky včetně nápřahu a dokončení je princ chráněn proti zásahům nepřátel mečem. Ochrana končí s animací; původní pravidla pastí a pádů platí dál.
 - **KICK-06:** Odhození má být výrazné a hravé: strážci létají pod různými úhly, s různou silou a rotací, s částečně náhodnou obměnou. Nemají všichni skončit na jedné hromadě. Krev při kopu a nárazech je kosmetická a nepřidává poškození.
+- **KICK-07:** Princ provede viditelný kop na volné zemi i bez nepřátel v okolí, i když nikoho netrefí. Nouzové přeskakování cizích animací zůstává podmíněné blízkou hrozbou podle KICK-02.
 
-Implementační rozhodnutí: okolí pro nouzovou reakci je 144 světových pixelů, dosah samotného kopu 64 pixelů na obě strany. Otočka na jedné opěrné noze trvá 0,84 s, opakování nejdříve po 1,02 s; držení `C` umožňuje opakovat reakci. Přední oblouk zasahuje mezi 0,14–0,34 s, zadní mezi 0,39–0,65 s. Výlez a navazující běžné animace běží osmkrát rychleji přes původní příkazy, akce zbraní se ukončí a schovají. Úvodní sběr pochodní před ukončením dokončí skutečné sejmutí obou pochodní. Pět obměňovaných způsobů odhození kombinuje nízký smyk, vysoký oblouk a přemety; fyzika zajišťuje odrazy od stěn, stropů a podlah. Po dopadu se nad strážcem točí hvězdičky a zotavení trvá 2–2,45 s. Smrt, volný pád, let jetpackem a příběhový odchod do dalšího levelu se kopancem nepřeskakují. Pasti a velké pády nadále používají původní pravidla prostředí; výška získaná samotným odhozením ani krátký pád po kopanci nezpůsobují poškození. Kostlivec a stín si zachovávají zvláštní pravidla.
+Implementační rozhodnutí: okolí pro nouzovou reakci je 144 světových pixelů, dosah samotného kopu je zkrácený na 32 pixelů (jednu dlaždici) na obě strany. Otočka na jedné opěrné noze trvá 0,84 s, opakování nejdříve po 1,02 s; držení `C` umožňuje opakovat reakci. Přední oblouk zasahuje mezi 0,14–0,34 s, zadní mezi 0,39–0,65 s. Výlez a navazující běžné animace běží osmkrát rychleji přes původní příkazy, akce zbraní se ukončí a schovají. Úvodní sběr pochodní před ukončením dokončí skutečné sejmutí obou pochodní. Pět obměňovaných způsobů přímého odhození kombinuje nízký smyk, vysoký oblouk a přemety; druhotné zásahy používají jen krátké svalení bez šíření. Fyzika respektuje stěny, stropy a podlahy. Po dopadu se nad strážcem točí hvězdičky a zotavení trvá 2–2,45 s. Smrt, volný pád, let jetpackem a příběhový odchod do dalšího levelu se kopancem nepřeskakují. Pasti a velké pády nadále používají původní pravidla prostředí; výška získaná samotným odhozením ani krátký pád po kopanci nezpůsobují poškození. Kostlivec a stín si zachovávají zvláštní pravidla.
 
 ## Jetpack
 
@@ -132,6 +136,7 @@ Implementační rozhodnutí: okolí pro nouzovou reakci je 144 světových pixel
 - **ENEMY-04:** Minigun má několik různých smrtí: například zásah do obličeje s odhozením těla o několik dlaždic, ztrátu částí těla a různé pohyby či převracení těla. Nemá používat jedinou opakovanou nehybnou smrt.
 - **ENEMY-05:** Smrt raketometem rozmetá části těla napříč prostředím. Fragmenty a těla se pohybují a střetávají se s okolím.
 - **ENEMY-06:** Hořící nepřítel je pro boj ihned mrtvý. Jeho hořící tělo ještě pět sekund pobíhá doleva/doprava; může spadnout nebo se napíchnout do pastí. Po pěti sekundách animace končí smrtí/kolapsem. Během této doby nesmí znovu útočit jako živý strážce.
+- **ENEMY-07:** Hořící nepřátelé křičí, ale současně smějí být slyšet nejvýše dva překrývající se křiky hoření. Je to výjimka pro hoření, nikoli návrat obecného zvuku při každém zabití podle ENEMY-03.
 
 ## Krev a její vrstvy
 
@@ -175,20 +180,23 @@ Implementační rozhodnutí: okolí pro nouzovou reakci je 144 světových pixel
 
 Tento přehled brání návratu ke starším požadavkům. Nejde o aktivní alternativy.
 
-| Starší rozhodnutí                                       | Platné znění                                                                        |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Minigun dostupný hned na první obrazovce                | V levelu 1 je až v místnosti pod startem, vlevo na pevné podlaze.                   |
-| Minigun vpravo od dopadu                                | Poslední umístění je v levé části místnosti.                                        |
-| Nejprve pouze molotov jako první zbraň / molotov na `1` | Základní zbraň jsou dvě pochodně na `1`; molotov na `2` zůstává na svém místě.      |
-| SHIFT vytahuje zbraň                                    | SHIFT slouží pohybu a hranám; zbraně jsou na CTRL/F.                                |
-| Bič jako pátá zbraň na `5`, útok na `CTRL`/`F`          | Samostatný bič na `X`, mimo výběr zbraní; použití ponechá vybranou zbraň.           |
-| Raketomet zatím bez nové grafiky                        | Má mít odpovídající grafiku a animace jako minigun.                                 |
-| Raketomet automaticky od levelu 3                       | Level 3: sebrat na začátku; od levelu 4 automaticky. Výslovně potvrzeno uživatelem. |
-| Jetpack dostupný dříve                                  | Poprvé u startu levelu 12, automaticky od levelu 13.                                |
-| Ostré horizontální přechody a pouze jedna obrazovka     | Plynulé boční posouvání a oddálený záběr celé hlavní místnosti se sousedy.          |
-| Přidat zdi tam, kde mapa končí                          | Dodatečné zdi mimo data byly zrušeny; prázdno zůstává.                              |
-| Krev nikdy nemizí bez výjimky                           | Zůstává na zachovaných površích; krev padající podlahy se odstraní.                 |
-| Krev na výstupních dveřích v popředí                    | Krev na jejich ploše je za princem.                                                 |
-| Molotov zastavený stropem bez dopadu ohně               | Hořící olej spadne pod strop na podlahu.                                            |
-| Postupné ubírání HP při zapálení                        | Okamžitá smrt v boji a pětisekundová animace hoření.                                |
-| 60 minut                                                | 600 minut.                                                                          |
+| Starší rozhodnutí                                       | Platné znění                                                                                    |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Minigun dostupný hned na první obrazovce                | V levelu 1 je až v místnosti pod startem, vpravo na pevné podlaze mimo sloup.                   |
+| Minigun vlevo od dopadu                                 | Aktuální umístění je v pravé části druhé obrazovky, dobře viditelné.                            |
+| Nejprve pouze molotov jako první zbraň / molotov na `1` | Základní zbraň jsou dvě pochodně na `1`; molotov na `2` zůstává na svém místě.                  |
+| SHIFT vytahuje zbraň                                    | SHIFT slouží pohybu a hranám; zbraně jsou na CTRL/F.                                            |
+| Bič jako pátá zbraň na `5`, útok na `CTRL`/`F`          | Samostatný bič na `X`, mimo výběr zbraní; použití ponechá vybranou zbraň.                       |
+| Raketomet zatím bez nové grafiky                        | Má mít odpovídající grafiku a animace jako minigun.                                             |
+| Raketomet automaticky od levelu 3                       | Sebrat v levelu 2 nebo 3; vlastnictví se přenáší, od levelu 4 je automatické.                   |
+| První pickup raketometu až v levelu 3                   | Nově už vlevo u startu levelu 2; v levelu 3 zůstává záložní pickup pro ty, kdo ho dosud nemají. |
+| Kop s dlouhým dosahem a neomezeným dominem              | Krátký dosah; přímo odkopnutý může srazit další, druhotně povalení už nic nešíří.               |
+| Bez nepřítele nelze kopnout                             | Na volné zemi lze kopnout naprázdno; jen nouzové zkracování cizích animací vyžaduje hrozbu.     |
+| Jetpack dostupný dříve                                  | Poprvé u startu levelu 12, automaticky od levelu 13.                                            |
+| Ostré horizontální přechody a pouze jedna obrazovka     | Plynulé boční posouvání a oddálený záběr celé hlavní místnosti se sousedy.                      |
+| Přidat zdi tam, kde mapa končí                          | Dodatečné zdi mimo data byly zrušeny; prázdno zůstává.                                          |
+| Krev nikdy nemizí bez výjimky                           | Zůstává na zachovaných površích; krev padající podlahy se odstraní.                             |
+| Krev na výstupních dveřích v popředí                    | Krev na jejich ploše je za princem.                                                             |
+| Molotov zastavený stropem bez dopadu ohně               | Hořící olej spadne pod strop na podlahu.                                                        |
+| Postupné ubírání HP při zapálení                        | Okamžitá smrt v boji a pětisekundová animace hoření.                                            |
+| 60 minut                                                | 600 minut.                                                                                      |

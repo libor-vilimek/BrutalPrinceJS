@@ -470,3 +470,29 @@ test("shutdown removes all visual particles and restores native alpha without re
   assert.doesNotThrow(() => f.effects.destroy());
   assert.equal(f.effects.ignite(f.actor()), null);
 });
+
+test("burning effects keep the limited audio pool synchronized through ignition, camera changes, collapse and shutdown", () => {
+  const f = fixture();
+  const calls = [];
+  let stops = 0;
+  let visible = [1];
+  f.delegate.roomCamera = { visibleRooms: () => visible };
+  f.delegate.weaponAudio = {
+    updateBurning(burns, rooms) {
+      calls.push({ active: burns.filter((burn) => burn.phase !== "charred").length, rooms });
+    },
+    stopBurning() {
+      stops++;
+    }
+  };
+  f.effects.ignite(f.actor());
+  assert.deepEqual(calls.at(-1), { active: 1, rooms: [1] });
+  visible = [2];
+  f.advance(0.05);
+  assert.deepEqual(calls.at(-1), { active: 1, rooms: [2] });
+  f.advance(5);
+  assert.deepEqual(calls.at(-1), { active: 0, rooms: [2] });
+  f.effects.destroy();
+  f.effects.destroy();
+  assert.equal(stops, 1);
+});

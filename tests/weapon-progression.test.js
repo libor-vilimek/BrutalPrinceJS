@@ -6,7 +6,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 const { test } = require("node:test");
 
-function fixture(number) {
+function fixture(number, inventory) {
   const keyboardCodes = {
     F: 70,
     CONTROL: 17,
@@ -29,6 +29,7 @@ function fixture(number) {
     BLOCK_WIDTH: 32,
     BLOCK_HEIGHT: 63,
     currentLevel: number,
+    levelInventory: inventory,
     startTime: new Date(),
     danger: false
   };
@@ -55,10 +56,14 @@ function fixture(number) {
   ]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "../src", file + ".js"), "utf8"), context);
   }
-  const mapPath = number < 90 ? `level${number}.json` : `custom/level${number}.json`;
-  const json = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/maps", mapPath), "utf8"));
-  json.guards = [];
-  json.prince.turn = false;
+  function mapData() {
+    const number = PrinceJS.currentLevel;
+    const mapPath = number < 90 ? `level${number}.json` : `custom/level${number}.json`;
+    const json = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/maps", mapPath), "utf8"));
+    json.guards = [];
+    json.prince.turn = false;
+    return json;
+  }
   const signal = () => {
     const listeners = [];
     return {
@@ -77,7 +82,7 @@ function fixture(number) {
   const messages = [];
   const sounds = [];
   const game = {
-    cache: { getJSON: () => json },
+    cache: { getJSON: mapData },
     sound: { stopAll() {}, play: (name) => sounds.push(name) },
     onPause: signal(),
     onResume: signal(),
@@ -130,6 +135,9 @@ function fixture(number) {
         )
       };
     });
+    level.entranceDoors = [
+      level.getTileAt(data.prince.location % 10, Math.floor(data.prince.location / 10), data.prince.room)
+    ].filter((tile) => tile.element === PrinceJS.Level.TILE_EXIT_RIGHT);
     return level;
   };
   PrinceJS.Kid = function (game, level, location, direction, room) {
@@ -236,6 +244,7 @@ function fixture(number) {
     game,
     input: game.input,
     world: game.world,
+    state: { start() {} },
     setupCamera() {},
     updateCamera() {}
   });
@@ -243,7 +252,7 @@ function fixture(number) {
   return { PrinceJS, state, keys, keyboardCodes, messages, sounds };
 }
 
-test("level 1 keeps its original molotov and left-hand lower-room minigun pickups", () => {
+test("level 1 keeps the molotov and places the minigun on clear right-hand floor in the second screen", () => {
   const { state } = fixture(1);
   assert.equal(state.kid.hasMolotov, false);
   assert.equal(state.kid.hasMinigun, false);
@@ -259,27 +268,38 @@ test("level 1 keeps its original molotov and left-hand lower-room minigun pickup
   assert.equal(state.molotov.pickup.room, 1);
   assert.equal(state.minigun.pickup.room, 2);
   const lowerRoom = state.level.rooms[2];
-  assert.equal(state.minigun.pickup.worldX - lowerRoom.x * 320, 48);
+  assert.equal(state.level.rooms[1].links.down, state.minigun.pickup.room);
+  assert.equal(state.minigun.pickup.worldX - lowerRoom.x * 320, 240);
   assert.equal(state.minigun.pickup.worldY - lowerRoom.y * 189, 119);
+  assert.equal(state.level.getTileAt(7, 1, 2).element, 1, "the gun sits on permanent plain floor");
+  assert.equal(state.level.getTileAt(6, 1, 2).element, 1, "the approach stays clear of pillar fronts");
   for (const weapon of state.weapons.filter((item) => item.pickup)) {
     assert.equal(weapon.pickup.collected, false);
     assert.equal(weapon.effects.pickupVisible, true);
   }
 });
 
-test("level 2 selects the basic torches, grants molotov/minigun, and leaves a whip to collect", () => {
+test("level 2 grants molotov/minigun and leaves the launcher left of the entrance and whip on the right", () => {
   const { state, messages, sounds, keys, keyboardCodes } = fixture(2);
   assert.equal(state.kid.hasMolotov, true);
   assert.equal(state.kid.hasMinigun, true);
   assert.equal(state.kid.hasRocketLauncher, false);
   assert.equal(state.kid.hasJetpack, false);
-  assert.equal(state.rocketLauncher, null);
+  assert.equal(state.rocketLauncher.pickup.collected, false);
+  assert.equal(state.rocketLauncher.effects.pickupVisible, true);
+  assert.equal(state.rocketLauncher.pickup.room, 5);
+  const startRoom = state.level.rooms[5];
+  assert.equal(state.rocketLauncher.pickup.worldX - startRoom.x * 320, 48);
+  assert.equal(state.rocketLauncher.pickup.worldY - startRoom.y * 189, 119);
+  assert.equal(state.level.getTileAt(1, 1, 5).isSafeWalkable(), true);
+  assert.equal(state.level.getTileAt(2, 1, 5).isExitDoor(), true);
   assert.equal(state.kid.activeWeapon, "twinTorches");
   assert.equal(state.kid.twinTorchesEquipped, true);
   assert.equal(state.kid.minigunEquipped, false);
   assert.equal(state.kid.hasWhip, false);
   assert.equal(state.whip.pickup.collected, false);
   assert.equal(state.whip.effects.pickupVisible, true);
+  assert.equal(state.whip.pickup.worldX - startRoom.x * 320, 144);
   assert.equal(state.weapons.includes(state.whip), false);
   assert.equal(state.whip.actionKey, keys.get(keyboardCodes.X));
   keys.get(keyboardCodes.X).onDown.dispatch();
@@ -303,7 +323,7 @@ test("level 2 selects the basic torches, grants molotov/minigun, and leaves a wh
   keys.get(keyboardCodes.THREE).onDown.dispatch();
   assert.equal(state.kid.activeWeapon, "minigun");
   keys.get(keyboardCodes.FOUR).onDown.dispatch();
-  assert.equal(state.kid.activeWeapon, "minigun", "the launcher remains unavailable before level 3");
+  assert.equal(state.kid.activeWeapon, "minigun", "the launcher remains unavailable until collected");
   const pickup = state.whip.pickup;
   const room = state.level.rooms[pickup.room];
   state.kid.room = pickup.room;
@@ -317,6 +337,77 @@ test("level 2 selects the basic torches, grants molotov/minigun, and leaves a wh
   assert.equal(state.kid.minigunEquipped, true);
   assert.equal(state.whip.effects.pickupVisible, false);
   assert.ok(messages.at(-1).startsWith("X WHIP"));
+});
+
+function collectLauncher(state) {
+  const pickup = state.rocketLauncher.pickup;
+  const room = state.level.rooms[pickup.room];
+  state.kid.room = pickup.room;
+  state.kid.baseX = room.x * 320;
+  state.kid.baseY = room.y * 189 + 3;
+  state.kid.charX = ((pickup.worldX - state.kid.baseX) * 140) / 320;
+  state.kid.charY = pickup.worldY - state.kid.baseY;
+  state.rocketLauncher.checkPickup();
+}
+
+test("a launcher collected in level 2 carries to level 3 and survives restarting that level", () => {
+  const { state, PrinceJS, keys, keyboardCodes } = fixture(2);
+  collectLauncher(state);
+  assert.equal(state.kid.hasRocketLauncher, true);
+  assert.equal(state.rocketLauncher.pickup.collected, true);
+  assert.equal(state.kid.activeWeapon, "rocketLauncher");
+  state.nextLevel(2);
+  assert.equal(PrinceJS.currentLevel, 3);
+  state.shutdown();
+  state.create();
+  assert.equal(state.level.number, 3);
+  assert.equal(state.kid.hasRocketLauncher, true);
+  assert.equal(state.rocketLauncher.pickup.collected, true, "the fallback pickup is hidden when already owned");
+  assert.equal(state.rocketLauncher.effects.pickupVisible, false);
+  assert.equal(state.kid.activeWeapon, "twinTorches");
+  keys.get(keyboardCodes.FOUR).onDown.dispatch();
+  assert.equal(state.kid.activeWeapon, "rocketLauncher");
+  state.restartLevel();
+  state.shutdown();
+  state.create();
+  assert.equal(state.kid.hasRocketLauncher, true);
+  assert.equal(state.rocketLauncher.effects.pickupVisible, false);
+  assert.equal(state.kid.activeWeapon, "twinTorches");
+});
+
+test("missing the level 2 launcher leaves the level 3 fallback to collect", () => {
+  const { state } = fixture(2);
+  state.nextLevel(2);
+  state.shutdown();
+  state.create();
+  assert.equal(state.kid.hasRocketLauncher, false);
+  assert.equal(state.rocketLauncher.pickup.collected, false);
+  assert.equal(state.rocketLauncher.effects.pickupVisible, true);
+  collectLauncher(state);
+  assert.equal(state.kid.hasRocketLauncher, true);
+});
+
+test("a fresh level 2 attempt restores its pickup and ignores another level's inventory checkpoint", () => {
+  const { state } = fixture(2, { level: 3, owned: ["hasRocketLauncher"] });
+  assert.equal(state.kid.hasRocketLauncher, false);
+  collectLauncher(state);
+  assert.equal(state.kid.hasRocketLauncher, true);
+  state.restartLevel();
+  state.shutdown();
+  state.create();
+  assert.equal(state.kid.hasRocketLauncher, false);
+  assert.equal(state.rocketLauncher.effects.pickupVisible, true);
+});
+
+test("starting a new game clears the previous run's equipment checkpoint", () => {
+  const context = vm.createContext({});
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/Boot.js"), "utf8"), context);
+  vm.runInContext(
+    'PrinceJS.Utils = {clearQuery() {}, applyQuery() {}}; PrinceJS.levelInventory = {level: 3, owned: ["hasRocketLauncher"]}; PrinceJS.Restart();',
+    context
+  );
+  assert.equal(vm.runInContext("PrinceJS.levelInventory", context), null);
+  assert.equal(vm.runInContext("PrinceJS.currentLevel", context), 1);
 });
 
 test("level 3 shows the launcher until walking over it, and restart restores that pickup", () => {

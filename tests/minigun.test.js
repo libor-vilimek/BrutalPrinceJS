@@ -145,7 +145,7 @@ function fixture() {
   return { PrinceJS, game, kid, level, delegate, gun, key, enemy, bullet, setTile };
 }
 
-test("level 1 minigun waits on the left of the room below and requires a grounded pickup", () => {
+test("level 1 minigun waits on the right of the room below and requires a grounded pickup", () => {
   const f = fixture();
   const map = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/maps/level1.json"), "utf8"));
   for (const room of [1, 2]) {
@@ -160,11 +160,11 @@ test("level 1 minigun waits on the left of the room below and requires a grounde
   f.level.number = 1;
   const pickup = f.gun.findPickup(1);
   assert.equal(pickup.room, 2);
-  assert.equal(pickup.worldX, 48);
+  assert.equal(pickup.worldX, 240);
   assert.equal(pickup.worldY, 189 + 119);
-  assert.equal(f.level.getTileAt(1, 1, 2).element, f.PrinceJS.Level.TILE_FLOOR);
+  assert.equal(f.level.getTileAt(7, 1, 2).element, f.PrinceJS.Level.TILE_FLOOR);
   f.gun.pickup = pickup;
-  f.kid.charX = 21;
+  f.kid.charX = 105;
   f.kid.charY = 53;
   f.gun.checkPickup();
   assert.equal(pickup.collected, false);

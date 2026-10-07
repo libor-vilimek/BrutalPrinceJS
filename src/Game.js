@@ -151,11 +151,17 @@ PrinceJS.Game.prototype = {
     this.kid.hasMolotov = this.kid.hasMinigun = PrinceJS.currentLevel >= 2;
     this.kid.hasRocketLauncher = PrinceJS.currentLevel >= 4;
     this.kid.hasWhip = PrinceJS.currentLevel >= 3;
+    this.kid.hasJetpack = PrinceJS.currentLevel >= 13;
+    if (PrinceJS.levelInventory && PrinceJS.levelInventory.level === PrinceJS.currentLevel) {
+      for (let owned of PrinceJS.levelInventory.owned) {
+        this.kid[owned] = true;
+      }
+    }
     this.twinTorches = new PrinceJS.TwinTorches(this);
     this.minigun = new PrinceJS.Minigun(this, json.prince.direction * (json.prince.reverse || 1));
     this.rocketLauncher = null;
     this.weapons = [this.twinTorches, this.minigun];
-    if (PrinceJS.currentLevel >= 3) {
+    if (PrinceJS.currentLevel >= 2) {
       this.rocketLauncher = new PrinceJS.RocketLauncher(this, -json.prince.direction * (json.prince.reverse || 1));
       this.weapons.push(this.rocketLauncher);
     }
@@ -166,7 +172,6 @@ PrinceJS.Game.prototype = {
       this.whip = new PrinceJS.Whip(this, direction);
     }
     this.twinTorches.equip();
-    this.kid.hasJetpack = PrinceJS.currentLevel >= 13;
     this.jetpack = new PrinceJS.Jetpack(this, json.prince.direction * (json.prince.reverse || 1));
     this.input.keyboard.addKey(Phaser.Keyboard.J).onDown.add(this.toggleJetpack, this);
 
@@ -827,6 +832,14 @@ PrinceJS.Game.prototype = {
       return;
     }
 
+    // Checkpoint only equipment brought into the next level. A retry restores
+    // that starting inventory; pickups from an unfinished attempt stay reset.
+    PrinceJS.levelInventory = {
+      level: PrinceJS.currentLevel + 1,
+      owned: ["hasTwinTorches", "hasMolotov", "hasMinigun", "hasRocketLauncher", "hasWhip", "hasJetpack"].filter(
+        (owned) => this.kid[owned]
+      )
+    };
     PrinceJS.danger = null;
     PrinceJS.currentLevel++;
     PrinceJS.currentHealth = PrinceJS.currentLevel === 13 ? this.kid.health : null;

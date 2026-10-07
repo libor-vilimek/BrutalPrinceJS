@@ -54,6 +54,8 @@ PrinceJS.Preloader.prototype = {
 
     // SFX
     this.game.load.audio("MinigunFire", "assets/sfx/minigun-fire.wav");
+    this.game.load.audio("BurningScreamLow", "assets/sfx/burning-scream-low.wav");
+    this.game.load.audio("BurningScreamHigh", "assets/sfx/burning-scream-high.wav");
     this.game.load.audio("FreeFallLand", "assets/sfx/01_Free_fall_land.mp3");
     this.game.load.audio("LooseFloorLands", "assets/sfx/02_Loose_floor_lands.mp3");
     this.game.load.audio("LooseFloorShakes1", "assets/sfx/03_Loose_floor_shakes.mp3");

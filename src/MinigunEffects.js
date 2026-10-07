@@ -453,7 +453,10 @@ PrinceJS.MinigunEffects.prototype.settleCasing = function (casing, support) {
     let graphics = this.game.add.graphics(room.x, room.y);
     let depth = this.casingDepths[casing.depthLayer];
     depth.graphics.addChildAt(graphics, depth.graphics.children.length - 1);
-    graphics.autoCull = true;
+    // Phaser 2 Graphics.getBounds returns empty bounds once autoCull has set
+    // renderable=false. A later cache rebuild can then erase an offscreen pile.
+    // Cached batches are already cheap sprites; leave viewport clipping to the renderer.
+    graphics.autoCull = false;
     batch = { graphics: graphics, casings: [], depthLayer: casing.depthLayer, dirty: false };
     batches.push(batch);
     room.batches.push(batch);
@@ -572,6 +575,9 @@ PrinceJS.MinigunEffects.prototype.updateCasings = function (dt) {
   for (let i = 0; i < this.dirtyCasingBatches.length; i++) {
     let batch = this.dirtyCasingBatches[i];
     if (batch.casings.length) {
+      // Graphics.getLocalBounds reuses _currentBounds even when a camera/world
+      // bounds query populated it. Rebuild from the actual local brass geometry.
+      batch.graphics._currentBounds = null;
       batch.graphics.cacheAsBitmap = true;
     }
     batch.dirty = false;

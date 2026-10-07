@@ -20,7 +20,7 @@ function setup() {
     launch.apply(this, args);
     if (!hadState && args[0].kickState) {
       const s = args[0].kickState;
-      f.launches.push({ enemy: args[0], vx: s.vx, vy: s.vy, spin: s.spin });
+      f.launches.push({ enemy: args[0], vx: s.vx, vy: s.vy, spin: s.spin, secondary: s.secondary });
     }
   };
   f.advanceKick = (seconds) => {
@@ -81,15 +81,17 @@ test("the full spin blocks repeated sword strikes including wind-up and recovery
   assert.equal(f.kid.action, "bump");
 });
 
-test("crowd collisions produce different trajectories, flips, blood and separated landing positions", () => {
+test("direct kicks retain varied trajectories, flips, cosmetic blood and separated landing positions", () => {
   const f = setup();
-  const guards = [2, 3, 4, 5].map((x) => f.guard(x));
+  f.placeKid(4);
+  const guards = [5, 5, 3, 3].map((x) => f.guard(x));
   const hp = guards.map((enemy) => enemy.health);
   f.kick.request();
   f.advanceKick(0.13);
   assert.equal(f.launches.length, 0);
   f.advanceKick(1.4);
-  assert.equal(f.launches.length, 4, "nearby bodies pass their impact to the crowd");
+  assert.equal(f.launches.length, 4, "both arcs reach only the guards next to the Prince");
+  assert.ok(f.launches.every((s) => !s.secondary));
   assert.ok(new Set(f.launches.map((s) => Math.round(s.vx))).size >= 3);
   assert.ok(new Set(f.launches.map((s) => Math.round(s.vy))).size >= 3);
   assert.ok(f.launches.some((s) => s.spin < 0) && f.launches.some((s) => s.spin > 0));
@@ -103,6 +105,63 @@ test("crowd collisions produce different trajectories, flips, blood and separate
   assert.ok(new Set(xs.map((x) => Math.round(x / 16))).size >= 3, "at least three distinct landing spots");
   assert.ok(guards.every((e) => !e.kickState && e.alpha === 1));
   assert.ok(f.delegate.bloodEffects.bursts.length > 0);
+});
+
+test("a directly kicked body topples neighbours locally, and secondary falls cannot propagate", () => {
+  const f = setup();
+  const first = f.guard(2);
+  const second = f.guard(3);
+  f.kick.request();
+  for (let i = 0; i < 100 && !second.kickState; i++) {
+    f.advanceKick(0.01);
+  }
+  assert.ok(first.kickState && !first.kickState.secondary);
+  assert.ok(second.kickState && second.kickState.secondary);
+  assert.equal(second.kickState.phase, "toppling");
+  assert.ok(!second.kickState.sprite, "a normal native fall replaces the flying cartwheel");
+  const secondX = f.kick.position(second).x;
+  const third = f.guard(4);
+  f.kick.syncEnemy(third, { x: secondX + 18, y: f.kick.position(second).y, room: second.room }, 16);
+  // Remove the original projectile so any new impact would have to propagate
+  // from the secondary fall; the third guard is directly inside that fall's path.
+  f.kick.releaseEnemy(first);
+  first.active = false;
+  f.advanceKick(0.6);
+  assert.ok(!third.kickState);
+  assert.equal(f.launches.length, 2);
+  assert.equal(second.kickState.phase, "recovering");
+  assert.ok(Math.abs(f.kick.position(second).x - secondX) <= 12, "secondary falls stay close to their original feet");
+  assert.equal(second.alpha, 1);
+  assert.ok(f.kick.updateEnemyActor(second), "fallen secondary guards still yield their combat AI");
+  f.advanceKick(3);
+  assert.ok(!second.kickState);
+  assert.equal(second.health, 3);
+  assert.equal(third.health, 3);
+});
+
+test("an empty kick stays visible and direct contact stops at one tile in both directions", () => {
+  for (const direction of [-1, 1]) {
+    const f = setup();
+    f.placeKid(4, 1, 1, direction);
+    const distant = f.guard(4);
+    const origin = f.kick.position(f.kid);
+    f.kick.syncEnemy(distant, { x: origin.x + direction * 34, y: origin.y, room: origin.room }, 16);
+    f.kick.request();
+    assert.equal(f.kid.specialAction.type, "kick");
+    assert.equal(f.kick.effects.pose.visible, true);
+    f.advanceKick(0.83);
+    assert.ok(!distant.kickState, "a guard beyond the foot's short range stays upright");
+    assert.equal(f.kick.effects.pose.visible, true);
+    f.advanceKick(0.3);
+    distant.active = false;
+    f.kick.request();
+    assert.equal(f.kid.specialAction.type, "kick", "no eligible enemy is required on free ground");
+    f.advanceKick(0.86);
+    assert.equal(f.kid.specialAction, null);
+    assert.equal(f.kid.cropRect, null);
+    assert.equal(f.kick.effects.pose.visible, false);
+    assert.equal(f.kid.activeWeapon, "minigun");
+  }
 });
 
 test("left-facing launch crosses an actual room link and restores the native sprite after landing", () => {
@@ -125,7 +184,9 @@ test("walls and closed gates block both the sweep and flying bodies", () => {
     const behind = f.guard(3);
     f.setTile(1, 2, 1, element);
     f.kick.request();
-    assert.ok(!f.kid.specialAction);
+    assert.equal(f.kid.specialAction.type, "kick", "a blocked target does not prevent an empty kick");
+    f.advanceKick(1.1);
+    assert.ok(!behind.kickState);
     f.PrinceJS.HordeSpawns.place(behind, 15);
     const near = f.guard(2);
     f.setTile(1, 2, 1, 1);

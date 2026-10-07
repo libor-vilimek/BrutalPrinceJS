@@ -320,6 +320,14 @@ async function kickChecks(preview = false) {
       }
     }
     check(strip, "A real seven-tile corridor is available for the domino");
+    placeKid(strip.room, (strip.column + 1) * 14, strip.row, 1);
+    state.kickKey.onDown.dispatch();
+    check(
+      state.kick.actionStage === "kicking" && state.kick.effects.pose.visible,
+      "C visibly kicks even in an empty corridor"
+    );
+    await pause(900);
+    check(!state.kid.specialAction && !state.kid.cropRect, "An empty kick finishes and restores normal movement");
     const guards = state.enemies.filter((enemy) => enemy.alive && enemy.baseCharName === "guard").slice(0, 4);
     const arrange = async (direction) => {
       state.minigun.bullets.length = 0;
@@ -372,12 +380,18 @@ async function kickChecks(preview = false) {
       check(state.kid.health === health, "Sword hits cannot hurt the Prince during wind-up, spin or follow-through");
       await pause(350);
       check(
-        guards.every((enemy) => enemy.kickState),
-        "Actual contact launches all four guards facing " + direction
+        guards[0].kickState &&
+          !guards[0].kickState.secondary &&
+          guards.slice(1).some((enemy) => enemy.kickState && enemy.kickState.secondary),
+        "Only the nearest guard is kicked directly; body contact topples secondary victims facing " + direction
       );
       check(
-        new Set(guards.map((enemy) => Math.round(state.kick.position(enemy).x / 20))).size >= 3,
-        "The crowd spreads into at least three separate positions"
+        guards
+          .slice(1)
+          .every(
+            (enemy) => !enemy.kickState || (enemy.kickState.secondary && !enemy.kickState.sprite && enemy.alpha === 1)
+          ),
+        "Secondary victims fall with their native sprite instead of becoming more flying projectiles"
       );
       check(
         guards.every((enemy) => enemy.health === 4),
@@ -590,10 +604,10 @@ async function combatChecks() {
     const secondRoom = state.level.rooms[below];
     check(state.minigun.pickup.room === below, "Minigun waits in the second room below the starting screen");
     check(
-      state.minigun.pickup.worldX === secondRoom.x * 320 + 48 &&
+      state.minigun.pickup.worldX === secondRoom.x * 320 + 240 &&
         state.minigun.pickup.worldY === secondRoom.y * 189 + 119 &&
-        state.level.getTileAt(1, 1, below).element === 1,
-      "Minigun is clearly positioned on plain floor at the left of the second room"
+        state.level.getTileAt(7, 1, below).element === 1,
+      "Minigun is clearly positioned on plain floor between columns on the right of the second room"
     );
     check(
       state.molotov.pickup.worldY === state.kid.baseY + 116,
@@ -799,7 +813,7 @@ async function campaignChecks() {
         "Level " + number + " grants the correct weapons immediately"
       );
       check(
-        !!state.molotov && !!state.rocketLauncher === number >= 3,
+        !!state.molotov && !!state.rocketLauncher === number >= 2,
         "Level " + number + " has the correct controllers"
       );
       check(
@@ -1325,13 +1339,14 @@ async function openingChecks() {
       await pause(60);
     }
     check(
-      state.kid.alive && state.kid.room === 2 && state.kid.charBlockY === 1 && !state.kid.hasMinigun,
-      "Releasing the ledge lands safely in the second room without collecting the gun early"
+      state.kid.alive && state.kid.room === 2 && state.kid.charBlockY === 1,
+      "Releasing the ledge lands safely beside the right-hand minigun"
     );
-    await walkUntil(
-      () => state.kid.hasMinigun,
-      "Walking left from the burnt guards picks up the clearly visible minigun",
-      -1
+    // This ledge route now lands within the right-hand pickup's native radius.
+    // The earlier assertion ensures it was not collected while still hanging.
+    check(
+      state.kid.hasMinigun && state.minigun.pickup.collected,
+      "The nearby minigun is collected upon landing, after the molotov encounter"
     );
     check(!state.minigun.effects.weapon.visible, "The collected gun stays hidden until firing");
     const shots = state.minigun.effects.shots;
@@ -1409,6 +1424,194 @@ async function walkUntil(predicate, description, direction = 1) {
   await pause(300);
 }
 
+async function pickupChecks(previewLevel = 0) {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    let state = await loadMission(previewLevel || 1);
+    quietEnemies(state);
+    if (previewLevel) {
+      if (previewLevel === 1) {
+        placeKid(2, 70, 1, 1);
+      }
+      await watchCamera(state, () => !state.roomCamera.transition);
+      await pause(100);
+      testGame.paused = true;
+      report(
+        previewLevel === 1
+          ? "Minigun on the right, on clear floor between the columns."
+          : "Launcher on the left of the arrival doors; whip on the right."
+      );
+      return;
+    }
+    let pickup = state.minigun.pickup;
+    let room = state.level.rooms[2];
+    check(
+      pickup.room === 2 && pickup.worldX === room.x * 320 + 240 && state.level.getTileAt(7, 1, 2).element === 1,
+      "Level-one minigun is on clear right-hand floor, outside the columns"
+    );
+    state = await loadMission(2);
+    quietEnemies(state);
+    pickup = state.rocketLauncher.pickup;
+    room = state.level.rooms[5];
+    check(
+      !state.kid.hasRocketLauncher &&
+        pickup.room === 5 &&
+        pickup.worldX === room.x * 320 + 48 &&
+        state.rocketLauncher.effects.ground.visible,
+      "Level-two launcher is visible on the left of the starting doors"
+    );
+    check(!state.kid.hasWhip && state.whip.effects.ground.visible, "The whip remains available beside the same doors");
+    await walkUntil(() => state.kid.hasRocketLauncher, "Walking left from the real start collects the launcher", -1);
+    check(
+      state.kid.activeWeapon === "rocketLauncher" && !state.rocketLauncher.effects.ground.visible,
+      "The collected launcher is usable and its pickup disappears"
+    );
+    state = await freshLevel(3);
+    check(
+      state.kid.hasRocketLauncher && !state.rocketLauncher.effects.ground.visible,
+      "Level progression retains the collected launcher"
+    );
+    state = await freshLevel(3);
+    check(state.kid.hasRocketLauncher, "Restarting level three retains equipment brought into it");
+    state = await loadMission(3);
+    check(
+      !state.kid.hasRocketLauncher && state.rocketLauncher.effects.ground.visible,
+      "A fresh level-three start still offers the fallback pickup"
+    );
+    report("ALL PICKUP AND CARRY-OVER CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    busy = false;
+  }
+}
+
+async function brassChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    const state = await loadMission(3);
+    quietEnemies(state);
+    state.selectWeapon("minigun");
+    placeKid(13, 70, 2, 1);
+    await watchCamera(state, () => !state.roomCamera.transition);
+    const effects = state.minigun.effects;
+    const muzzle = effects.getMuzzle();
+    const emit = (count) => {
+      for (let i = 0; i < count; i++) {
+        effects.shot(muzzle.x, muzzle.y, muzzle.direction);
+      }
+    };
+    const cachePixels = () =>
+      (effects.casingRooms[13]?.batches || []).map((batch) => {
+        const canvas = batch.graphics._cachedSprite && batch.graphics._cachedSprite.buffer.canvas;
+        check(canvas && canvas.width > 1 && canvas.height > 1, "A settled batch has a nonempty bitmap");
+        const bytes = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+        let pixels = 0,
+          hash = 2166136261;
+        for (let i = 0; i < bytes.length; i++) {
+          hash = Math.imul(hash ^ bytes[i], 16777619) >>> 0;
+          if (i % 4 === 3 && bytes[i]) {
+            pixels++;
+          }
+        }
+        return { pixels, hash, width: canvas.width, height: canvas.height };
+      });
+    emit(160);
+    await pause(180);
+    placeKid(5, 35, 2, 1);
+    await pause(3400);
+    const away = cachePixels();
+    check(
+      away.length === 10 && away.every((batch) => batch.pixels > 0),
+      "Every depth still contains actual brass pixels after settling offscreen"
+    );
+    const count = effects.casings.length;
+    placeKid(13, 70, 2, 1);
+    await watchCamera(state, () => !state.roomCamera.transition);
+    const returned = cachePixels();
+    check(
+      JSON.stringify(returned) === JSON.stringify(away) && effects.casings.length === count,
+      "Returning preserves the exact cached pixels and every casing"
+    );
+    emit(20);
+    await pause(120);
+    placeKid(5, 35, 2, 1);
+    await pause(3400);
+    check(
+      effects.casings.length > count && cachePixels().every((batch) => batch.pixels > 0),
+      "Adding more brass and leaving again cannot blank the growing pile"
+    );
+    placeKid(13, 70, 2, 1);
+    await watchCamera(state, () => !state.roomCamera.transition);
+    await pause(100);
+    testGame.paused = true;
+    report("ALL PERSISTENT BRASS PIXEL CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    busy = false;
+  }
+}
+
+async function burningAudioChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  const state = gameState();
+  try {
+    check(testAudio.checked, "Sound was explicitly enabled for this audio test");
+    testGame.paused = false;
+    state.weaponAudio.unlock();
+    for (let i = 0; i < 30 && testGame.sound.context && testGame.sound.context.state !== "running"; i++) {
+      await pause(20);
+    }
+    check(
+      !testGame.sound.usingWebAudio || testGame.sound.context.state === "running",
+      "Audio is unlocked by the test button gesture"
+    );
+    quietEnemies(state);
+    placeKid(2, 70, 1, 1);
+    await watchCamera(state, () => !state.roomCamera.transition);
+    const guards = state.enemies.filter((enemy) => enemy.alive && enemy.baseCharName === "guard").slice(0, 6);
+    guards.forEach((enemy, i) => {
+      placeGuard(enemy, 2, 12 + i, i % 2 ? 1 : -1);
+      state.burningEnemyEffects.ignite(enemy);
+    });
+    let peak = 0;
+    for (let i = 0; i < 115; i++) {
+      await pause(50);
+      const voices = state.weaponAudio.burningVoices.filter((voice) => voice.sound.isPlaying);
+      peak = Math.max(peak, voices.length);
+      if (voices.length > 2) {
+        throw new Error("More than two overlapping burning screams");
+      }
+    }
+    check(peak === 2, "Six burning guards use at most two simultaneous real audio voices");
+    check(
+      state.weaponAudio.burningVoices.every((voice) => !voice.sound.isPlaying && !voice.burn),
+      "All voices stop when the burns finish"
+    );
+    report("ALL BURNING AUDIO CHECKS PASSED — SOUND MUTED AGAIN");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    testAudio.checked = false;
+    testGame.sound.mute = true;
+    state.weaponAudio.stopBurning();
+    busy = false;
+  }
+}
+
 async function featureChecks() {
   if (busy) {
     return;
@@ -1429,7 +1632,7 @@ async function featureChecks() {
       check(!state.enemies.some((enemy) => enemy.room === spawnRoom), "Mission " + number + " spawn room is clear");
       check(!state.kid.hasSword && !state.kid.sword.visible, "Mission " + number + " starts without a sword");
       check(state.kid.alive && state.minigun.pickup, "Minigun is available safely");
-      check(!!state.rocketLauncher === number >= 3, "Rocket launcher remains locked before mission three");
+      check(!!state.rocketLauncher === number >= 2, "Rocket launcher becomes collectible from mission two");
       check(state.kid.health === 10 && state.ui.playerHPActive === 10, "Mission starts with ten health points");
       if (number === 1) {
         state.kid.stabbed();
@@ -2411,6 +2614,11 @@ document.getElementById("melee-fire").addEventListener("click", meleeFireChecks)
 document.getElementById("whip-check").addEventListener("click", whipChecks);
 document.getElementById("kick-check").addEventListener("click", () => kickChecks());
 document.getElementById("kick-preview").addEventListener("click", () => kickChecks(true));
+document.getElementById("pickup-check").addEventListener("click", () => pickupChecks());
+document.getElementById("pickup-preview-one").addEventListener("click", () => pickupChecks(1));
+document.getElementById("pickup-preview-two").addEventListener("click", () => pickupChecks(2));
+document.getElementById("brass-check").addEventListener("click", brassChecks);
+document.getElementById("burn-audio-check").addEventListener("click", burningAudioChecks);
 document.getElementById("torch-preview").addEventListener("click", torchPreview);
 document.getElementById("whip-preview").addEventListener("click", whipPreview);
 document.getElementById("door-blood").addEventListener("click", doorBloodPreview);

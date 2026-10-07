@@ -24,6 +24,16 @@ PrinceJS.RocketLauncher.prototype.constructor = PrinceJS.RocketLauncher;
 
 PrinceJS.RocketLauncher.prototype.findPickup = function (direction) {
   let pickup = PrinceJS.RangedWeapon.prototype.findPickup.call(this, direction);
+  if (PrinceJS.currentLevel === 2 && this.level.number === 2 && this.kid.room === 5) {
+    let room = this.level.rooms[5];
+    let tile = this.level.getTileAt(1, 1, 5);
+    if (tile.element === PrinceJS.Level.TILE_TORCH) {
+      // The torch is on the back wall: the clear floor below it is immediately
+      // left of the arrival doors, with the whip on their other side.
+      pickup.worldX = room.x * PrinceJS.ROOM_WIDTH + PrinceJS.BLOCK_WIDTH + 16;
+      pickup.worldY = room.y * PrinceJS.ROOM_HEIGHT + PrinceJS.Utils.convertBlockYtoY(1) + 3;
+    }
+  }
   if (PrinceJS.currentLevel === 3 && this.level.number === 3 && this.kid.room === 9) {
     let room = this.level.rooms[9];
     let tile = this.level.getTileAt(8, 2, 9);

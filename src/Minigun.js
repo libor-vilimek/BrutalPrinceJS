@@ -30,12 +30,12 @@ PrinceJS.Minigun.prototype.findPickup = function (direction) {
   if (this.level.number === 1 && this.kid.room === 1) {
     let below = this.level.rooms[this.kid.room].links.down;
     let room = this.level.rooms[below];
-    let tile = room && this.level.getTileAt(1, 1, below);
+    let tile = room && this.level.getTileAt(7, 1, below);
     if (tile && tile.element === PrinceJS.Level.TILE_FLOOR) {
-      // Keep the gun on clear floor at the left of the lower room, away from
-      // the landing, loose board and pillar fronts.
+      // The second screen is below the start. This clear right-hand floor
+      // keeps the gun between the pillars, beyond the landing and loose board.
       pickup.room = below;
-      pickup.worldX = room.x * PrinceJS.ROOM_WIDTH + PrinceJS.BLOCK_WIDTH + 16;
+      pickup.worldX = room.x * PrinceJS.ROOM_WIDTH + 7 * PrinceJS.BLOCK_WIDTH + 16;
       pickup.worldY = room.y * PrinceJS.ROOM_HEIGHT + PrinceJS.Utils.convertBlockYtoY(1) + 3;
     }
   }

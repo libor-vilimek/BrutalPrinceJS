@@ -15,11 +15,12 @@ PrinceJS.Kick = function (delegate) {
   this.launchCount = Math.floor(Math.random() * 5);
 };
 
-PrinceJS.Kick.RANGE = 64;
+PrinceJS.Kick.RANGE = 32;
 PrinceJS.Kick.NEAR = 144;
 PrinceJS.Kick.DURATION = 0.84;
 PrinceJS.Kick.COOLDOWN = 1.02;
 PrinceJS.Kick.RECOVERY = 2;
+PrinceJS.Kick.TOPPLE_DURATION = 0.38;
 
 PrinceJS.Kick.prototype = {
   // Share the whip's tested world/foot geometry, including gates and room links.
@@ -128,7 +129,22 @@ PrinceJS.Kick.prototype = {
 
   prepare: function (dt) {
     let kid = this.kid;
-    if (!this.canPrepare() || !this.targets(this.threatOrigin(), PrinceJS.Kick.NEAR, false).length) {
+    if (!this.canPrepare()) {
+      return;
+    }
+    if (!this.targets(this.threatOrigin(), PrinceJS.Kick.NEAR, false).length) {
+      // An empty kick is still a proper visible action. Only a nearby threat
+      // permits skipping weapon sequences or accelerating native animations.
+      if (
+        !kid.specialAction &&
+        !kid.pickupPotion &&
+        !kid.pickupSword &&
+        (["stand", "startrun", "running", "runstop", "crawl"].includes(kid.action) ||
+          /^step\d+$/.test(kid.action) ||
+          (kid.action === "stoop" && kid.charFrame === 109))
+      ) {
+        this.begin();
+      }
       return;
     }
     let action = kid.specialAction;
@@ -252,7 +268,7 @@ PrinceJS.Kick.prototype = {
     }
   },
 
-  knockDown: function (enemy, direction, strength, chain) {
+  knockDown: function (enemy, direction, strength, chain, secondary = false) {
     if (!this.canTarget(enemy) || chain.has(enemy)) {
       return;
     }
@@ -266,11 +282,12 @@ PrinceJS.Kick.prototype = {
       { speed: 250, lift: 165, spin: -5 },
       { speed: 440, lift: 175, spin: 8 }
     ];
-    let style = styles[this.launchCount++ % styles.length];
+    let style = secondary ? { speed: 65, lift: 0, spin: 0 } : styles[this.launchCount++ % styles.length];
     let foot = this.position(enemy);
     let state = {
       owner: this,
-      phase: "airborne",
+      phase: secondary ? "toppling" : "airborne",
+      secondary,
       elapsed: 0,
       position: foot,
       direction,
@@ -289,8 +306,8 @@ PrinceJS.Kick.prototype = {
       vy: -style.lift * (0.9 + this.random() * 0.2),
       spin: direction * style.spin,
       rotation: 0,
-      friction: 330 + this.random() * 240,
-      bounceX: 0.35 + this.random() * 0.2
+      friction: secondary ? 600 : 330 + this.random() * 240,
+      bounceX: secondary ? 0 : 0.35 + this.random() * 0.2
     };
     enemy.kickState = state;
     enemy.action = "stand";
@@ -300,9 +317,14 @@ PrinceJS.Kick.prototype = {
     enemy.sword.visible = false;
     enemy.opponent = this.kid;
     this.enemies.add(enemy);
-    this.effects.launch(enemy, state);
-    this.syncEnemy(enemy, foot, 31);
-    enemy.alpha = 0;
+    if (secondary && enemy.charFace === direction) {
+      enemy.changeFace();
+    }
+    if (!secondary) {
+      this.effects.launch(enemy, state);
+    }
+    this.syncEnemy(enemy, foot, secondary ? 16 : 31);
+    enemy.alpha = secondary ? state.alpha : 0;
     if (this.delegate.bloodEffects) {
       this.delegate.bloodEffects.hit(enemy, { weapon: "kick", x: foot.x, y: foot.y - 27, room: foot.room, direction });
     }
@@ -359,7 +381,7 @@ PrinceJS.Kick.prototype = {
       }
       let support = this.tileAt(state.position.x, state.position.y - 2, state.position.room);
       if (support && !support.tile.isWalkable()) {
-        state.phase = "airborne";
+        state.phase = state.secondary ? "toppling" : "airborne";
         state.elapsed = 0;
         state.x = state.position.x;
         state.y = state.position.y - 20;
@@ -367,8 +389,10 @@ PrinceJS.Kick.prototype = {
         state.vx = state.vy = 0;
         state.launchFloor = state.position.y;
         state.rotation = 0;
-        this.effects.launch(enemy, state);
-        enemy.alpha = 0;
+        if (!state.secondary) {
+          this.effects.launch(enemy, state);
+          enemy.alpha = 0;
+        }
       } else if (state.elapsed >= state.recovery) {
         this.releaseEnemy(enemy);
         enemy.action = "stand";
@@ -379,12 +403,12 @@ PrinceJS.Kick.prototype = {
     }
     // Short sweeps catch thin gates and body-to-body hits at the fastest launch.
     let steps = Math.max(1, Math.ceil(((Math.abs(state.vx) + Math.abs(state.vy)) * dt) / 3));
-    for (let i = 0; i < steps && enemy.kickState === state && state.phase === "airborne"; i++) {
+    for (let i = 0; i < steps && enemy.kickState === state && state.phase !== "recovering"; i++) {
       let beforeSpeed = Math.abs(state.vx) + Math.abs(state.vy);
       let result = this.physics.step(state, dt / steps, {
         gravity: 620,
         bounceX: state.bounceX,
-        bounceY: state.bounceCount < 1 ? 0.22 : 0,
+        bounceY: !state.secondary && state.bounceCount < 1 ? 0.22 : 0,
         friction: state.friction
       });
       if (result.invalid || !this.level.rooms[state.room]) {
@@ -394,14 +418,19 @@ PrinceJS.Kick.prototype = {
       }
       state.rotation += (state.spin * dt) / steps;
       state.position = { x: state.x, y: state.y + 18, room: state.room };
-      this.syncEnemy(enemy, state.position, 31);
-      enemy.alpha = 0;
+      let frame = state.secondary
+        ? [16, 24, 29, 31, 33, 35][Math.min(5, Math.floor((state.elapsed / PrinceJS.Kick.TOPPLE_DURATION) * 6))]
+        : 31;
+      this.syncEnemy(enemy, state.position, frame);
+      enemy.alpha = state.secondary ? state.alpha : 0;
       enemy.checkChoppers();
       if (!enemy.alive) {
         this.releaseEnemy(enemy);
         return;
       }
-      for (let other of this.delegate.enemies || []) {
+      // Only the body actually struck by the foot can bowl over neighbours.
+      // Those neighbours fall back in place and never pass the impact onward.
+      for (let other of state.secondary ? [] : this.delegate.enemies || []) {
         if (!this.canTarget(other) || state.chain.has(other) || beforeSpeed < 80) {
           continue;
         }
@@ -411,8 +440,8 @@ PrinceJS.Kick.prototype = {
           Math.abs(foot.y - 20 - state.y) <= 25 &&
           this.lineClear({ x: state.x, y: state.y, room: state.room }, { x: foot.x, y: foot.y - 20, room: foot.room })
         ) {
-          this.knockDown(other, Math.sign(state.vx) || state.direction, 0.85 + this.random() * 0.25, state.chain);
-          // The incoming body loses some momentum; the new one overtakes it.
+          this.knockDown(other, Math.sign(state.vx) || state.direction, 1, state.chain, true);
+          // The incoming body loses momentum without launching another missile.
           state.vx *= 0.8;
           state.spin *= -0.75;
         }
@@ -454,7 +483,11 @@ PrinceJS.Kick.prototype = {
           }
         }
       }
-      if (result.grounded && Math.abs(state.vx) < 18) {
+      if (
+        result.grounded &&
+        Math.abs(state.vx) < 18 &&
+        (!state.secondary || state.elapsed >= PrinceJS.Kick.TOPPLE_DURATION)
+      ) {
         this.recover(enemy, state.y + state.radius);
       }
     }

@@ -27,6 +27,7 @@ PrinceJS.Init = function () {
   PrinceJS.currentLevel = 1;
   PrinceJS.maxHealth = 10;
   PrinceJS.currentHealth = null;
+  PrinceJS.levelInventory = null;
   PrinceJS.minutes = PrinceJS.TIME_LIMIT;
   PrinceJS.startTime = undefined;
   PrinceJS.endTime = undefined;

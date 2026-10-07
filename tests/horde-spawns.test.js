@@ -286,13 +286,17 @@ test("mission one opens with two molotov targets under the shaft and a clear app
     PrinceJS.Level.TILE_SPACE,
     "the bottle has an open shaft above its targets"
   );
-  assert.equal(level.getTileAt(1, 1, below).element, PrinceJS.Level.TILE_FLOOR, "the gun waits on unobstructed floor");
+  assert.equal(
+    level.getTileAt(7, 1, below).element,
+    PrinceJS.Level.TILE_FLOOR,
+    "the gun waits on clear right-hand floor"
+  );
   const nextRoom = level.rooms[below].links.right;
   assert.ok(
     !guards.some(
       (guard) => guard.room === nextRoom && Math.floor(guard.location / 10) === 1 && guard.location % 10 < 3
     ),
-    "the next room's entrance gives the Prince room to reach the left-hand gun"
+    "the next room's entrance stays clear beyond the right-hand gun"
   );
   assert.ok(
     guards.some((guard) => guard.room === nextRoom && guard.location === 13),
