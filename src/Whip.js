@@ -245,6 +245,7 @@ PrinceJS.Whip.prototype = {
       enemy.health > 0 &&
       !enemy.burningDeath &&
       !enemy.whipState &&
+      !enemy.kickState &&
       !enemy.inFallDown &&
       !enemy.inJumpUp &&
       this.level.rooms[enemy.room]

@@ -58,6 +58,9 @@ PrinceJS.Enemy.prototype.updateActor = function () {
   if (this.whipState && this.whipState.owner.updateEnemyActor(this)) {
     return;
   }
+  if (this.kickState && this.kickState.owner.updateEnemyActor(this)) {
+    return;
+  }
   this.updateSplash();
   this.updateBehaviour();
   this.processCommand();

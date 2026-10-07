@@ -19,6 +19,7 @@ Tento dokument zachycuje aktuální přání z celé této konverzace. Změny zd
 - [Molotov a oheň](#molotov-a-oheň)
 - [Minigun a raketomet](#minigun-a-raketomet)
 - [Bič](#bič)
+- [Nouzový kopanec](#nouzový-kopanec)
 - [Jetpack](#jetpack)
 - [Nepřátelé a jejich smrti](#nepřátelé-a-jejich-smrti)
 - [Krev a její vrstvy](#krev-a-její-vrstvy)
@@ -36,6 +37,7 @@ Tento dokument zachycuje aktuální přání z celé této konverzace. Změny zd
 - **INPUT-04:** `J` zapne/nasadí jetpack a dalším stiskem ho zase sundá. Létání používá šipky.
 - **INPUT-05:** Již získané zbraně zůstávají dostupné pro přepínání. Automatické vybavení v pozdějších levelech nesmí vyžadovat opakovaný sběr.
 - **INPUT-06:** Bič je samostatná akce na klávese `X`, mimo výběr zbraní. `5` ho už nevybírá a `CTRL`/`F` ho nespouští. Sebrání ani použití biče nemění právě vybranou zbraň.
+- **INPUT-07:** `C` je samostatný otočný kopanec, dostupný od začátku bez sběru a bez změny vybrané zbraně.
 
 Navazující implementační rozhodnutí: pořadí zbraní je `1` pochodně, `2` molotov, `3` minigun, `4` raketomet. Pochodně jsou výchozí volba při vstupu do levelu. Bič zůstává automaticky dostupný od levelu 3, samostatně na `X`. Tato doplnění navazují na současné ovládání a postup inventáře; uživatel výslovně určil pořadí pochodní a molotovu a následně vyjmutí biče z výběru zbraní.
 
@@ -60,9 +62,9 @@ Navazující implementační rozhodnutí: pořadí zbraní je `1` pochodně, `2`
 
 - **ART-01:** Nové pózy musí odpovídat původnímu modelu prince, zejména velikosti hlavy, barvě a velikosti vlasů, původní světlé barvě oblečení a odhaleným pažím. Krk má mít přirozené původní proporce. Animace nesmí trvale barvit oblečení dožluta; krátké osvětlení zábleskem při střelbě podle ART-04 zůstává. Při střelbě má být úsměv/škleb malý; cenění zubů nesmí vytvářet přehnaně velká ústa.
 - **ART-02:** Zbraň se při běžném pohybu nezobrazuje trvale. Vidět je při vytahování, používání a schovávání.
-- **ART-03:** Vytahování střelných zbraní je krátká blokující sekvence: princ během ní nevykonává jiné akce.
+- **ART-03:** Vytahování střelných zbraní je krátká blokující sekvence. Výjimkou je výslovně vyžádaný nouzový kopanec na `C` při blízkém nepříteli podle KICK-02.
 - **ART-04:** Při střelbě princ drží minigun i raketomet oběma rukama a stojí na místě. Záblesky ho osvětlují žlutě.
-- **ART-05:** Když střelba skončí, následuje blokující animace schování zbraně. Pohyb ani přepnutí zbraně ji nesmí přeskočit.
+- **ART-05:** Když střelba skončí, následuje blokující animace schování zbraně. Pohyb ani přepnutí zbraně ji nesmí přeskočit. Nouzový kopanec na `C` při blízkém nepříteli je výjimkou podle KICK-02.
 - **ART-06:** Animace mají být pěkné a svižné. Nové vybavení nesmí měnit původní proporce ani omylem přidat další ruce či ponechat po skončení neúplný sprite.
 
 ## Dvě pochodně
@@ -102,7 +104,18 @@ Navazující implementační rozhodnutí: pořadí zbraní je `1` pochodně, `2`
 - **WHIP-04:** I při krátkém pádu dopadne na obličej a ztratí jeden život. Velký pád ho zabije podle původních pravidel pádu.
 - **WHIP-05:** Přeživší nepřítel se musí chvíli sbírat ze země, než začne znovu útočit. Samotné zotavování neodebírá opakovaně další životy.
 
-Navazující implementační rozhodnutí: krátký stisk `X` dokončí jeden švih, držení švihy opakuje. Po uvolnění princ bič schová a teprve pak se obnoví pohyb a přepínání zbraní. Bič nepřerušuje jinou právě probíhající akci ani schovávání střelné zbraně.
+Navazující implementační rozhodnutí: krátký stisk `X` dokončí jeden švih, držení švihy opakuje. Po uvolnění princ bič schová a teprve pak se obnoví pohyb a přepínání zbraní; výjimkou je nouzový kopanec podle KICK-02. Bič nepřerušuje jinou právě probíhající akci ani schovávání střelné zbraně.
+
+## Nouzový kopanec
+
+- **KICK-01:** Otočný kopanec na `C` odhodí blízké nepřátele před princem i za ním. Jejich nárazy srazí další strážce jako domino. Samotný kopanec, nárazy ani zotavování neubírají životy.
+- **KICK-02:** Je-li poblíž dosažitelný nepřítel, `C` umožní zkrátit probíhající animace a ihned zahájit otočný kop. Platí i pro výlez, tasení a schovávání zbraní včetně biče. Jde o výslovnou výjimku z obvyklých blokujících animací; bez nepřítele se tím animace nepřeskakují. Samotná otočka má pomalejší, čitelnou animaci.
+- **KICK-03:** Sražení nepřátelé se chvíli sbírají ze země a nemohou útočit. Domino vyžaduje skutečný kontakt a respektuje stěny, mříže, podlahy a propojení místností.
+- **KICK-04:** Bič zůstává samostatný na `X` se svým dosavadním dosahem, stahováním z hrany a poškozením. Kopanec jej nemění ani nevybírá jinou zbraň.
+- **KICK-05:** Během celé otočky včetně nápřahu a dokončení je princ chráněn proti zásahům nepřátel mečem. Ochrana končí s animací; původní pravidla pastí a pádů platí dál.
+- **KICK-06:** Odhození má být výrazné a hravé: strážci létají pod různými úhly, s různou silou a rotací, s částečně náhodnou obměnou. Nemají všichni skončit na jedné hromadě. Krev při kopu a nárazech je kosmetická a nepřidává poškození.
+
+Implementační rozhodnutí: okolí pro nouzovou reakci je 144 světových pixelů, dosah samotného kopu 64 pixelů na obě strany. Otočka na jedné opěrné noze trvá 0,84 s, opakování nejdříve po 1,02 s; držení `C` umožňuje opakovat reakci. Přední oblouk zasahuje mezi 0,14–0,34 s, zadní mezi 0,39–0,65 s. Výlez a navazující běžné animace běží osmkrát rychleji přes původní příkazy, akce zbraní se ukončí a schovají. Úvodní sběr pochodní před ukončením dokončí skutečné sejmutí obou pochodní. Pět obměňovaných způsobů odhození kombinuje nízký smyk, vysoký oblouk a přemety; fyzika zajišťuje odrazy od stěn, stropů a podlah. Po dopadu se nad strážcem točí hvězdičky a zotavení trvá 2–2,45 s. Smrt, volný pád, let jetpackem a příběhový odchod do dalšího levelu se kopancem nepřeskakují. Pasti a velké pády nadále používají původní pravidla prostředí; výška získaná samotným odhozením ani krátký pád po kopanci nezpůsobují poškození. Kostlivec a stín si zachovávají zvláštní pravidla.
 
 ## Jetpack
 
@@ -156,6 +169,7 @@ Navazující implementační rozhodnutí: krátký stisk `X` dokončí jeden šv
 - **WORK-01:** Když uživatel výslovně požaduje subagenty či paralelní zpracování, skutečně rozděl práci mezi subagenty. Nestačí jen popsat plán.
 - **WORK-02:** Paralelní změny je nutné následně propojit a ověřit jako celek, zejména sdílený inventář, animace, vstupy, vrstvy a přechody mezi levely.
 - **WORK-03:** Ruleset popisuje platná rozhodnutí, nikoli seznam slibů. Nedodělané nebo nejasné body označ; neprohlašuj je za vyřešené pouze proto, že jsou zapsané zde.
+- **WORK-04:** Testy a prohlídky hry probíhají s vypnutým zvukem. Výjimkou je cílené testování zvuku; po něm se zvuk zase vypne.
 
 ## Nahrazená rozhodnutí
 

@@ -144,6 +144,9 @@ PrinceJS.Game.prototype = {
     this.input.keyboard.addKey(Phaser.Keyboard.FOUR).onDown.add(() => this.selectWeapon("rocketLauncher"), this);
     this.whipKey = this.input.keyboard.addKey(Phaser.Keyboard.X);
     this.whipKey.onDown.add(this.handleWhipControl, this);
+    this.kickKey = this.input.keyboard.addKey(Phaser.Keyboard.C);
+    this.kickKey.onDown.add(this.handleKickControl, this);
+    this.kick = new PrinceJS.Kick(this);
     this.kid.hasTwinTorches = true;
     this.kid.hasMolotov = this.kid.hasMinigun = PrinceJS.currentLevel >= 2;
     this.kid.hasRocketLauncher = PrinceJS.currentLevel >= 4;
@@ -198,6 +201,9 @@ PrinceJS.Game.prototype = {
 
   update: function () {
     const delta = this.game.time.elapsedMS / 1000;
+    if (this.kick) {
+      this.kick.update(delta);
+    }
     if (this.jetpack) {
       this.jetpack.update(delta);
     }
@@ -271,6 +277,10 @@ PrinceJS.Game.prototype = {
   },
 
   shutdown: function () {
+    if (this.kick) {
+      this.kick.destroy();
+      this.kick = null;
+    }
     if (this.jetpack) {
       this.jetpack.destroy();
     }
@@ -305,6 +315,7 @@ PrinceJS.Game.prototype = {
       Phaser.Keyboard.THREE,
       Phaser.Keyboard.FOUR,
       Phaser.Keyboard.X,
+      Phaser.Keyboard.C,
       Phaser.Keyboard.J
     ]) {
       this.input.keyboard.removeKey(key);
@@ -341,6 +352,12 @@ PrinceJS.Game.prototype = {
     }
   },
 
+  handleKickControl: function () {
+    if (this.kick) {
+      this.kick.request();
+    }
+  },
+
   selectWeapon: function (id) {
     let action = this.kid.specialAction;
     if (
@@ -360,7 +377,7 @@ PrinceJS.Game.prototype = {
       } else if (id === "twinTorches") {
         instruction = " - HOLD CTRL / F TO SPIN";
       }
-      this.ui.showText(weapon.spec.label + instruction, "weapon");
+      this.ui.showText(weapon.spec.label + instruction + " / C KICK", "weapon");
       this.ui.hideTextTimer = 40;
     }
   },

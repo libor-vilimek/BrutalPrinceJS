@@ -517,7 +517,7 @@ PrinceJS.Kid.prototype.stabbed = function () {
   let action = this.specialAction;
   if (
     action &&
-    action.type === "twinTorches" &&
+    ["twinTorches", "kick"].includes(action.type) &&
     typeof action.owner.handleMeleeHit === "function" &&
     action.owner.handleMeleeHit()
   ) {

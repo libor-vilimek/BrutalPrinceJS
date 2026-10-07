@@ -10,7 +10,7 @@ let animated = false;
 let previews = [];
 let previewGame = new Phaser.Game(
   previewColumns * 320,
-  Math.ceil(12 / previewColumns) * 230 + 20,
+  Math.ceil(13 / previewColumns) * 230 + 20,
   Phaser.CANVAS,
   "preview",
   {
@@ -81,7 +81,8 @@ function buildPreviews() {
     "Original · crouched",
     "Minigun · crouched",
     "Molotov · hanging",
-    "Jetpack · straps"
+    "Jetpack · straps",
+    "Kick · roundhouse"
   ];
   labels.forEach((label, index) => {
     const column = index % previewColumns;
@@ -178,6 +179,13 @@ function buildPreviews() {
           time: time % 0.6,
           lighterLit: true
         });
+    } else if (index === 12) {
+      const effects = new PrinceJS.KickEffects(previewGame, kid);
+      const state = { actionStage: "kicking", elapsed: 0 };
+      draw = (time) => {
+        state.elapsed = time % PrinceJS.Kick.DURATION;
+        effects.update(0, state);
+      };
     } else if (index === 11) {
       const effects = new PrinceJS.JetpackEffects(previewGame, kid, pickup);
       const state = { active: true, phase: "flying", elapsed: 1, velocityX: 0, velocityY: 0 };

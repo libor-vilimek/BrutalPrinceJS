@@ -7,3 +7,4 @@ Před každou změnou si přečti kořenový [ruleset.md](ruleset.md), zejména 
 - Pokud není jasné, zda autor promptu chce dosavadní pravidlo změnit a jak, zeptej se ho před změnou. Domněnka ani odlišné současné chování kódu nejsou potvrzením.
 - Při výslovné změně aktualizuj ruleset a související nápovědu či dokumentaci. Zachovej pravidla z ostatních oblastí.
 - Před dokončením ověř výsledné chování i soulad s rulesetem. U společných změn zkontroluj také ovládání, inventář, animace, grafické vrstvy a postup mezi levely.
+- Při testování a prohlídkách v prohlížeči nech zvuk vypnutý. Zapni ho pouze tehdy, když cíleně ověřuješ zvuk, a po takovém testu ho zase vypni.

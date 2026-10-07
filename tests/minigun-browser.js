@@ -3,9 +3,16 @@
 // Browser integration fixture. The production entry point remains unchanged.
 const gameFrame = document.getElementById("game");
 const output = document.getElementById("results");
+const testAudio = document.getElementById("test-audio");
 const pause = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 let testGame;
 let busy = false;
+
+testAudio.addEventListener("change", () => {
+  if (testGame && testGame.sound) {
+    testGame.sound.mute = !testAudio.checked;
+  }
+});
 
 function report(text) {
   output.textContent += text + "\n";
@@ -26,6 +33,9 @@ async function ready() {
   for (let i = 0; i < 100; i++) {
     const games = gameFrame.contentWindow.Phaser && gameFrame.contentWindow.Phaser.GAMES;
     testGame = games && games[0];
+    if (testGame && testGame.sound) {
+      testGame.sound.mute = !testAudio.checked;
+    }
     if (testGame && testGame.cache && testGame.cache.checkJSONKey("kid-anims") && !testGame.load.isLoading) {
       testGame.stage.disableVisibilityChange = true;
       testGame.paused = false;
@@ -283,6 +293,135 @@ async function whipChecks() {
   }
 }
 
+async function kickChecks(preview = false) {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    const state = await loadMission(4);
+    quietEnemies(state);
+    let strip;
+    for (const [id, room] of Object.entries(state.level.rooms)) {
+      for (let row = 0; row < 3 && !strip; row++) {
+        for (let column = 0; column <= 3 && !strip; column++) {
+          if (
+            Array.from({ length: 7 }, (_, i) => state.level.getTileAt(column + i, row, Number(id))).every(
+              (tile) => tile.isSafeWalkable() && !tile.isBarrier() && !tile.isExitDoor() && tile.element !== 11
+            )
+          ) {
+            strip = { room: Number(id), row, column };
+          }
+        }
+      }
+      if (strip) {
+        break;
+      }
+    }
+    check(strip, "A real seven-tile corridor is available for the domino");
+    const guards = state.enemies.filter((enemy) => enemy.alive && enemy.baseCharName === "guard").slice(0, 4);
+    const arrange = async (direction) => {
+      state.minigun.bullets.length = 0;
+      quietEnemies(state);
+      placeKid(strip.room, (strip.column + (direction === 1 ? 1 : 7)) * 14, strip.row, direction);
+      await watchCamera(state, () => !state.roomCamera.transition);
+      guards.forEach((enemy, i) => {
+        state.kick.releaseEnemy(enemy);
+        placeGuard(enemy, strip.room, strip.row * 10 + strip.column + (direction === 1 ? i + 1 : 5 - i), -direction);
+        enemy.health = 4;
+      });
+    };
+    for (const direction of [1, -1]) {
+      await arrange(direction);
+      state.selectWeapon("minigun");
+      state.minigun.beginDraw();
+      if (direction === -1) {
+        state.minigun.beginHolster();
+      }
+      state.kick.cooldown = 0;
+      state.kick.launchCount = 0;
+      state.kick.random = () => 0.5;
+      state.kickKey.onDown.dispatch();
+      check(
+        state.kid.specialAction && state.kid.specialAction.type === "kick",
+        "C immediately interrupts drawing/stowing"
+      );
+      check(
+        guards.every((enemy) => !enemy.kickState),
+        "A readable wind-up precedes the roundhouse contact"
+      );
+      check(
+        !state.minigun.effects.weapon.visible && !state.minigun.effects.head.visible,
+        "The interrupted gun and its pose are hidden"
+      );
+      if (preview) {
+        await pause(240);
+        testGame.paused = true;
+        report(
+          "C: protected roundhouse. Guards scatter, tumble and see stars; blood is cosmetic. X still uses the whip."
+        );
+        return;
+      }
+      const health = state.kid.health;
+      state.kid.stabbed();
+      await pause(400);
+      state.kid.stabbed();
+      await pause(350);
+      state.kid.stabbed();
+      check(state.kid.health === health, "Sword hits cannot hurt the Prince during wind-up, spin or follow-through");
+      await pause(350);
+      check(
+        guards.every((enemy) => enemy.kickState),
+        "Actual contact launches all four guards facing " + direction
+      );
+      check(
+        new Set(guards.map((enemy) => Math.round(state.kick.position(enemy).x / 20))).size >= 3,
+        "The crowd spreads into at least three separate positions"
+      );
+      check(
+        guards.every((enemy) => enemy.health === 4),
+        "Every guard retains all HP (" + guards.map((enemy) => enemy.health).join(", ") + ")"
+      );
+      check(
+        !state.kid.specialAction && !state.kid.cropRect && state.kid.activeWeapon === "minigun",
+        "The full Prince sprite and selected weapon are restored"
+      );
+      state.weaponCtrlKey.isDown = true;
+      await pause(480);
+      check(
+        state.minigun.actionStage === "firing",
+        "There is enough recovery time to draw and fire the selected weapon"
+      );
+      state.weaponCtrlKey.isDown = false;
+      state.minigun.cancelAction();
+    }
+    const prepared = await prepareMolotov();
+    const ledgeState = prepared.state;
+    const kid = ledgeState.kid;
+    try {
+      const target = ledgeState.enemies.find((enemy) => enemy.alive && enemy.baseCharName === "guard");
+      placeGuard(target, 1, 11, 1);
+      target.health = 4;
+      const startY = kid.baseY + kid.charY;
+      ledgeState.kickKey.onDown.dispatch();
+      await pause(300);
+      check(
+        kid.baseY + kid.charY === startY - 63 && !/hang|climb/.test(kid.action),
+        "C finishes a real threatened ledge climb in under 0.3 seconds"
+      );
+      check(target.health === 4 && kid.alive, "The emergency climb preserves enemy HP and the Prince survives");
+    } finally {
+      kid.keyS = prepared.keyS;
+    }
+    report("ALL ROUNDHOUSE AND FLYING GUARD CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    busy = false;
+  }
+}
+
 async function torchPreview() {
   if (busy) {
     return;
@@ -396,6 +535,8 @@ function placeKid(room, x, row, direction) {
   state.weaponFireKey.isDown = false;
   state.weaponCtrlKey.isDown = false;
   state.whipKey.isDown = false;
+  state.kickKey.isDown = false;
+  state.kick.cancelAction();
   if (state.whip) {
     state.whip.cancelAction();
   }
@@ -2268,6 +2409,8 @@ document.getElementById("boundary-preview").addEventListener("click", async () =
 document.getElementById("run").addEventListener("click", combatChecks);
 document.getElementById("melee-fire").addEventListener("click", meleeFireChecks);
 document.getElementById("whip-check").addEventListener("click", whipChecks);
+document.getElementById("kick-check").addEventListener("click", () => kickChecks());
+document.getElementById("kick-preview").addEventListener("click", () => kickChecks(true));
 document.getElementById("torch-preview").addEventListener("click", torchPreview);
 document.getElementById("whip-preview").addEventListener("click", whipPreview);
 document.getElementById("door-blood").addEventListener("click", doorBloodPreview);
@@ -2469,6 +2612,7 @@ document.getElementById("inspect").addEventListener("click", () => {
       casings: state.minigun.effects.casings.length,
       depthLayers: new Set(state.minigun.effects.casings.map((casing) => casing.depthLayer)).size,
       audioShots: state.weaponAudio.shots,
+      audioMuted: testGame.sound.mute,
       audioState: testGame.sound.context && testGame.sound.context.state,
       audioLocked: testGame.sound.touchLocked,
       audioReady: testGame.cache.isSoundReady("MinigunFire"),

@@ -16,6 +16,7 @@ function fixture(number) {
     FOUR: 52,
     FIVE: 53,
     X: 88,
+    C: 67,
     J: 74,
     R: 82,
     A: 65,
@@ -49,6 +50,7 @@ function fixture(number) {
     "Molotov",
     "GorePhysics",
     "Whip",
+    "Kick",
     "Game"
   ]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "../src", file + ".js"), "utf8"), context);
@@ -179,7 +181,7 @@ function fixture(number) {
       this[event] = signal();
     }
   };
-  const effects = function (game, kid, pickup) {
+  const effects = function (game, kid, pickup = { collected: true }) {
     this.collected = pickup.collected;
     this.pickupVisible = !this.collected;
     this.collectCalls = this.destroyCalls = 0;
@@ -195,6 +197,7 @@ function fixture(number) {
     this.destroy = () => this.destroyCalls++;
   };
   PrinceJS.MinigunEffects = PrinceJS.RocketLauncherEffects = PrinceJS.MolotovEffects = PrinceJS.WhipEffects = effects;
+  PrinceJS.KickEffects = effects;
   // These tests exercise Game's grants/selection. Dedicated controller tests cover melee animation and physics.
   PrinceJS.TwinTorches = function (delegate) {
     Object.assign(this, {
@@ -388,9 +391,13 @@ for (const number of [4, 12, 13, 14, 99]) {
     assert.equal(state.kid.specialAction, null);
     assert.equal(state.kid.activeWeapon, "molotov");
     const oldWhip = state.whip;
+    const oldKick = state.kick;
+    assert.equal(oldKick.key, keys.get(keyboardCodes.C));
     const originalWeapons = Array.from(state.weapons);
     state.shutdown();
     assert.equal(oldWhip.destroyed, true);
+    assert.equal(oldKick.destroyed, true);
+    assert.equal(keys.has(keyboardCodes.C), false);
     assert.equal(oldWhip.effects.destroyCalls, 1);
     assert.equal(keys.has(keyboardCodes.X), false);
     assert.equal(state.whip, null);
@@ -405,6 +412,8 @@ for (const number of [4, 12, 13, 14, 99]) {
     assert.equal(state.kid.jetpackEquipped, false);
     assert.equal(state.kid.hasWhip, true);
     assert.notEqual(state.whip, oldWhip);
+    assert.notEqual(state.kick, oldKick);
+    assert.equal(state.kick.key, keys.get(keyboardCodes.C));
     assert.equal(state.whip.actionKey, keys.get(keyboardCodes.X));
     assert.equal(state.whip.pickup.collected, true);
     assert.equal(state.whip.effects.pickupVisible, false);
