@@ -1097,23 +1097,48 @@ PrinceJS.Kid.prototype.tryPickup = function () {
 };
 
 PrinceJS.Kid.prototype.keyL = function () {
-  return this.cursors.left.isDown || this.pointerL() || PrinceJS.Utils.gamepadLeftPressed(this.game);
+  return (
+    this.cursors.left.isDown ||
+    this.game.touchControls?.isDown(37) ||
+    this.pointerL() ||
+    PrinceJS.Utils.gamepadLeftPressed(this.game)
+  );
 };
 
 PrinceJS.Kid.prototype.keyR = function () {
-  return this.cursors.right.isDown || this.pointerR() || PrinceJS.Utils.gamepadRightPressed(this.game);
+  return (
+    this.cursors.right.isDown ||
+    this.game.touchControls?.isDown(39) ||
+    this.pointerR() ||
+    PrinceJS.Utils.gamepadRightPressed(this.game)
+  );
 };
 
 PrinceJS.Kid.prototype.keyU = function () {
-  return this.cursors.up.isDown || this.pointerU() || PrinceJS.Utils.gamepadUpPressed(this.game);
+  return (
+    this.cursors.up.isDown ||
+    this.game.touchControls?.isDown(38) ||
+    this.pointerU() ||
+    PrinceJS.Utils.gamepadUpPressed(this.game)
+  );
 };
 
 PrinceJS.Kid.prototype.keyD = function () {
-  return this.cursors.down.isDown || this.pointerD() || PrinceJS.Utils.gamepadDownPressed(this.game);
+  return (
+    this.cursors.down.isDown ||
+    this.game.touchControls?.isDown(40) ||
+    this.pointerD() ||
+    PrinceJS.Utils.gamepadDownPressed(this.game)
+  );
 };
 
 PrinceJS.Kid.prototype.keyS = function () {
-  return this.shiftKey.isDown || this.pointerS() || PrinceJS.Utils.gamepadActionPressed(this.game);
+  return (
+    this.shiftKey.isDown ||
+    this.game.touchControls?.isDown(16) ||
+    this.pointerS() ||
+    PrinceJS.Utils.gamepadActionPressed(this.game)
+  );
 };
 
 PrinceJS.Kid.prototype.keyWeaponAction = function () {

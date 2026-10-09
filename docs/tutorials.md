@@ -2,6 +2,8 @@
 
 The tutorial is an expanding collection of short, contextual lessons. Each lesson pauses the game behind an amber panel with Persian-inspired geometric ornaments, explains one new mechanic, and displays the key needed to try it. A fresh press of a displayed key closes the panel, resumes play, and performs that input. Other keys, Escape, and clicks on the backdrop do not dismiss it. The displayed keycaps also work as touch/mouse buttons. Tab cycles through them without leaving the panel.
 
+Escape or the top-right menu opens settings above a lesson; closing settings returns to the same paused lesson. The Controls button there explains every keyboard, touch and controller action. On mobile, use the lesson's displayed keycap to confirm; the regular bottom-left movement/action buttons resume after the lesson. Opening a lesson clears held touch input, and changing touch-control preferences does not change tutorial completion or equipment ownership.
+
 ## Current contents
 
 | Lesson                | When it appears                                                                      | Accepted input                              | Assistance                                                                                             |

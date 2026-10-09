@@ -21,6 +21,10 @@ Project decisions and contribution guidance: [ruleset.md](ruleset.md) and [AGENT
   - `J`: Equip/activate the jetpack, or remove it; fly with the cursor keys
   - `SPACE`: Show Remaining Time
   - `ENTER`: Continue Game
+  - `ESC`: Open / close settings and pause / resume
+  - `CTRL / SHIFT + A`: Restart this level
+  - `CTRL / SHIFT + R`: Start a new game
+  - `CTRL / SHIFT + L`: Skip a level (levels 1–3 or custom levels)
 - Mouse
   - See Touch Controls for Mobile
 - Game Controller
@@ -85,22 +89,29 @@ Run `npm test` for camera, weapon collision and inventory tests. Open `http://lo
 
 ## Play Mobile
 
-- Browser: https://princejs.com
-  - Use Landscape Mode
-  - Single Tab
-  - Disable Landscape Tab Bar in Browser Settings
-- Add to Home Screen to start as Fullscreen App
-- Reduced difficulty (50%):
-  - https://princejs.com?strength=50
-- Touch Controls (tap/drag area on screen, fight mode in brackets):
+Open this version's deployed URL or local server on your phone or tablet. The complete game and HUD fit in both portrait and landscape, including browser chrome and screen safe areas. Rotate freely; the game keeps its original proportions. Adding it to the home screen is optional.
 
-  ![Mobile](assets/web/mobile.svg)
-  - Dragging can be used to trigger continuous move sequences, e.g.
-    - _Run Jump_: Tap Left or Right -> Hold -> Drag in Left or Right corner
-    - _Jump Grab_: (Run) Jump -> Hold -> Drag to Center (Shift)
+On-screen controls are enabled by default on mobile and disabled by default on desktop. Enable or disable them on either device in **Settings → On-screen controls**. Your explicit choice is saved on this browser, along with the separate sound and music preferences. Controls sit below the game at the bottom left so they do not cover the room or health display.
 
-- Weapons
-  - _Shift_: Fire the equipped weapon
+- **Arrows:** move, jump / climb up, crouch / climb down. Hold multiple buttons for a running jump.
+- **Walk / Grab:** the same as Shift: walk slowly, drink potions and hold edges. Combine with Down to lower yourself onto an edge.
+- **Fire:** hold to spin torches or fire a gun. With a molotov, hold to charge and release to throw; hold Up for the high arc. While hanging, press Fire to light and drop it below.
+- **Switch:** cycle torches, molotov, minigun and rocket launcher, skipping equipment you do not own. The current weapon appears on the button; normal drawing and stowing restrictions still apply.
+- **Kick / Whip:** the same as C / X; they keep the selected weapon. Whip is unavailable until acquired.
+- **Jetpack:** the same as J, available when owned. Use the arrows to fly.
+- **Time / Continue:** show remaining time, or continue after death / at the end of a level.
+
+Use multiple fingers to combine movement, grabbing and attacks. Releasing or cancelling a touch, changing orientation, losing focus, pausing or leaving a level clears held touch inputs. Touch buttons never press or release physical keyboard keys. Tutorial keycaps remain tappable while lessons pause the game.
+
+With on-screen controls disabled, the original mouse / touch regions are available: the left / right third moves, the top / bottom third jumps or crouches, and the center grabs, drinks or uses the selected weapon. Drag between regions to combine actions. These invisible regions are inactive while the labeled controls are enabled.
+
+## Settings and controls reference
+
+The small menu icon in the upper-right corner appears for 3.5 seconds at the beginning of each level or retry, then fades away. Move the mouse into that corner, click / tap it, tab to the button, or press **Esc** to reach the menu again.
+
+Settings provides independent **Sound effects** and **Music** sliders (0–100%) and mute buttons. Muting preserves the slider value for unmuting. Changes apply to playing and future sounds, including weapon audio and cutscenes. The original limit of two simultaneous burning screams remains unchanged.
+
+The **Controls** button opens the complete keyboard, touch / mouse and controller reference. Both panels pause gameplay and the campaign clock. Closing settings during a tutorial returns to that tutorial without dismissing its lesson. Preferences survive level changes, restarts and page reloads; private browsers that deny storage retain them only for the session.
 
 ## Play on Apple Watch
 

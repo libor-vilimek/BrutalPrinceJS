@@ -70,7 +70,7 @@ PrinceJS.WeaponAudio.prototype = {
     // changing the cadence or drowning out every other sound in the game.
     let accent = [1, 0.94, 0.98, 0.92][this.shots++ % 4];
     let volume = PrinceJS.WeaponAudio.MINIGUN_VOLUME * accent;
-    if (!sound.usingWebAudio) {
+    if (!sound.usingWebAudio && !this.game.settings) {
       volume *= sound.volume;
     }
     voice.play("", 0, volume, false, true);
@@ -115,7 +115,7 @@ PrinceJS.WeaponAudio.prototype = {
       if (!burn) {
         continue;
       }
-      let volume = PrinceJS.WeaponAudio.BURNING_VOLUME * (sound.usingWebAudio ? 1 : sound.volume);
+      let volume = PrinceJS.WeaponAudio.BURNING_VOLUME * (sound.usingWebAudio || this.game.settings ? 1 : sound.volume);
       voice.sound.play("", 0, volume, false, true);
       if (sound.usingWebAudio && voice.sound._sound) {
         let source = voice.sound._sound;

@@ -237,7 +237,10 @@ PrinceJS.Kick.prototype = {
       } else {
         this.sweep();
       }
-    } else if (this.cooldown === 0 && (this.pending > 0 || (this.key && this.key.isDown))) {
+    } else if (
+      this.cooldown === 0 &&
+      (this.pending > 0 || (this.key && this.key.isDown) || this.game.touchControls?.isDown(67))
+    ) {
       this.prepare(dt);
     } else {
       this.fastTime = 0;

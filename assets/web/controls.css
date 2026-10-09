@@ -1,0 +1,374 @@
+.menu-corner,
+.game-menu,
+.touch-controls {
+  font-family: "Trebuchet MS", system-ui, sans-serif;
+  color: #f6e6ce;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.menu-corner {
+  position: fixed;
+  z-index: 1200;
+  top: env(safe-area-inset-top, 0px);
+  right: env(safe-area-inset-right, 0px);
+  padding: 8px;
+  touch-action: manipulation;
+}
+
+.menu-toggle {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 10px;
+  border: 1px solid #c9955266;
+  border-radius: 10px;
+  background: #1b1712e6;
+  color: #efc58e;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 220ms;
+}
+
+.menu-visible .menu-toggle,
+.menu-open .menu-toggle,
+.menu-toggle:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .menu-corner:hover .menu-toggle {
+    opacity: 1;
+  }
+}
+
+.menu-toggle svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.game-menu {
+  position: fixed;
+  z-index: 1300;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  height: 100%;
+  height: 100dvh;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: #080706c7;
+  touch-action: pan-y;
+}
+
+.game-menu [hidden],
+.game-menu[hidden],
+.touch-controls[hidden] {
+  display: none;
+}
+
+.game-menu-panel {
+  width: min(480px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  padding: clamp(18px, 4vw, 30px);
+  border: 1px solid #af814a;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #2c241b, #141210 70%);
+  box-shadow:
+    0 24px 90px #000a,
+    inset 0 1px #f5d5a318;
+  scrollbar-width: thin;
+  scrollbar-color: #a67b48 #211b15;
+}
+
+.game-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.game-menu-eyebrow {
+  margin: 0 0 7px;
+  color: #be9867;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.game-menu h1 {
+  margin: 0;
+  font:
+    32px Georgia,
+    serif;
+}
+
+.game-menu h2 {
+  margin: 24px 0 12px;
+  font-size: 15px;
+  color: #efc58e;
+}
+
+.game-menu button,
+.touch-controls button {
+  box-sizing: border-box;
+  min-height: 44px;
+  border: 1px solid #947043;
+  border-radius: 8px;
+  background: #33291f;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.game-menu button:hover,
+.game-menu button[aria-pressed="true"] {
+  background: #53402a;
+}
+
+.game-menu button:focus-visible,
+.game-menu input:focus-visible,
+.menu-toggle:focus-visible,
+.touch-controls button:focus-visible {
+  outline: 2px solid #ffcf88;
+  outline-offset: 3px;
+}
+
+.game-menu .menu-close {
+  flex: 0 0 44px;
+  font:
+    26px Georgia,
+    serif;
+  background: transparent;
+  border-color: #79604480;
+}
+
+.menu-description,
+.menu-controls p {
+  color: #c4b6a3;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.menu-description {
+  margin: 18px 0 24px;
+}
+
+.menu-audio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 20px 0;
+  font-size: 14px;
+}
+
+.menu-audio output {
+  text-align: right;
+  color: #dfb77f;
+  font-variant-numeric: tabular-nums;
+}
+
+.menu-audio input {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  height: 44px;
+  accent-color: #dfad66;
+  touch-action: none;
+}
+
+.menu-touch-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 26px 0;
+  padding-top: 22px;
+  border-top: 1px solid #c995522f;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.menu-touch-setting small {
+  display: block;
+  margin-top: 6px;
+  color: #a89983;
+  font-size: 11px;
+}
+
+.menu-touch-setting input {
+  width: 28px;
+  height: 44px;
+  flex-shrink: 0;
+  margin: 0;
+  accent-color: #dfad66;
+}
+
+.menu-controls-button,
+.menu-resume,
+.menu-back {
+  width: 100%;
+  padding: 12px 16px;
+}
+
+.menu-controls-button {
+  display: flex;
+  justify-content: space-between;
+}
+
+.menu-note {
+  margin: 14px 0 22px;
+  text-align: center;
+  font-size: 10px;
+  color: #a89983;
+}
+
+.game-menu .menu-resume {
+  background: #dfad66;
+  color: #21170b;
+  font-weight: bold;
+}
+
+.game-menu .menu-resume:hover {
+  background: #f2c587;
+}
+
+.menu-controls dl {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.menu-controls dt,
+.menu-controls dd {
+  margin: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid #c9955220;
+}
+
+.menu-controls dt {
+  padding-right: 12px;
+  color: #f2c587;
+}
+
+.menu-controls dd {
+  color: #d2c5b3;
+}
+
+.menu-back {
+  margin: 12px 0;
+}
+
+.touch-controls {
+  --pad: clamp(44px, 7vmin, 48px);
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  align-self: flex-start;
+  gap: 12px;
+  padding: 8px;
+  box-sizing: border-box;
+  touch-action: none;
+}
+
+.touch-dpad {
+  display: grid;
+  grid-template: repeat(3, var(--pad)) / repeat(3, var(--pad));
+  gap: 4px;
+}
+
+.touch-up {
+  grid-area: 1 / 2;
+}
+.touch-left {
+  grid-area: 2 / 1;
+}
+.touch-grab {
+  grid-area: 2 / 2;
+}
+.touch-right {
+  grid-area: 2 / 3;
+}
+.touch-down {
+  grid-area: 3 / 2;
+}
+
+.touch-actions {
+  display: grid;
+  grid-template: repeat(3, var(--pad)) / repeat(3, calc(var(--pad) + 4px));
+  gap: 4px;
+}
+
+.touch-controls button {
+  min-height: 0;
+  padding: 3px;
+  font-size: 11px;
+  line-height: 1.1;
+  background: #211c17;
+  border-color: #8d704878;
+  touch-action: none;
+}
+
+.touch-dpad button:not(.touch-grab) {
+  font:
+    24px system-ui,
+    sans-serif;
+}
+
+.touch-controls .touch-fire {
+  background: #75401f;
+  border-color: #c48745;
+}
+
+.touch-controls .touch-switch {
+  grid-column: span 2;
+}
+
+.touch-weapon {
+  display: block;
+  margin-top: 4px;
+  font-size: 9px;
+  color: #cca878;
+}
+
+.touch-controls button.pressed {
+  background: #b2773d;
+  border-color: #f6d194;
+  color: white;
+}
+
+.touch-controls button:disabled {
+  opacity: 0.3;
+}
+
+.touch-controls[inert] {
+  opacity: 0.5;
+}
+
+@media (max-width: 359px), (max-height: 359px) {
+  .touch-controls {
+    --pad: 44px;
+    gap: 8px;
+    padding: 4px;
+  }
+  .menu-controls dl {
+    grid-template-columns: 95px minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-toggle {
+    transition: none;
+  }
+}

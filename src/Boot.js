@@ -30,6 +30,7 @@ PrinceJS.Init = function () {
   PrinceJS.levelInventory = null;
   PrinceJS.completedTutorials = new Set();
   PrinceJS.tutorialPauseTime = null;
+  PrinceJS.menuPauseTime = null;
   PrinceJS.minutes = PrinceJS.TIME_LIMIT;
   PrinceJS.startTime = undefined;
   PrinceJS.endTime = undefined;
@@ -79,6 +80,10 @@ PrinceJS.Boot.prototype = {
   },
 
   create: function () {
+    this.game.settings = new PrinceJS.GameSettings(this.game);
+    this.game.touchControls = new PrinceJS.TouchControls(this.game);
+    this.game.menu = new PrinceJS.GameMenu(this.game);
+    this.game.canvas.tabIndex = 0;
     this.world.scale.set(PrinceJS.SCALE_FACTOR);
     this.state.start("Preloader");
 

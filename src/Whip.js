@@ -82,7 +82,7 @@ PrinceJS.Whip.prototype = {
   },
 
   triggerDown: function () {
-    return !!(this.actionKey && this.actionKey.isDown);
+    return !!((this.actionKey && this.actionKey.isDown) || this.game.touchControls?.isDown(88));
   },
 
   canAct: function () {

@@ -119,7 +119,11 @@ PrinceJS.Molotov.prototype = {
   },
 
   triggerDown: function () {
-    if ((this.fireKey && this.fireKey.isDown) || (this.ctrlKey && this.ctrlKey.isDown)) {
+    if (
+      (this.fireKey && this.fireKey.isDown) ||
+      (this.ctrlKey && this.ctrlKey.isDown) ||
+      this.game.touchControls?.isDown(17)
+    ) {
       return true;
     }
     if (typeof this.kid.keyWeaponAction !== "function" || !this.kid.keyWeaponAction()) {

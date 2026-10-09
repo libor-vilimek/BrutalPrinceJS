@@ -96,7 +96,7 @@ PrinceJS.Preloader.prototype = {
 
     this.input.keyboard.onDownCallback = this.start.bind(this);
     this.game.input.onDown.addOnce(() => {
-      this.game.sound.context.resume();
+      this.game.settings.unlockAudio();
     });
 
     this.game.input.mouse.capture = true;

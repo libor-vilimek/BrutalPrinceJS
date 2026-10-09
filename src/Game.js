@@ -204,6 +204,10 @@ PrinceJS.Game.prototype = {
     PrinceJS.Utils.updateQuery();
     this.tutorial = new PrinceJS.Tutorial(this);
     this.twinTorches.startIntro();
+    if (this.game.touchControls) {
+      this.game.touchControls.attach(this);
+      this.game.menu.reveal();
+    }
   },
 
   update: function () {
@@ -272,6 +276,9 @@ PrinceJS.Game.prototype = {
   },
 
   pauseUpdate: function () {
+    if (this.game.menu && this.game.menu.isOpen) {
+      return;
+    }
     if (this.tutorial) {
       this.tutorial.pauseUpdate();
     }
@@ -300,6 +307,9 @@ PrinceJS.Game.prototype = {
     }
     this.checkLevelLogic();
     this.ui.updateUI();
+    if (this.game.touchControls) {
+      this.game.touchControls.update();
+    }
     this.checkTimers();
     this.firstUpdate = false;
     if (this.tutorial) {
@@ -308,6 +318,9 @@ PrinceJS.Game.prototype = {
   },
 
   shutdown: function () {
+    if (this.game.touchControls) {
+      this.game.touchControls.attach(null);
+    }
     if (this.tutorial) {
       this.tutorial.destroy();
       this.tutorial = null;
@@ -906,6 +919,9 @@ PrinceJS.Game.prototype = {
   },
 
   handleDead: function () {
+    if (this.game.touchControls) {
+      this.game.touchControls.clear();
+    }
     this.continueTimer = 10;
   },
 
@@ -955,6 +971,9 @@ PrinceJS.Game.prototype = {
   },
 
   onPause: function () {
+    if (this.game.menu && this.game.menu.isOpen) {
+      return;
+    }
     if (this.tutorial) {
       if (this.tutorial.active) {
         return;
@@ -966,6 +985,9 @@ PrinceJS.Game.prototype = {
   },
 
   onResume: function () {
+    if (this.game.menu && this.game.menu.isOpen) {
+      return;
+    }
     if (this.tutorial && this.tutorial.active) {
       return;
     }

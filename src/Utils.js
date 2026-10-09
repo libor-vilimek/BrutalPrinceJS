@@ -236,6 +236,11 @@ PrinceJS.Utils = {
   },
 
   pointerDown: function (game) {
+    // Labeled controls own touch input while enabled; canvas taps must not
+    // simultaneously activate the old invisible movement/weapon regions.
+    if (game.touchControls && !game.touchControls.root.hidden) {
+      return false;
+    }
     if (game.input.activePointer.leftButton && game.input.activePointer.leftButton.isDown) {
       return true;
     }
@@ -322,7 +327,9 @@ PrinceJS.Utils = {
         seconds: -1
       };
     }
-    let diff = (PrinceJS.endTime || PrinceJS.tutorialPauseTime || new Date()).getTime() - PrinceJS.startTime.getTime();
+    let diff =
+      (PrinceJS.endTime || PrinceJS.tutorialPauseTime || PrinceJS.menuPauseTime || new Date()).getTime() -
+      PrinceJS.startTime.getTime();
     let minutes = Math.floor(diff / 60000);
     let seconds = Math.floor(diff / 1000) % 60;
     return { minutes, seconds };

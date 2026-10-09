@@ -198,7 +198,7 @@ PrinceJS.RangedWeapon.prototype = {
   },
 
   triggerDown: function () {
-    if (this.fireKey.isDown || (this.ctrlKey && this.ctrlKey.isDown)) {
+    if (this.fireKey.isDown || (this.ctrlKey && this.ctrlKey.isDown) || this.game.touchControls?.isDown(17)) {
       return true;
     }
     if (!this.kid.keyWeaponAction()) {

@@ -40,6 +40,10 @@ Tento dokument zachycuje aktuální přání z celé této konverzace. Změny zd
 - **INPUT-05:** Již získané zbraně zůstávají dostupné pro přepínání. Automatické vybavení v pozdějších levelech nesmí vyžadovat opakovaný sběr.
 - **INPUT-06:** Bič je samostatná akce na klávese `X`, mimo výběr zbraní. `5` ho už nevybírá a `CTRL`/`F` ho nespouští. Sebrání ani použití biče nemění právě vybranou zbraň.
 - **INPUT-07:** `C` je samostatný otočný kopanec, dostupný od začátku bez sběru a bez změny vybrané zbraně.
+- **INPUT-08:** Volitelné dotykové ovládání vlevo dole obsahuje směrové šipky, přepínání vlastněných zbraní a samostatná tlačítka střelby, kopu a biče. V nastavení ho lze zapnout i vypnout na libovolném zařízení; na mobilním webu je výchozí zapnuto, na běžném desktopovém webu vypnuto.
+- **INPUT-09:** Tlačítko `Controls` v menu zobrazí úplný přehled aktuálního ovládání.
+
+Implementační rozhodnutí pro dotyk: panel má také `Walk / Grab` pro SHIFT, jetpack, zobrazení času a pokračování. Podporuje současné držení více tlačítek. Přepnutí zbraně používá původní kontrolu vlastnictví a blokujících animací; bič ani kop výběr nemění. Dotyky mají samostatný stav a neuvolňují fyzické klávesy. Zrušení dotyku, ztráta fokusu, pauza, změna orientace, smrt a odchod z levelu uvolní držené vstupy. Při zapnutém panelu jsou původní neviditelné dotykové oblasti plátna neaktivní; při vypnutém zůstávají dostupné.
 
 Navazující implementační rozhodnutí: pořadí zbraní je `1` pochodně, `2` molotov, `3` minigun, `4` raketomet. Pochodně jsou výchozí volba při vstupu do levelu. Bič zůstává automaticky dostupný od levelu 3, samostatně na `X`. Tato doplnění navazují na současné ovládání a postup inventáře; uživatel výslovně určil pořadí pochodní a molotovu a následně vyjmutí biče z výběru zbraní.
 
@@ -203,6 +207,11 @@ Implementační rozhodnutí: zničitelné části jsou původní uvolněné podl
 - **TIME-01:** Výchozí čas hry je 600 minut místo původních 60 minut.
 - **VIEW-01:** Hra se v prohlížeči vejde do viditelné plochy bez vodorovných i svislých scrollbarů. Při změně velikosti okna se přizpůsobí a zachová správné proporce.
 - **VIEW-02:** Titulek karty prohlížeče zní přesně `Brutal Pince of Persia`.
+- **VIEW-03:** Celá hra včetně HUD se vejde na mobilní web v orientaci na výšku i na šířku. Dotykový panel nesmí zakrývat herní obraz ani HUD.
+- **MENU-01:** Malá ikona menu vpravo nahoře se ukáže na začátku levelu a poté při přiblížení myši nebo kliknutí či dotyku v tomto rohu.
+- **AUDIO-01:** Nastavení poskytuje samostatnou hlasitost zvukových efektů a hudby včetně možnosti ztlumení každé kategorie.
+
+Implementační rozhodnutí pro menu: úvodní zobrazení ikony trvá 3,5 s a opakuje se při restartu i postupu. Menu zpřístupňuje také klávesa ESC a fokus klávesnice. Nastavení i přehled Controls pozastaví hru a její čas; návrat do rozpracované lekce tutoriál neodklikne. Hlasitosti 0–100 %, samostatná ztlumení a výslovná volba dotykového panelu se ukládají do localStorage; při nedostupném úložišti platí do obnovení stránky. Ztlumení si pamatuje nastavenou hlasitost. K hudbě patří původní soubory z assets/music včetně krátkých hudebních motivů, k efektům assets/sfx. Responzivní zobrazení používá dynamickou výšku viewportu a bezpečné okraje zařízení; pro ovládací panel rezervuje prostor pod obrazem.
 
 ## Způsob práce
 
