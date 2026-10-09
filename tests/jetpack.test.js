@@ -12,6 +12,15 @@ function fixture(number = 13, map = null) {
     PrinceJS,
     Phaser: {
       Sprite: function () {},
+      Signal: function () {
+        const listeners = [];
+        this.add = (callback, owner) => listeners.push((...args) => callback.apply(owner, args));
+        this.dispatch = (...args) => listeners.forEach((listener) => listener(...args));
+      },
+      Animation: {
+        generateFrameNames: (prefix, first, last, suffix) =>
+          Array.from({ length: last - first + 1 }, (_, index) => prefix + (first + index) + suffix)
+      },
       Rectangle: function (x, y, width, height) {
         Object.assign(this, { x, y, width, height });
       }
@@ -25,6 +34,7 @@ function fixture(number = 13, map = null) {
     "Level",
     "tiles/Base",
     "tiles/Gate",
+    "tiles/Loose",
     "PrincePose",
     "JetpackEffects",
     "Jetpack"
@@ -36,6 +46,21 @@ function fixture(number = 13, map = null) {
   const graphics = [];
   const sprites = [];
   const game = {
+    make: {
+      sprite(x, y, key, frameName) {
+        return {
+          x,
+          y,
+          frameName,
+          height: 63,
+          visible: true,
+          addChild() {},
+          destroy() {
+            this.destroyed = true;
+          }
+        };
+      }
+    },
     add: {
       sprite() {
         const sprite = {
@@ -85,19 +110,35 @@ function fixture(number = 13, map = null) {
     sound: { play() {} }
   };
   const level = Object.create(PrinceJS.Level.prototype);
+  level.game = game;
+  level.back = level.front = { add() {} };
   level.number = map ? map.number : number;
   level.rooms = [];
   level.dummyWall = Object.assign(Object.create(PrinceJS.Tile.Base.prototype), { element: 20 });
   level.unMaskTile = () => {};
   const setTile = (room, x, y, element, posY = 0) => {
     const tile = Object.assign(
-      Object.create(element === 4 ? PrinceJS.Tile.Gate.prototype : PrinceJS.Tile.Base.prototype),
+      element === PrinceJS.Level.TILE_LOOSE_BOARD
+        ? new PrinceJS.Tile.Loose(game, 0, PrinceJS.Level.TYPE_DUNGEON)
+        : Object.create(element === 4 ? PrinceJS.Tile.Gate.prototype : PrinceJS.Tile.Base.prototype),
       { room, roomX: x, roomY: y, element, posY, shakes: 0, pushes: 0, raises: 0 }
     );
-    tile.shake = () => tile.shakes++;
+    const shake = tile.shake;
+    tile.shake = (fall) => {
+      tile.shakes++;
+      if (shake) {
+        shake.call(tile, fall);
+      }
+    };
     tile.push = () => tile.pushes++;
     tile.raise = () => tile.raises++;
-    level.rooms[room].tiles[y * 10 + x] = tile;
+    if (element === PrinceJS.Level.TILE_LOOSE_BOARD) {
+      tile.onStartFalling.add(level.floorStartFall, level);
+      tile.onStopFalling.add(level.floorStopFall, level);
+      level.addTile(x, y, room, tile);
+    } else {
+      level.rooms[room].tiles[y * 10 + x] = tile;
+    }
     return tile;
   };
   const roomPositions = [
@@ -443,6 +484,132 @@ test("floors catch downward flight and ceilings stop upward flight unless the ti
   assert.ok(f.kid.charY < 80);
 });
 
+test("upward jetpack head impacts open loose floors immediately and preserve native falling debris", () => {
+  for (const face of [-1, 1]) {
+    const f = fixture();
+    f.kid.charFace = face;
+    const loose = f.setTile(1, 3, 0, f.PrinceJS.Level.TILE_LOOSE_BOARD);
+    const neighbor = f.setTile(1, 4, 0, f.PrinceJS.Level.TILE_FLOOR);
+    const floor = new f.PrinceJS.Tile.Base(f.level.game, f.PrinceJS.Level.TILE_FLOOR, 0, 0);
+    f.level.addTile(3, 1, 1, floor);
+    const removedSurfaces = [];
+    f.level.delegate = { bloodEffects: { removeSurface: (tile) => removedSurfaces.push(tile) } };
+    if (face === -1) {
+      loose.shake(true);
+      loose.update();
+    }
+    f.jetpack.toggle();
+    f.pressed.up = true;
+    f.advance(6);
+    assert.equal(f.level.getTileAt(3, 0, 1), loose, "no break before the head reaches the ceiling");
+    f.advance(14);
+    assert.equal(f.level.getTileAt(3, 0, 1).element, f.PrinceJS.Level.TILE_SPACE);
+    assert.equal(f.level.getTileAt(4, 0, 1), neighbor);
+    assert.deepEqual(removedSurfaces, [loose], "only the broken slab loses its blood marks");
+    assert.ok(f.jetpack.position.y < 53, "the whole body flies through the opened floor");
+    assert.equal(f.jetpack.velocityY, -96, "the impact does not stop the ascent");
+    assert.equal(f.kid.health, 10);
+    assert.equal(f.kid.jetpackEquipped, true);
+    assert.equal(f.kid.specialAction.owner, f.jetpack);
+    assert.equal(loose.state, f.PrinceJS.Tile.Loose.STATE_FALLING);
+    assert.equal(loose.back.frameName, "dungeon_falling");
+    assert.equal(loose.front.visible, false, "the original foreground floor disappears");
+    for (let i = 0; i < 10; i++) {
+      loose.update();
+    }
+    assert.equal(floor.debris, true);
+    assert.equal(loose.back.destroyed, true);
+    assert.equal(loose.front.destroyed, true);
+    assert.equal(f.level.getTileAt(3, 0, 1).isWalkable(), false, "the passage remains open after debris lands");
+  }
+});
+
+test("head impacts break both touched loose slabs at a seam but leave an adjacent solid ceiling intact", () => {
+  const f = fixture();
+  f.kid.charX = (128 * 140) / 320;
+  f.setTile(1, 3, 0, f.PrinceJS.Level.TILE_LOOSE_BOARD);
+  f.setTile(1, 4, 0, f.PrinceJS.Level.TILE_LOOSE_BOARD);
+  const untouched = f.setTile(1, 5, 0, f.PrinceJS.Level.TILE_LOOSE_BOARD);
+  f.jetpack.toggle();
+  f.pressed.up = true;
+  f.advance(20);
+  assert.equal(f.level.getTileAt(3, 0, 1).element, f.PrinceJS.Level.TILE_SPACE);
+  assert.equal(f.level.getTileAt(4, 0, 1).element, f.PrinceJS.Level.TILE_SPACE);
+  assert.equal(f.level.getTileAt(5, 0, 1), untouched);
+  assert.equal(untouched.state, f.PrinceJS.Tile.Loose.STATE_INACTIVE);
+  assert.ok(f.jetpack.position.y < 53);
+
+  const mixed = fixture();
+  mixed.kid.charX = (128 * 140) / 320;
+  mixed.setTile(1, 3, 0, mixed.PrinceJS.Level.TILE_LOOSE_BOARD);
+  const solid = mixed.setTile(1, 4, 0, mixed.PrinceJS.Level.TILE_FLOOR);
+  mixed.jetpack.toggle();
+  mixed.pressed.up = true;
+  mixed.advance(40);
+  assert.equal(mixed.level.getTileAt(3, 0, 1).element, mixed.PrinceJS.Level.TILE_SPACE);
+  assert.equal(mixed.level.getTileAt(4, 0, 1), solid);
+  assert.ok(Math.abs(mixed.jetpack.position.y - 99) < 0.01, "the remaining solid half still blocks the head");
+});
+
+test("head impacts resolve loose floors in linked rooms above and beside the Prince", () => {
+  const above = fixture();
+  above.setTile(3, 3, 2, above.PrinceJS.Level.TILE_LOOSE_BOARD);
+  above.jetpack.toggle();
+  above.pressed.up = true;
+  above.advance(40);
+  assert.equal(above.level.getTileAt(3, 2, 3).element, above.PrinceJS.Level.TILE_SPACE);
+  assert.equal(above.kid.room, 3);
+  assert.deepEqual(above.roomsChanged, [3]);
+
+  const beside = fixture();
+  beside.kid.charX = (322 * 140) / 320;
+  beside.setTile(2, 0, 0, beside.PrinceJS.Level.TILE_LOOSE_BOARD);
+  beside.setTile(2, 0, 1, beside.PrinceJS.Level.TILE_FLOOR);
+  beside.jetpack.toggle();
+  beside.pressed.up = true;
+  beside.advance(20);
+  assert.equal(beside.level.getTileAt(0, 0, 2).element, beside.PrinceJS.Level.TILE_SPACE);
+  assert.equal(beside.kid.room, 1);
+  assert.ok(beside.jetpack.position.y < 53);
+});
+
+test("a swept ascent breaks successive loose floors even with long frame deltas", () => {
+  const f = fixture();
+  f.kid.charY = 179;
+  for (const row of [0, 1]) {
+    f.setTile(1, 3, row, f.PrinceJS.Level.TILE_LOOSE_BOARD);
+  }
+  f.jetpack.toggle();
+  f.pressed.up = true;
+  f.advance(45, 1);
+  for (const row of [0, 1]) {
+    assert.equal(f.level.getTileAt(3, row, 1).element, f.PrinceJS.Level.TILE_SPACE);
+  }
+  assert.equal(f.kid.room, 3);
+  assert.equal(f.kid.jetpackEquipped, true);
+});
+
+test("collision queries, hovering and side contact never smash loose floors", () => {
+  const f = fixture();
+  const loose = f.setTile(1, 3, 0, f.PrinceJS.Level.TILE_LOOSE_BOARD);
+  assert.equal(f.jetpack.blockedAt({ room: 1, x: 112, y: 98 }), true);
+  assert.equal(f.level.getTileAt(3, 0, 1), loose, "collision probes must not change the level");
+  f.kid.charY = 99;
+  f.jetpack.toggle();
+  f.advance(20);
+  assert.equal(f.level.getTileAt(3, 0, 1), loose);
+  assert.equal(loose.state, f.PrinceJS.Tile.Loose.STATE_INACTIVE);
+  f.jetpack.toggle();
+  f.kid.charX = (80 * 140) / 320;
+  f.kid.charY = 83;
+  f.jetpack.toggle();
+  f.pressed.right = true;
+  f.advance(30);
+  assert.equal(f.level.getTileAt(3, 0, 1), loose);
+  assert.equal(loose.state, f.PrinceJS.Tile.Loose.STATE_INACTIVE);
+  assert.ok(Math.abs(f.jetpack.position.x - 88) < 0.01, "side contact stops at the slab edge");
+});
+
 test("horizontal and vertical linked room travel updates actor, bases, block indices and camera signal", () => {
   const right = fixture();
   right.jetpack.toggle();
@@ -515,6 +682,11 @@ test("hovering above buttons and loose floors does not trigger them; actual cont
     f.pressed.down = true;
     f.advance(20);
     assert.ok(tile[counter] > 0);
+    assert.equal(f.level.getTileAt(3, 1, 1), tile, "landing does not immediately smash the floor");
+    if (element === f.PrinceJS.Level.TILE_LOOSE_BOARD) {
+      assert.equal(tile.state, f.PrinceJS.Tile.Loose.STATE_SHAKING);
+      assert.equal(tile.fall, true);
+    }
   }
 });
 

@@ -237,6 +237,9 @@ PrinceJS.Jetpack.prototype = {
         break;
       }
       let candidate = this.candidatePosition(axis, step);
+      if (candidate && axis === "y" && step < 0) {
+        this.breakLooseCeiling(candidate, step);
+      }
       if (!candidate || this.blockedAt(candidate)) {
         let safe = 0;
         let blocked = 1;
@@ -260,6 +263,26 @@ PrinceJS.Jetpack.prototype = {
         break;
       }
       this.setPosition(candidate);
+    }
+  },
+
+  breakLooseCeiling: function (position, step) {
+    let headY = position.y - this.height;
+    let row = Math.floor(headY / PrinceJS.BLOCK_HEIGHT);
+    let undersideY = PrinceJS.Utils.convertBlockYtoY(row) + 6;
+    // Only an upward crossing of the underside counts as a head impact.
+    if (headY >= undersideY || headY - step < undersideY) {
+      return;
+    }
+    let left = position.x - this.halfWidth;
+    let right = position.x + this.halfWidth;
+    for (let column = Math.floor(left / PrinceJS.BLOCK_WIDTH); column * PrinceJS.BLOCK_WIDTH < right; column++) {
+      let tile = this.tileAt(column, row, position.room);
+      if (tile.element === PrinceJS.Level.TILE_LOOSE_BOARD) {
+        // Use the native fall so the hole, debris and surface cleanup stay in sync.
+        tile.shake(true);
+        tile.sweep();
+      }
     }
   },
 

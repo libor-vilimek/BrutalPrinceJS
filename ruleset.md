@@ -127,7 +127,10 @@ Implementační rozhodnutí: okolí pro nouzovou reakci je 144 světových pixel
 - **JET-01:** Jetpack se aktivuje a sundává klávesou `J`, nosí se na zádech a umožňuje létat.
 - **JET-02:** Princ při letu drží oběma rukama popruhy. Použij stávající grafiku, pokud existuje; jinak ji vytvoř ve stejném stylu.
 - **JET-03:** První dostupnost je pickup u startu levelu 12. Od levelu 13 je automaticky v inventáři. Starší dostupnost od začátku hry byla zrušena.
-- **JET-04:** Let musí respektovat skutečné stěny, podlahy, stropy a dostupná propojení místností.
+- **JET-04:** Let musí respektovat skutečné stěny, podlahy, stropy a dostupná propojení místností. Výjimkou je rozražení zničitelné podlahy hlavou podle JET-05.
+- **JET-05:** Při letu vzhůru s nasazeným jetpackem princ hlavou rozrazí zničitelné části podlahy nad sebou a může vzniklým otvorem proletět. Pevné podlahy a stropy jej dál zastaví.
+
+Implementační rozhodnutí: zničitelné části jsou původní uvolněné podlahové desky. Náraz zespodu ihned spustí jejich běžný pád a odstraní kolizi i krev z odstraněného povrchu; boční dotyk je nerozbíjí a přistání shora zachovává původní chování.
 
 ## Nepřátelé a jejich smrti
 
