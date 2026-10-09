@@ -36,7 +36,7 @@ PrinceJS.GameMenu = function (game) {
         <p class="menu-note">Your preferences are saved on this device.</p>
       </div>
       <div class="menu-controls" hidden>
-        <p class="menu-description">Hold buttons to keep moving or attacking. Combine directions with Jump or Walk / Grab.</p>
+        <p class="menu-description">Hold buttons to keep moving or attacking. Combine directions with Jump or Walk / Grab, or turn on Toggle Shift to keep grabbing.</p>
         <h2>Movement</h2>
         <dl>
           <dt>← / →</dt><dd>Move left / right</dd>
@@ -64,7 +64,9 @@ PrinceJS.GameMenu = function (game) {
           <dt>Ctrl / Shift + L</dt><dd>Skip a level (levels 1–3 and custom levels)</dd>
         </dl>
         <h2>Touch &amp; mouse</h2>
-        <p>Enable on-screen controls on any device. Use multiple fingers for running jumps, grabbing and aiming. Walk / Grab is Shift; Fire is Ctrl; Kick is C; Whip is X. Switch cycles only through owned weapons. Jetpack is J, Time is Space, and Continue resumes after death or a completed level.</p>
+        <p>Enable on-screen controls on any device. In landscape they overlay the full-size game; in portrait they sit below it. The top-right menu stays visible while the controls are shown.</p>
+        <p>Use multiple fingers for running jumps, grabbing and aiming. Hold Walk / Grab for Shift, or tap Toggle Shift to keep Shift held without a finger on the button; tap it again to release. Its highlighted state means Shift is on. Pausing, losing focus, rotating the screen, hiding controls, death or leaving a level releases it.</p>
+        <p>Fire is Ctrl; Kick is C; Whip is X. Switch cycles only through owned weapons. Jetpack is J, and Continue resumes after death or a completed level.</p>
         <p>Tap a tutorial's displayed key to try its lesson. With on-screen controls off, the original screen regions remain: left / right edges move, the upper / lower third jumps or crouches, and the center grabs, drinks or uses the selected weapon. Drag between regions to combine actions.</p>
         <p>On the game's bottom status strip, tap to show time. While time or the level is shown, tap the left / center / right part to go back a level / restart / go forward a level.</p>
         <h2>Game controller</h2>
@@ -121,10 +123,15 @@ PrinceJS.GameMenu = function (game) {
     true
   );
   this.syncSettings();
+  this.setControlsVisible(!this.game.touchControls.root.hidden);
   this.reveal();
 };
 
 PrinceJS.GameMenu.prototype = {
+  setControlsVisible: function (visible) {
+    this.corner.classList.toggle("menu-controls-visible", visible);
+  },
+
   reveal: function () {
     this.corner.classList.add("menu-visible");
     window.clearTimeout(this.hideTimer);

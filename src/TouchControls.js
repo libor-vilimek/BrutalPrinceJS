@@ -3,6 +3,7 @@
 PrinceJS.TouchControls = function (game) {
   this.game = game;
   this.pointers = new Map();
+  this.shiftLocked = false;
   this.root = document.createElement("nav");
   this.root.className = "touch-controls";
   this.root.setAttribute("aria-label", "On-screen game controls");
@@ -21,10 +22,11 @@ PrinceJS.TouchControls = function (game) {
       <button data-code="88" aria-label="Use whip">Whip</button>
       <button data-action="switch" class="touch-switch" aria-label="Switch to next owned weapon">Switch<span class="touch-weapon">Torches</span></button>
       <button data-code="74" aria-label="Toggle jetpack">Jetpack</button>
-      <button data-code="32" aria-label="Show remaining time">Time</button>
+      <button data-action="shift" data-code="16" class="touch-shift-toggle" aria-label="Toggle Shift" aria-pressed="false">Toggle<br>Shift</button>
       <button data-action="continue" aria-label="Continue game">Continue</button>
     </div>`;
   document.querySelector(".game").appendChild(this.root);
+  this.shiftToggle = this.root.querySelector(".touch-shift-toggle");
   this.buttons = Array.from(this.root.querySelectorAll("button"));
   this.buttons.forEach((button) => {
     button.type = "button";
@@ -60,6 +62,7 @@ PrinceJS.TouchControls.prototype = {
   refresh: function () {
     this.clear();
     this.root.hidden = !this.state || !this.game.settings.values.touch;
+    this.game.menu?.setControlsVisible(!this.root.hidden);
     this.update();
   },
 
@@ -70,7 +73,7 @@ PrinceJS.TouchControls.prototype = {
     if (this.state.tutorial && this.state.tutorial.isGuidedKey(code)) {
       return false;
     }
-    return Array.from(this.pointers.values()).some((entry) => entry.code === code);
+    return (code === 16 && this.shiftLocked) || Array.from(this.pointers.values()).some((entry) => entry.code === code);
   },
 
   press: function (event, button) {
@@ -91,7 +94,8 @@ PrinceJS.TouchControls.prototype = {
       tutorial.sequence.cancel();
     }
     const held = this.isDown(code);
-    this.pointers.set(event.pointerId, { code, button });
+    // The toggle commits on a completed tap, not as a held Shift pointer.
+    this.pointers.set(event.pointerId, { code: button.dataset.action === "shift" ? null : code, button });
     button.classList.add("pressed");
     if (typeof event.pointerId === "number") {
       button.setPointerCapture(event.pointerId);
@@ -111,8 +115,6 @@ PrinceJS.TouchControls.prototype = {
       this.state.handleKickControl();
     } else if (code === 74) {
       this.state.toggleJetpack();
-    } else if (code === 32) {
-      this.state.showRemainingMinutes();
     }
     this.update();
   },
@@ -123,8 +125,21 @@ PrinceJS.TouchControls.prototype = {
       return;
     }
     this.pointers.delete(id);
-    if (![...this.pointers.values()].some((other) => other.button === entry.button)) {
+    const stillPressed = [...this.pointers.values()].some((other) => other.button === entry.button);
+    if (!stillPressed) {
       entry.button.classList.remove("pressed");
+    }
+    if (
+      !cancelled &&
+      !stillPressed &&
+      entry.button.dataset.action === "shift" &&
+      this.state &&
+      this.state.kid.alive &&
+      !this.root.hidden &&
+      !this.game.paused &&
+      !this.state.tutorial?.isGuidedKey(16)
+    ) {
+      this.setShiftLocked(!this.shiftLocked);
     }
     if (!cancelled && entry.code === 17 && !this.isDown(17) && this.state && !this.game.paused) {
       this.state.handleWeaponRelease();
@@ -134,6 +149,12 @@ PrinceJS.TouchControls.prototype = {
   clear: function () {
     this.pointers.clear();
     this.buttons.forEach((button) => button.classList.remove("pressed"));
+    this.setShiftLocked(false);
+  },
+
+  setShiftLocked: function (locked) {
+    this.shiftLocked = locked;
+    this.shiftToggle.setAttribute("aria-pressed", String(locked));
   },
 
   cycleWeapon: function () {

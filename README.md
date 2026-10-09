@@ -93,23 +93,24 @@ Run `npm test` for camera, weapon collision and inventory tests. Open `http://lo
 
 Open this version's deployed URL or local server on your phone or tablet. The complete game and HUD fit in both portrait and landscape, including browser chrome and screen safe areas. Rotate freely; the game keeps its original proportions. Adding it to the home screen is optional.
 
-On-screen controls are enabled by default on mobile and disabled by default on desktop. Enable or disable them on either device in **Settings → On-screen controls**. Your explicit choice is saved on this browser, along with the separate sound and music preferences. Controls sit below the game at the bottom left so they do not cover the room or health display.
+On-screen controls are enabled by default on mobile and disabled by default on desktop. Enable or disable them on either device in **Settings → On-screen controls**. Your explicit choice is saved on this browser, along with the separate sound and music preferences. In landscape, the game uses the full available area, with translucent controls overlaid at the bottom left. In portrait, controls sit below the game. The full scene and HUD retain their original proportions.
 
 - **Arrows:** move, jump / climb up, crouch / climb down. Hold multiple buttons for a running jump.
 - **Walk / Grab:** the same as Shift: walk slowly, drink potions and hold edges. Combine with Down to lower yourself onto an edge.
+- **Toggle Shift:** tap to keep Shift held after lifting your finger; tap again to release it. The highlighted button means Shift is on. Combine it with the arrows for careful walking, lowering yourself and climbing, or leave it on to keep holding an edge. Walk / Grab and the physical Shift key still work independently.
 - **Fire:** hold to spin torches or fire a gun. With a molotov, hold to charge and release to throw; hold Up for the high arc. While hanging, press Fire to light and drop it below.
 - **Switch:** cycle torches, molotov, minigun and rocket launcher, skipping equipment you do not own. The current weapon appears on the button; normal drawing and stowing restrictions still apply.
 - **Kick / Whip:** the same as C / X; they keep the selected weapon. Whip is unavailable until acquired.
 - **Jetpack:** the same as J, available when owned. Use the arrows to fly.
-- **Time / Continue:** show remaining time, or continue after death / at the end of a level.
+- **Continue:** continue after death / at the end of a level. The keyboard's Space key still shows remaining time.
 
-Use multiple fingers to combine movement, grabbing and attacks. Releasing or cancelling a touch, changing orientation, losing focus, pausing or leaving a level clears held touch inputs. Touch buttons never press or release physical keyboard keys. Tutorial keycaps remain tappable while lessons pause the game.
+Use multiple fingers to combine movement, grabbing and attacks. Releasing or cancelling one touch clears its momentary input. Toggle Shift stays on until tapped again or until input is cleared by changing orientation, losing focus, pausing, hiding controls, death or leaving a level. It is not saved as a preference. Touch buttons never press or release physical keyboard keys. Tutorial keycaps remain tappable while lessons pause the game.
 
 With on-screen controls disabled, the original mouse / touch regions are available: the left / right third moves, the top / bottom third jumps or crouches, and the center grabs, drinks or uses the selected weapon. Drag between regions to combine actions. These invisible regions are inactive while the labeled controls are enabled.
 
 ## Settings and controls reference
 
-The small menu icon in the upper-right corner appears for 3.5 seconds at the beginning of each level or retry, then fades away. Move the mouse into that corner, click / tap it, tab to the button, or press **Esc** to reach the menu again.
+The small menu icon in the upper-right corner stays visible whenever on-screen controls are shown. Otherwise it appears for 3.5 seconds at the beginning of each level or retry, then fades away. Move the mouse into that corner, click / tap it, tab to the button, or press **Esc** to reach the menu again.
 
 Settings provides independent **Sound effects** and **Music** sliders (0–100%) and mute buttons. Muting preserves the slider value for unmuting. Changes apply to playing and future sounds, including weapon audio and cutscenes. The original limit of two simultaneous burning screams remains unchanged.
 
