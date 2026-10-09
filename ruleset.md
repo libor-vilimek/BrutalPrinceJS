@@ -172,6 +172,7 @@ Implementační rozhodnutí: zničitelné části jsou původní uvolněné podl
 
 - **TIME-01:** Výchozí čas hry je 600 minut místo původních 60 minut.
 - **VIEW-01:** Hra se v prohlížeči vejde do viditelné plochy bez vodorovných i svislých scrollbarů. Při změně velikosti okna se přizpůsobí a zachová správné proporce.
+- **VIEW-02:** Titulek karty prohlížeče zní přesně `Brutal Pince of Persia`.
 
 ## Způsob práce
 
