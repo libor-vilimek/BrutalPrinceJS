@@ -447,6 +447,107 @@ test("the whip lesson waits for the actual reachable ankle in the third room lef
   assert.equal(lesson.when(f.state), false);
 });
 
+test("the kick lesson waits for the final upper landing and a reachable close guard", () => {
+  const f = fixture();
+  const lesson = f.prince.TutorialLessons.find((item) => item.id === "upper-ledge-kick");
+  f.prince.currentLevel = f.state.level.number = 2;
+  f.prince.Kick = { RANGE: 32 };
+  f.state.level.rooms = { 22: { x: 9, y: 1 } };
+  f.state.kid.room = 22;
+  let origin = { room: 22, x: 9 * 320 + 48, y: 189 + 119 };
+  let targets = [];
+  let canPrepare = true;
+  f.state.kick = {
+    cooldown: 0,
+    actionStage: "hidden",
+    canPrepare: () => canPrepare,
+    threatOrigin: () => origin,
+    targets(point, range, forward) {
+      assert.equal(point, origin);
+      assert.equal(range, 32, "the lesson uses contact range, not the much wider emergency radius");
+      assert.equal(forward, false);
+      return targets;
+    }
+  };
+  assert.equal(lesson.when(f.state), false, "no empty demonstration without a real target");
+  targets = [{}];
+  assert.equal(lesson.when(f.state), true);
+  f.state.kid.action = "climbup";
+  assert.equal(lesson.when(f.state), true, "C can finish the last part of the native climb");
+  f.state.kid.action = "hangstraight";
+  assert.equal(lesson.when(f.state), false, "wait for the player to start climbing");
+  f.state.kid.action = "stand";
+  origin.y += 63;
+  assert.equal(lesson.when(f.state), false, "the lower shelf is too early");
+  origin.y -= 63;
+  origin.x += 240;
+  assert.equal(lesson.when(f.state), false, "the disconnected landing across the shaft is not the ascent");
+  origin.x -= 240;
+  f.state.kid.room = 1;
+  assert.equal(lesson.when(f.state), false, "the earlier whip floor must not trigger the kick");
+  f.state.kid.room = 22;
+  canPrepare = false;
+  assert.equal(lesson.when(f.state), false);
+  canPrepare = true;
+  f.state.kick.cooldown = 0.2;
+  assert.equal(lesson.when(f.state), false, "an unavailable kick cannot be taught yet");
+});
+
+test("the upper kick completes before the repeated minigun selection and firing lessons", () => {
+  const f = fixture();
+  f.prince.currentLevel = f.state.level.number = 2;
+  Object.assign(f.state.kid, { room: 22, charBlockY: 1, hasMinigun: true });
+  f.state.minigun = { canSelect: () => true, canFire: () => true };
+  f.state.kick = { actionStage: "hidden", pending: 0 };
+  // Completing the first-level gun lessons must not suppress this new sequence.
+  f.tutorial.completed.add("minigun-select");
+  f.tutorial.completed.add("minigun-fire");
+  const kickLesson = f.prince.TutorialLessons.find((item) => item.id === "upper-ledge-kick");
+  f.tutorial.show(kickLesson);
+  f.input("keydown", 51);
+  f.input("keyup", 51);
+  assert.equal(f.tutorial.active, kickLesson);
+  f.input("keydown", 67);
+  f.input("keyup", 67);
+  f.state.kick.pending = 0.3;
+  f.tutorial.worldUpdated();
+  for (let i = 0; i < 4; i++) {
+    f.tutorial.update(0.05);
+  }
+  assert.ok(f.tutorial.assist, "wait for native climb preparation");
+  f.state.kick.pending = 0;
+  f.state.kick.actionStage = "kicking";
+  f.state.kid.specialAction = { type: "kick" };
+  for (let i = 0; i < 20; i++) {
+    f.tutorial.update(0.05);
+  }
+  assert.equal(f.tutorial.active, null, "do not cover the visible kick with the next panel");
+  assert.equal(f.keys.get(67).isDown, true);
+  f.state.kick.actionStage = "hidden";
+  f.state.kid.specialAction = null;
+  f.tutorial.update(0.05);
+  assert.equal(f.keys.get(67).isDown, false, "a tap produces one kick and releases C");
+  f.tutorial.update(0.02);
+  assert.equal(f.tutorial.active.id, "kick-minigun-select");
+  f.input("keydown", 51);
+  f.input("keyup", 51);
+  f.state.kid.activeWeapon = "minigun";
+  f.tutorial.worldUpdated();
+  f.tutorial.update(0.02);
+  f.tutorial.update(0.02);
+  assert.equal(f.tutorial.active.id, "kick-minigun-fire");
+  f.input("keydown", 17);
+  f.input("keyup", 17);
+  f.tutorial.worldUpdated();
+  for (let i = 0; i < 20; i++) {
+    f.tutorial.update(0.05);
+  }
+  assert.equal(f.keys.get(17).isDown, true, "the burst includes time to draw the gun");
+  f.input("blur");
+  assert.equal(f.keys.get(17).isDown, false);
+  assert.equal(f.tutorial.assist, null);
+});
+
 test("live guidance reserves movement but preserves restart shortcuts and the emergency kick", () => {
   const f = fixture();
   f.tutorial.sequence.guiding = true;

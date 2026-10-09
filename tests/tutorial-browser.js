@@ -116,8 +116,8 @@ async function run() {
     );
     check(s.twinTorches.canReach(target), "The waiting guard is within the first torch spin's reach");
     check(
-      target.charX === 56 && s.kid.charX === 27 && !s.kid.hasMolotov,
-      "The moved guard stays in reach after a shorter retreat, with the bottle still waiting for the player"
+      target.charX === 42 && s.kid.charX === 27 && !s.kid.hasMolotov,
+      "The guard stands left of the pillar, in torch reach after the short retreat, with the bottle still waiting"
     );
     check(s.kid.health === s.kid.maxHealth, "The guard cannot hurt the Prince during the opening collection");
     const frozen = snapshot(s);
@@ -379,6 +379,7 @@ async function runCampaign(preview = false) {
     );
     check(s.kid.activeWeapon === beforeWhip, "X pulls the guard without switching the selected weapon");
     await until(() => !s.kid.specialAction, "whip stow");
+    await upperLedgeKick();
     placePrince(11, 133, 1, -1);
     key("keydown", 37);
     await until(() => s.tutorial.active && s.tutorial.active.id === "rockets-select", "rocket pickup lesson");
@@ -425,6 +426,30 @@ async function runCampaign(preview = false) {
 }
 document.getElementById("campaign").addEventListener("click", () => runCampaign());
 document.getElementById("cards").addEventListener("click", () => runCampaign(true));
+document.getElementById("kick-preview").addEventListener("click", async () => {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  results.textContent = "";
+  try {
+    await replay();
+    tap(17);
+    await until(() => !state().tutorial.assist && !state().kid.specialAction, "opening spin before kick preview");
+    state().nextLevel(1, true, true);
+    await continueCutscene();
+    await until(() => state().level && state().level.number === 2 && state().tutorial, "second level");
+    await until(
+      () => state().kid.charFace === -1 && state().kid.action === "stand",
+      "arrival turn before kick preview"
+    );
+    await upperLedgeKick(true);
+  } catch (error) {
+    results.textContent += "FAIL: " + error.message + "\n";
+  } finally {
+    busy = false;
+  }
+});
 document.getElementById("replay").addEventListener("click", async () => {
   if (busy) {
     return;
@@ -474,4 +499,59 @@ function placePrince(room, x, row, face) {
   kid.processCommand();
   kid.updateCharPosition();
   s.changeRoom(room);
+}
+
+async function upperLedgeKick(preview = false) {
+  const s = state();
+  // This checkpoint is the last real ledge of the climb from the whip room.
+  // Leave the waiting upper guards and all their combat reactions untouched.
+  placePrince(22, 35, 2, -1);
+  const kid = s.kid;
+  kid.charY = 179;
+  kid.action = "hangstraight";
+  kid.actionCode = 6;
+  kid.setSpecialActionFrame(91);
+  kid.updateBlockXY();
+  kid.updateCharPosition();
+  key("keydown", 16);
+  await wait(100);
+  check(!s.tutorial.active, "The upper kick lesson waits while the player is still hanging");
+  const health = kid.health;
+  const selected = kid.activeWeapon;
+  key("keydown", 38, { shiftKey: true });
+  try {
+    await until(() => s.tutorial.active && s.tutorial.active.id === "upper-ledge-kick", "top-of-ascent kick lesson");
+  } finally {
+    key("keyup", 38, { shiftKey: true });
+    key("keyup", 16);
+  }
+  check(kid.health === health, "The upper landing lesson appears before the close guards can stab the Prince");
+  check(
+    s.kick.targets(s.kick.threatOrigin(), 32, false).length > 0,
+    "A real upper guard is in contact range for the kick"
+  );
+  if (preview) {
+    results.textContent += "Upper ledge preview. Press C, then 3 and Ctrl. Sound stays disabled.\n";
+    return;
+  }
+  tap(17);
+  check(s.tutorial.active.id === "upper-ledge-kick", "Ctrl cannot skip the C lesson");
+  tap(67);
+  await until(() => s.kick.actionStage === "kicking", "real roundhouse spin");
+  check(!s.tutorial.active && kid.activeWeapon === selected, "C starts the real kick without switching weapons");
+  await until(() => s.kick.chain && s.kick.chain.size > 0, "kick connects with the upper guard");
+  check(!s.tutorial.active, "The whole kick remains visible before the next panel");
+  await until(() => s.tutorial.active && s.tutorial.active.id === "kick-minigun-select", "post-kick selection");
+  check(
+    s.kick.actionStage === "hidden" && !kid.specialAction && !s.kickKey.isDown && kid.health === health,
+    "One tap finishes one protected kick before the repeated gun lesson"
+  );
+  tap(51);
+  await until(() => s.tutorial.active && s.tutorial.active.id === "kick-minigun-fire", "post-kick firing lesson");
+  const shots = s.minigun.effects.shots;
+  tap(17);
+  await until(() => s.minigun.effects.shots >= shots + 10, "post-kick assisted burst");
+  check(kid.health === health, "The kick makes enough room to draw and fire the minigun safely");
+  await until(() => !s.tutorial.assist && !kid.specialAction, "post-kick minigun stow");
+  check(!s.weaponCtrlKey.isDown && kid.activeWeapon === "minigun", "The follow-up burst releases Ctrl normally");
 }

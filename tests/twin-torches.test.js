@@ -356,8 +356,12 @@ test("the opening steps beside each actual handle before pickup instead of exten
   assert.equal(f.PrinceJS.Utils.convertX(f.kid.charX), 61, "the short retreat ends ahead of the starting position");
   const target = map.guards.find((guard) => guard.burnRoute === "opening-shaft");
   const enemy = f.enemy(f.PrinceJS.Utils.convertBlockXtoX(target.location % 10) + target.direction * 7);
-  assert.equal(target.location, 13);
-  assert.equal(f.weapon.canReach(enemy), true, "the guard moved right is still within the first spin's reach");
+  assert.equal(target.location, 12);
+  assert.equal(
+    f.weapon.canReach(enemy),
+    true,
+    "the visible guard beside the pillar remains within the first spin's reach"
+  );
   assert.ok(80 - f.PrinceJS.Utils.convertX(f.kid.charX) > 17, "the bottle remains outside pickup range");
   assert.equal(f.kid.charFrame, 15);
   assert.equal(f.kid.specialAction, null);

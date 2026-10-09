@@ -125,6 +125,89 @@ PrinceJS.TutorialLessons = [
       state.enemies.some((enemy) => state.whip.findSnag(enemy))
   },
   {
+    id: "upper-ledge-kick",
+    category: "Make room to fight",
+    title: "A little breathing room",
+    description:
+      "A guard is too close to draw your gun. A roundhouse kick sends him flying and gives you room to fight.",
+    instruction: "Press C to kick the nearby guard away.",
+    hint: "You can also use C to finish a climb quickly when an enemy is close. Your selected weapon stays the same.",
+    keys: [{ code: Phaser.Keyboard.C, label: "C" }],
+    holdMs: 100,
+    holdUntil: (state) => state.kick.actionStage === "hidden" && state.kick.pending === 0,
+    maxHoldMs: 2000,
+    when: function (state) {
+      if (
+        PrinceJS.currentLevel !== 2 ||
+        state.level.number !== 2 ||
+        state.kid.room !== 22 ||
+        !state.kick ||
+        state.kick.cooldown !== 0 ||
+        state.kick.actionStage !== "hidden" ||
+        !state.kick.canPrepare() ||
+        ["hang", "hangstraight", "climbdown"].includes(state.kid.action)
+      ) {
+        return false;
+      }
+      // The final climb reaches the left landing in room 22, above the whip
+      // encounter. Use its destination feet while the native climb finishes.
+      const origin = state.kick.threatOrigin();
+      const room = state.level.rooms[22];
+      return !!(
+        origin &&
+        origin.room === 22 &&
+        Math.floor((origin.y - room.y * PrinceJS.ROOM_HEIGHT) / PrinceJS.BLOCK_HEIGHT) === 1 &&
+        origin.x < room.x * PrinceJS.ROOM_WIDTH + 64 &&
+        state.kick.targets(origin, PrinceJS.Kick.RANGE, false).length
+      );
+    }
+  },
+  {
+    id: "kick-minigun-select",
+    category: "Use the opening",
+    title: "Back to the minigun",
+    description: "The kick has made some space. Choose your minigun before the guards get back on their feet.",
+    instruction: "Press 3 to select the minigun.",
+    hint: "C works with any weapon selected. Now switch back to weapon 3.",
+    inventory: ["minigun"],
+    keys: [{ code: Phaser.Keyboard.THREE, label: "3" }],
+    when: (state) =>
+      PrinceJS.currentLevel === 2 &&
+      state.level.number === 2 &&
+      state.kid.room === 22 &&
+      state.kid.charBlockY === 1 &&
+      state.tutorial.completed.has("upper-ledge-kick") &&
+      state.kick.actionStage === "hidden" &&
+      state.kick.pending === 0 &&
+      state.kid.hasMinigun &&
+      state.kid.action === "stand" &&
+      !state.kid.specialAction &&
+      !state.kid.inFallDown &&
+      !state.kid.inJumpUp &&
+      state.minigun.canSelect()
+  },
+  {
+    id: "kick-minigun-fire",
+    category: "Use the opening",
+    title: "Keep them back",
+    description: "Draw the minigun and fire down the corridor while the guards are recovering from your kick.",
+    instruction: "Hold Ctrl to fire. Release to put the minigun away.",
+    hint: "This tap holds a full burst so you can see the kick and minigun work together.",
+    keys: [
+      { code: Phaser.Keyboard.CONTROL, label: "Ctrl" },
+      { code: Phaser.Keyboard.F, label: "F" }
+    ],
+    holdMs: 2300,
+    when: (state) =>
+      PrinceJS.currentLevel === 2 &&
+      state.level.number === 2 &&
+      state.kid.room === 22 &&
+      state.tutorial.completed.has("kick-minigun-select") &&
+      state.kid.activeWeapon === "minigun" &&
+      !state.kid.specialAction &&
+      state.minigun.canFire()
+  },
+  {
     id: "rockets-select",
     category: "Know your weapons",
     title: "A heavier answer",
