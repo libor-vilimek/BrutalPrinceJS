@@ -54,10 +54,18 @@ async function ready() {
 
 async function settleOpeningIntro() {
   for (let i = 0; i < 100; i++) {
-    const torches = gameState().twinTorches;
+    const state = gameState();
+    if (!state) {
+      await pause(50);
+      continue;
+    }
+    const torches = state.twinTorches;
     if (!torches || (!torches.introPending && torches.actionStage !== "intro")) {
       return;
     }
+    // The fixture must also settle when Chrome pauses background animation frames.
+    state.updateWorld();
+    torches.update(0.05);
     await pause(50);
   }
   throw new Error("The starting torch collection did not finish");
@@ -161,7 +169,7 @@ async function meleeFireChecks() {
       !state.kid.hasWhip && state.whip.effects.ground.visible && state.whip.pickup.room === state.kid.room,
       "The whip is visible beside the level-two arrival door"
     );
-    await walkUntil(() => state.kid.hasWhip, "Walking right from the level-two start collects the whip");
+    await walkUntil(() => state.kid.hasWhip, "Walking left from the level-two start collects the whip", -1);
     check(
       state.kid.activeWeapon === "twinTorches" && !state.whip.effects.ground.visible,
       "Pickup unlocks the X whip and hides its floor art while keeping torches selected"
@@ -410,10 +418,12 @@ async function kickChecks(preview = false) {
       check(state.kid.health === health, "Sword hits cannot hurt the Prince during wind-up, spin or follow-through");
       // Unhit guards can still attack when the spin ends. Isolate the follow-up
       // draw check to the two fallen guards whose recovery it is testing.
-      guards.filter((enemy) => !enemy.kickState).forEach((enemy) => {
-        enemy.setInactive();
-        enemy.setInvisible();
-      });
+      guards
+        .filter((enemy) => !enemy.kickState)
+        .forEach((enemy) => {
+          enemy.setInactive();
+          enemy.setInvisible();
+        });
       await pause(250);
       check(
         guards[0].kickState &&
@@ -1453,6 +1463,10 @@ async function walkUntil(predicate, description, direction = 1) {
   kid[key] = () => true;
   try {
     for (let i = 0; i < 80 && !predicate(); i++) {
+      // Keep real movement and pickup checks running in background test tabs.
+      const state = gameState();
+      state.updateWorld();
+      state.update();
       await pause(50);
     }
     check(predicate(), description);
@@ -1460,6 +1474,95 @@ async function walkUntil(predicate, description, direction = 1) {
     kid[key] = originalKey;
   }
   await pause(300);
+}
+
+async function healthChecks() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  output.textContent = "";
+  try {
+    let state = await loadMission(2);
+    quietEnemies(state);
+    const types = { recover: 1, add: 2 };
+    const drink = async (modifier) => {
+      let potion;
+      for (const room of state.level.rooms.filter(Boolean)) {
+        potion = room.tiles.find((tile) => tile.element === 10 && tile.modifier === modifier);
+        if (potion) {
+          break;
+        }
+      }
+      check(!!potion, "A real " + (modifier === types.add ? "large" : "small") + " red potion is present");
+      placeKid(potion.room, potion.roomX * 14 + 7, potion.roomY, 1);
+      const before = state.kid.health;
+      const keyS = state.kid.keyS;
+      state.kid.keyS = () => true;
+      try {
+        for (let i = 0; i < 200 && potion.element === 10; i++) {
+          // Drive native actor frames even when a background browser throttles RAF.
+          state.kid.updateActor();
+          await pause(50);
+        }
+        check(potion.element === 1, "Shift drinks and removes the bottle using the native animation");
+        for (let i = 0; i < 100 && state.kid.health === before; i++) {
+          await pause(50);
+        }
+      } finally {
+        state.kid.keyS = keyS;
+      }
+      check(!state.kid.specialAction, "Drinking does not start a weapon action");
+    };
+    check(state.kid.health === 10 && state.ui.playerHPActive === 10, "New games still start with ten lives");
+    await drink(types.add);
+    check(
+      state.kid.maxHealth === 11 && state.kid.health === 11 && state.ui.playerHPActive === 11,
+      "The large potion increases maximum health to eleven and refills it"
+    );
+    check(
+      state.ui.playerHealthText.visible && state.ui.playerHealthText.text === "11/11",
+      "The HUD shows the exact expanded health within the original player area"
+    );
+    state.kid.damageLife();
+    state.kid.damageLife();
+    check(state.ui.playerHealthText.text === "9/11", "Damage remains synchronized with the expanded HUD");
+    await drink(types.recover);
+    check(
+      state.kid.health === 10 && state.kid.maxHealth === 11 && state.ui.playerHealthText.text === "10/11",
+      "A small red potion recovers exactly one life without increasing the maximum"
+    );
+    state = await freshLevel(3);
+    quietEnemies(state);
+    check(
+      state.kid.maxHealth === 11 && state.kid.health === 11 && state.ui.playerHPActive === 11,
+      "The eleven-point maximum carries into the next level"
+    );
+    await drink(types.add);
+    check(
+      state.kid.maxHealth === 12 && state.ui.playerHealthText.text === "12/12",
+      "Another large bottle grows the maximum again"
+    );
+    state = await freshLevel(4);
+    const saved = new URL(gameFrame.contentWindow.location.href);
+    check(saved.searchParams.get("health") === "12", "Level progression saves the earned maximum in the URL");
+    const loaded = new Promise((resolve) => gameFrame.addEventListener("load", resolve, { once: true }));
+    gameFrame.src = saved.href;
+    await loaded;
+    await ready();
+    state = gameState();
+    quietEnemies(state);
+    check(
+      state.kid.maxHealth === 12 && state.ui.playerHealthText.text === "12/12",
+      "Reopening the saved URL restores expanded health"
+    );
+    check(testGame.sound.mute, "The entire potion playtest stays muted");
+    report("ALL POTION AND EXPANDED HEALTH CHECKS PASSED");
+  } catch (error) {
+    report("FAIL: " + error.message);
+  } finally {
+    busy = false;
+  }
 }
 
 async function pickupChecks(previewLevel = 0) {
@@ -1477,11 +1580,14 @@ async function pickupChecks(previewLevel = 0) {
       }
       await watchCamera(state, () => !state.roomCamera.transition);
       await pause(100);
+      // Render the settled scene before freezing a background preview tab.
+      testGame.updateLogic(1);
+      testGame.updateRender(1);
       testGame.paused = true;
       report(
         previewLevel === 1
           ? "Minigun on the right, on clear floor between the columns."
-          : "Launcher on the left of the arrival doors; whip on the right."
+          : "Whip beside the launcher, together on the left of the starting Prince."
       );
       return;
     }
@@ -1502,12 +1608,19 @@ async function pickupChecks(previewLevel = 0) {
         state.rocketLauncher.effects.ground.visible,
       "Level-two launcher is visible on the left of the starting doors"
     );
-    check(!state.kid.hasWhip && state.whip.effects.ground.visible, "The whip remains available beside the same doors");
+    check(
+      !state.kid.hasWhip &&
+        state.whip.effects.ground.visible &&
+        state.whip.pickup.worldX === pickup.worldX + 32 &&
+        state.whip.pickup.worldY === pickup.worldY,
+      "The visible whip sits directly beside the launcher, to the left of the spawn"
+    );
     await walkUntil(() => state.kid.hasRocketLauncher, "Walking left from the real start collects the launcher", -1);
     check(
       state.kid.activeWeapon === "rocketLauncher" && !state.rocketLauncher.effects.ground.visible,
       "The collected launcher is usable and its pickup disappears"
     );
+    check(state.kid.hasWhip && !state.whip.effects.ground.visible, "The same leftward walk collects the whip first");
     state = await freshLevel(3);
     check(
       state.kid.hasRocketLauncher && !state.rocketLauncher.effects.ground.visible,
@@ -2650,6 +2763,7 @@ document.getElementById("boundary-preview").addEventListener("click", async () =
 document.getElementById("run").addEventListener("click", combatChecks);
 document.getElementById("melee-fire").addEventListener("click", meleeFireChecks);
 document.getElementById("whip-check").addEventListener("click", whipChecks);
+document.getElementById("health-check").addEventListener("click", healthChecks);
 document.getElementById("kick-check").addEventListener("click", () => kickChecks());
 document.getElementById("kick-preview").addEventListener("click", () => kickChecks(true));
 document.getElementById("pickup-check").addEventListener("click", () => pickupChecks());

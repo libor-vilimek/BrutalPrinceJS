@@ -353,7 +353,11 @@ PrinceJS.Utils = {
         PrinceJS.currentLevel = queryLevel;
       }
     }
-    // Health is fixed at ten in this version; older saved health/h values must not reduce it.
+    // Keep the ten-point starting minimum while restoring bonuses earned from potions.
+    let queryHealth = Number(query.get("health") || query.get("h"));
+    if (Number.isSafeInteger(queryHealth) && queryHealth >= 10) {
+      PrinceJS.maxHealth = queryHealth;
+    }
     if (query.get("time") || query.get("t")) {
       let queryTime = parseInt(query.get("time") || query.get("t"), 10);
       if (!isNaN(queryTime) && queryTime >= 1 && queryTime <= PrinceJS.TIME_LIMIT) {

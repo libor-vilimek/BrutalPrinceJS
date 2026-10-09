@@ -8,7 +8,7 @@ const { test } = require("node:test");
 
 const fixture = require("./helpers/whip-fixture");
 
-test("level two's coiled whip is beside the actual arrival door, visible and not collected from the spawn", () => {
+test("level two's coiled whip is left of the spawn beside the launcher, visible and not collected from the spawn", () => {
   const f = fixture();
   const json = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/maps/level2.json")));
   const data = json.room.find((room) => room.id === json.prince.room);
@@ -25,13 +25,13 @@ test("level two's coiled whip is beside the actual arrival door, visible and not
   f.kid.hasWhip = false;
   const whip = new f.PrinceJS.Whip(f.delegate, 1);
   assert.equal(whip.pickup.room, 5);
-  assert.equal(whip.pickup.column, 4);
+  assert.equal(whip.pickup.column, 2);
   assert.equal(whip.pickup.row, 1);
-  assert.equal(whip.pickup.worldX, 3984);
+  assert.equal(whip.pickup.worldX, 3920);
   assert.equal(whip.pickup.worldY, 497);
   assert.equal(whip.effects.ground.visible, true);
   assert.equal(whip.checkPickup(), false);
-  f.kid.charX = 4 * 14 + 7;
+  f.kid.charX = 2 * 14 + 7;
   assert.equal(whip.checkPickup(), true);
   assert.equal(f.kid.hasWhip, true);
   assert.equal(f.kid.activeWeapon, "minigun");

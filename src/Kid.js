@@ -1700,9 +1700,7 @@ PrinceJS.Kid.prototype.recoverLife = function () {
 };
 
 PrinceJS.Kid.prototype.addLife = function () {
-  if (this.maxHealth < 10) {
-    this.maxHealth++;
-  }
+  this.maxHealth++;
   this.health = this.maxHealth;
   this.onAddLive.dispatch();
 };

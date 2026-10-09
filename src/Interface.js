@@ -67,44 +67,50 @@ PrinceJS.Interface.prototype = {
   setPlayerLive: function (actor) {
     this.player = actor;
     this.playerHPActive = this.player.health;
-    for (let i = 0; i < this.playerHPActive; i++) {
+    for (let i = 0; i < Math.min(10, this.player.maxHealth); i++) {
       this.playerHPs[i] = this.game.add.sprite(i * 7, 2, "general", "kid-live");
       this.layer.addChild(this.playerHPs[i]);
     }
-    for (let i = this.playerHPActive; i < this.player.maxHealth; i++) {
-      this.playerHPs[i] = this.game.add.sprite(i * 7, 2, "general", "kid-emptylive");
-      this.layer.addChild(this.playerHPs[i]);
-    }
+    this.playerHealthText = this.game.make.bitmapText(9, 4, "font", "", 16);
+    this.playerHealthText.anchor.setTo(0, 0.5);
+    this.layer.addChild(this.playerHealthText);
+    this.refreshPlayerLives();
     this.player.onDamageLife.add(this.damagePlayerLive, this);
     this.player.onRecoverLive.add(this.recoverPlayerLive, this);
     this.player.onAddLive.add(this.addPlayerLive, this);
   },
 
   damagePlayerLive: function (num) {
-    let n = Math.min(this.playerHPActive, num);
-    for (let i = 0; i < n; i++) {
-      this.playerHPActive--;
-      this.playerHPs[this.playerHPActive].frameName = "kid-emptylive";
-    }
+    this.playerHPActive = Math.max(0, this.playerHPActive - num);
+    this.refreshPlayerLives();
   },
 
   recoverPlayerLive: function () {
-    this.playerHPs[0].frameName = "kid-live";
-    this.playerHPs[this.playerHPActive].frameName = "kid-live";
-    this.playerHPActive++;
+    this.playerHPActive = Math.min(this.player.maxHealth, this.playerHPActive + 1);
+    this.refreshPlayerLives();
   },
 
   addPlayerLive: function () {
-    this.playerHPActive = this.playerHPs.length;
-    if (this.playerHPs.length < 10) {
-      let hp = this.game.add.sprite(this.playerHPActive * 7, 2, "general", "kid-live");
-      this.playerHPs[this.playerHPActive] = hp;
+    this.playerHPActive = this.player.health;
+    while (this.playerHPs.length < Math.min(10, this.player.maxHealth)) {
+      let hp = this.game.add.sprite(this.playerHPs.length * 7, 2, "general", "kid-live");
+      this.playerHPs.push(hp);
       this.layer.addChild(hp);
-      this.playerHPActive++;
     }
+    this.refreshPlayerLives();
+  },
 
-    for (let i = 0; i < this.playerHPActive; i++) {
-      this.playerHPs[i].frameName = "kid-live";
+  refreshPlayerLives: function () {
+    let compact = this.player.maxHealth > 10;
+    for (let i = 0; i < this.playerHPs.length; i++) {
+      this.playerHPs[i].visible = !compact || i === 0;
+      this.playerHPs[i].frameName = i < this.playerHPActive ? "kid-live" : "kid-emptylive";
+    }
+    this.playerHealthText.visible = compact;
+    this.playerHealthText.text = this.playerHPActive + "/" + this.player.maxHealth;
+    this.playerHealthText.fontSize = 16;
+    if (this.playerHealthText.width > 60) {
+      this.playerHealthText.fontSize *= 60 / this.playerHealthText.width;
     }
   },
 

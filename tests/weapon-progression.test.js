@@ -279,7 +279,7 @@ test("level 1 keeps the molotov and places the minigun on clear right-hand floor
   }
 });
 
-test("level 2 grants molotov/minigun and leaves the launcher left of the entrance and whip on the right", () => {
+test("level 2 grants molotov/minigun and leaves the launcher and whip together left of the spawn", () => {
   const { state, messages, sounds, keys, keyboardCodes } = fixture(2);
   assert.equal(state.kid.hasMolotov, true);
   assert.equal(state.kid.hasMinigun, true);
@@ -299,7 +299,9 @@ test("level 2 grants molotov/minigun and leaves the launcher left of the entranc
   assert.equal(state.kid.hasWhip, false);
   assert.equal(state.whip.pickup.collected, false);
   assert.equal(state.whip.effects.pickupVisible, true);
-  assert.equal(state.whip.pickup.worldX - startRoom.x * 320, 144);
+  assert.equal(state.whip.pickup.worldX - startRoom.x * 320, 80);
+  assert.equal(state.whip.pickup.worldX - state.rocketLauncher.pickup.worldX, 32);
+  assert.equal(state.whip.pickup.worldY, state.rocketLauncher.pickup.worldY);
   assert.equal(state.weapons.includes(state.whip), false);
   assert.equal(state.whip.actionKey, keys.get(keyboardCodes.X));
   keys.get(keyboardCodes.X).onDown.dispatch();

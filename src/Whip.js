@@ -33,7 +33,7 @@ PrinceJS.Whip.prototype = {
     let room = this.level.rooms[this.kid.room];
     let row = entrance ? entrance.roomY : this.kid.charBlockY;
     let column = entrance ? entrance.roomX : this.kid.charBlockX;
-    let candidates = entrance ? [column + 1, column - 2, column + 2, column - 3] : [];
+    let candidates = entrance ? [column - 1, column - 2, column + 1, column + 2, column - 3] : [];
     for (let candidate of candidates) {
       let tile = this.level.getTileAt(candidate, row, this.kid.room);
       if (
@@ -41,7 +41,7 @@ PrinceJS.Whip.prototype = {
         candidate < 10 &&
         tile.isSafeWalkable() &&
         !tile.isBarrier() &&
-        !tile.isExitDoor() &&
+        (!tile.isExitDoor() || (entrance && tile.element === PrinceJS.Level.TILE_EXIT_LEFT)) &&
         ![PrinceJS.Level.TILE_SPIKES, PrinceJS.Level.TILE_POTION, PrinceJS.Level.TILE_SWORD].includes(tile.element)
       ) {
         pickup.worldX = room.x * PrinceJS.ROOM_WIDTH + candidate * PrinceJS.BLOCK_WIDTH + 16;

@@ -14,6 +14,7 @@ Tento dokument zachycuje aktuální přání z celé této konverzace. Změny zd
 
 - [Ovládání a inventář](#ovládání-a-inventář)
 - [Levely a získávání vybavení](#levely-a-získávání-vybavení)
+- [Životy a lahvičky](#životy-a-lahvičky)
 - [Vzhled prince a animace zbraní](#vzhled-prince-a-animace-zbraní)
 - [Dvě pochodně](#dvě-pochodně)
 - [Molotov a oheň](#molotov-a-oheň)
@@ -47,7 +48,7 @@ Navazující implementační rozhodnutí: pořadí zbraní je `1` pochodně, `2`
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1, startovní obrazovka  | Princ automaticky získá dvě skutečné pochodně ze stěny úvodní animací. Molotov zůstává na původním místě na horní startovní plošině. Minigun na této obrazovce není.        |
 | 1, místnost pod startem | Několik nepřátel poskytuje první příležitost použít molotov. Minigun leží dobře viditelně v pravé části této druhé obrazovky na pevné podlaze, mimo padající část a sloupy. |
-| 2                       | Molotov a minigun jsou automaticky vlastněné. Bič je k sebrání u vstupních dveří; raketomet leží vlevo hned na začátku levelu.                                              |
+| 2                       | Molotov a minigun jsou automaticky vlastněné. Bič je k sebrání vlevo od prince vedle raketometu u vstupních dveří.                                                          |
 | 3                       | Raketomet sebraný v levelu 2 zůstává vlastněný. Pokud ho princ dosud nemá, je k sebrání na začátku. Molotov a minigun jsou automaticky vlastněné.                           |
 | 4 a dál                 | Raketomet je automaticky vlastněný společně s dříve dostupnými zbraněmi.                                                                                                    |
 | 1–11                    | Jetpack není dostupný.                                                                                                                                                      |
@@ -59,6 +60,13 @@ Navazující implementační rozhodnutí: pořadí zbraní je `1` pochodně, `2`
 - **LEVEL-03:** Vybavení automaticky přidělené v pozdějších levelech nemá vyžadovat další sběr. Samotné vlastnictví jetpacku ještě nespouští let.
 
 Navazující implementační rozhodnutí: při postupu se uloží výbava přinesená do dalšího levelu. Jeho restart tuto výbavu zachová; pickup získaný až během nedokončeného pokusu se znovu objeví podle dosavadních pravidel restartu. Nová hra uloženou výbavu vymaže.
+
+## Životy a lahvičky
+
+- **HEALTH-01:** Nová hra začíná s deseti životy. Velká červená lahvička zvýší maximum o jeden i nad deset a doplní zdraví na nové maximum. Zvýšené maximum se přenáší do dalšího levelu a obnoví se z uložené URL; starší hodnoty pod deset nesnižují výchozí zdraví.
+- **HEALTH-02:** V mapách kampaně je více malých červených lahviček. Každá doplní právě jeden život, nejvýše do aktuálního maxima, a maximum sama nezvýší. Pití nadále používá původní animaci a ovládání.
+
+Implementační rozhodnutí: levely 1–13 obsahují celkem 56 dalších léčivých lahviček na pevné podlaze mimo startovní výbavu, pasti a příběhové scény. Původní lahvičky a jejich účinky zůstávají zachované. Při maximu do deseti má ukazatel původní ikony; nad deset zobrazuje ikonu a přesný počet `aktuální/maximum`, aby nepřekrýval čas ani zdraví protivníka.
 
 ## Vzhled prince a animace zbraní
 
@@ -101,7 +109,7 @@ Navazující implementační rozhodnutí: při postupu se uloží výbava přine
 
 ## Bič
 
-- **WHIP-01:** Bič je v druhém levelu u vstupních dveří k sebrání.
+- **WHIP-01:** Bič je v druhém levelu vlevo od startujícího prince, přímo vedle raketometu u vstupních dveří, aby byl dobře viditelný a šel sebrat cestou k raketometu.
 - **WHIP-02:** Lze jím normálně práskat a zraňovat nepřátele jako zbraní.
 - **WHIP-03:** Jestli nad princem blízko okraje stojí nepřítel, bič ho může chytit za nohu a posunout do skutečné díry, do níž spadne. Funguje i přímo pod protivníkem při otočení prince na obě strany: bič se vede kolem volného okraje plošiny. Nejde o přesun skrz souvislou podlahu nebo strop.
 - **WHIP-04:** I při krátkém pádu dopadne na obličej a ztratí jeden život. Velký pád ho zabije podle původních pravidel pádu.

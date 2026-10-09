@@ -29,7 +29,7 @@ PrinceJS.RocketLauncher.prototype.findPickup = function (direction) {
     let tile = this.level.getTileAt(1, 1, 5);
     if (tile.element === PrinceJS.Level.TILE_TORCH) {
       // The torch is on the back wall: the clear floor below it is immediately
-      // left of the arrival doors, with the whip on their other side.
+      // left of the arrival doors, with the whip beside it on the right.
       pickup.worldX = room.x * PrinceJS.ROOM_WIDTH + PrinceJS.BLOCK_WIDTH + 16;
       pickup.worldY = room.y * PrinceJS.ROOM_HEIGHT + PrinceJS.Utils.convertBlockYtoY(1) + 3;
     }
