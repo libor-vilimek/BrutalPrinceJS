@@ -166,6 +166,12 @@ PrinceJS.TwinTorches.prototype = {
     if (stage === "intro") {
       this.introStartX = this.kid.charX;
       this.introSteps = this.introTorches.map((torch) => this.safeIntroStep(torch));
+      // Retreat only half a tile from the second socket. This keeps the first
+      // target in reach while leaving the nearby bottle for the player to pick up.
+      const lastStep = this.introSteps[1];
+      const endX = this.introStartX + Math.sign(lastStep) * Math.max(0, Math.abs(lastStep) - 7);
+      // Native edge steps use integer distances to select their animation.
+      this.introEndStep = Math.round(endX) - this.introStartX;
     }
     return true;
   },
@@ -320,7 +326,9 @@ PrinceJS.TwinTorches.prototype = {
     let second = ease(0.56, 0.22);
     let back = ease(1.18, 0.32);
     this.kid.charX =
-      this.introStartX + (this.introSteps[0] * first + (this.introSteps[1] - this.introSteps[0]) * second) * (1 - back);
+      this.introStartX +
+      (this.introSteps[0] * first + (this.introSteps[1] - this.introSteps[0]) * second) * (1 - back) +
+      this.introEndStep * back;
     // This scripted route moves the standing root. Native walk frames include
     // alternating foot offsets paired with CHX commands we do not execute here.
     // Resolve the floor/room from the root before applying the visual step, or

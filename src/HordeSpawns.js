@@ -94,12 +94,13 @@ PrinceJS.HordeSpawns = {
             continue;
           }
           // A small first encounter directly beneath the loose-floor shaft gives
-          // the hanging molotov a purpose before the minigun pickup on the left.
+          // the hanging molotov a purpose before the minigun pickup on the right.
           if (roomId === introRoom && (row !== 1 || ![6, 7].includes(column))) {
             continue;
           }
-          // Leave room to reach the left-hand gun before entering the first crowd.
-          if (introRoom > 0 && room.links.left === introRoom && row === 1 && column < 3) {
+          // Omit the two nearest soldiers as well, leaving a five-column
+          // approach to finish drawing the minigun after its tutorial prompt.
+          if (introRoom > 0 && room.links.left === introRoom && row === 1 && column < 5) {
             continue;
           }
           let tile = level.getTileAt(column, row, roomId);

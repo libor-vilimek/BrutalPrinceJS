@@ -294,13 +294,13 @@ test("mission one opens with two molotov targets under the shaft and a clear app
   const nextRoom = level.rooms[below].links.right;
   assert.ok(
     !guards.some(
-      (guard) => guard.room === nextRoom && Math.floor(guard.location / 10) === 1 && guard.location % 10 < 3
+      (guard) => guard.room === nextRoom && Math.floor(guard.location / 10) === 1 && guard.location % 10 < 5
     ),
     "the next room's entrance stays clear beyond the right-hand gun"
   );
   assert.ok(
-    guards.some((guard) => guard.room === nextRoom && guard.location === 13),
-    "the first crowd starts beyond the three-column entrance clearance"
+    guards.some((guard) => guard.room === nextRoom && guard.location === 15),
+    "the first crowd starts beyond five clear columns after removing the two nearest soldiers"
   );
   assert.ok(
     !guards.some((guard) => guard.room === json.prince.room),

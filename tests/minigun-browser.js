@@ -106,11 +106,12 @@ async function meleeFireChecks() {
       kid.room === start.room &&
         kid.baseX === startRoom.x * 320 &&
         kid.baseY === startRoom.y * 189 + 3 &&
-        kid.charX === state.twinTorches.introStartX &&
-        kid.charBlockX === 0 &&
+        kid.charX === 27 &&
+        kid.charX > state.twinTorches.introStartX &&
+        kid.charBlockX === 1 &&
         kid.charBlockY === 1 &&
         !kid.inFallDown,
-      "The complete opening returns to the real starting landing without drifting through neighboring walls"
+      "The opening ends after a short retreat on the same landing without drifting through neighboring walls"
     );
     placeKid(2, 70, 1, 1);
     state.selectWeapon("twinTorches");

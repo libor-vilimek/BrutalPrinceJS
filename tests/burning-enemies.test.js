@@ -230,7 +230,7 @@ test("the opening burn follows the real two-tier landing and waits for the loose
       }
     };
     f.effects.random = () => (fps === 30 ? 0 : 1);
-    const guard = f.actor({ x: 96, feet: 119, burnRoute: "opening-shaft" });
+    const guard = f.actor({ x: 128, feet: 119, burnRoute: "opening-shaft" });
     const burn = f.effects.ignite(guard, { weapon: "twinTorches" });
     let passedLanding = false;
     let waited = false;

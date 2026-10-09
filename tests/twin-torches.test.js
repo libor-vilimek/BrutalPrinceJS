@@ -353,7 +353,12 @@ test("the opening steps beside each actual handle before pickup instead of exten
   }
   f.weapon.elapsed = f.PrinceJS.TwinTorches.INTRO_DURATION;
   f.weapon.updateIntro(0);
-  assert.equal(f.kid.charX, start);
+  assert.equal(f.PrinceJS.Utils.convertX(f.kid.charX), 61, "the short retreat ends ahead of the starting position");
+  const target = map.guards.find((guard) => guard.burnRoute === "opening-shaft");
+  const enemy = f.enemy(f.PrinceJS.Utils.convertBlockXtoX(target.location % 10) + target.direction * 7);
+  assert.equal(target.location, 13);
+  assert.equal(f.weapon.canReach(enemy), true, "the guard moved right is still within the first spin's reach");
+  assert.ok(80 - f.PrinceJS.Utils.convertX(f.kid.charX) > 17, "the bottle remains outside pickup range");
   assert.equal(f.kid.charFrame, 15);
   assert.equal(f.kid.specialAction, null);
   const blocked = f.setTile(f.kid.room, 1, 1, 20);
@@ -421,7 +426,8 @@ test("every native opening frame stays on the starting landing without crossing 
       }
       assert.deepEqual(f.roomChanges, []);
       assert.ok(f.weapon.introDone && f.weapon.introTorches.every((torch) => torch.captured && torch.tile.taken));
-      assert.equal(f.kid.charX, startX);
+      assert.equal(f.PrinceJS.Utils.convertX(f.kid.charX), direction === 1 ? 61 : 66);
+      assert.ok(Number.isInteger(f.kid.charX), "native edge steps need an integer root after collection");
       assert.equal(f.kid.charFrame, 15);
       assert.equal(f.kid.specialAction, null);
     }
@@ -612,7 +618,6 @@ test("level1 intro waits for landing, takes both actual nearby wall torches, tuc
   f.kid.inFallDown = false;
   f.kid.charY = 116;
   f.kid.charBlockY = 1;
-  const position = f.kid.charX;
   f.advance(0.1);
   assert.equal(f.weapon.actionStage, "intro");
   assert.equal(f.weapon.canSelect(), false);
@@ -630,7 +635,7 @@ test("level1 intro waits for landing, takes both actual nearby wall torches, tuc
   assert.equal(f.weapon.introDone, true);
   assert.equal(f.weapon.actionStage, "hidden");
   assert.equal(f.kid.specialAction, null);
-  assert.equal(f.kid.charX, position);
+  assert.equal(f.PrinceJS.Utils.convertX(f.kid.charX), 61);
   assert.equal(f.kid.activeWeapon, "twinTorches");
   assert.equal(f.weapon.startIntro(), false);
   assert.equal(f.level.getTileAt(0, 1, 1).tileChild.visible, false);

@@ -115,6 +115,10 @@ async function run() {
       "The opening guard faces away and does not react to the Prince"
     );
     check(s.twinTorches.canReach(target), "The waiting guard is within the first torch spin's reach");
+    check(
+      target.charX === 56 && s.kid.charX === 27 && !s.kid.hasMolotov,
+      "The moved guard stays in reach after a shorter retreat, with the bottle still waiting for the player"
+    );
     check(s.kid.health === s.kid.maxHealth, "The guard cannot hurt the Prince during the opening collection");
     const frozen = snapshot(s);
     for (const code of [27, 13, 32, 39, 50, 67, 74, 88]) {
@@ -321,6 +325,7 @@ async function runCampaign(preview = false) {
     await until(() => s.tutorial.active && s.tutorial.active.id === "minigun-select", "minigun room entry", 15000);
     key("keyup", 39);
     check(s.kid.hasMinigun && s.kid.room === 3, "Walking right collects the minigun and enters the next room");
+    const minigunHealth = s.kid.health;
     check(
       frame.contentDocument.querySelectorAll(".tutorial-weapon").length === 3,
       "The weapon lesson shows pictures and number keys for torches, molotovs and minigun"
@@ -334,6 +339,11 @@ async function runCampaign(preview = false) {
     await until(() => s.tutorial.active && s.tutorial.active.id === "minigun-fire", "minigun firing lesson");
     const shots = s.minigun.effects.shots;
     tap(17);
+    await until(() => s.minigun.effects.shots > shots, "first minigun shot");
+    check(
+      s.kid.health === minigunHealth,
+      "The cleared entrance leaves enough time to draw and fire before being stabbed"
+    );
     await until(() => s.minigun.effects.shots >= shots + 10, "assisted minigun burst");
     await until(() => !s.tutorial.assist && !s.kid.specialAction, "minigun stow");
     check(!s.weaponCtrlKey.isDown && s.kid.activeWeapon === "minigun", "The burst ends and keeps the selected gun");
