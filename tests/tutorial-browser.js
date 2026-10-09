@@ -411,6 +411,7 @@ async function runCampaign(preview = false) {
       !s.weaponCtrlKey.isDown && s.kid.activeWeapon === "rocketLauncher",
       "The rocket lesson releases its assisted input"
     );
+    await rocketDemolition();
     check(game.sound.mute && game.sound.volume === 0, "All campaign lessons preserve muted sound");
     game.paused = true;
     results.textContent += "All campaign tutorial checks passed.\n";
@@ -514,17 +515,17 @@ async function upperLedgeKick(preview = false) {
   kid.updateBlockXY();
   kid.updateCharPosition();
   key("keydown", 16);
-  await wait(100);
-  check(!s.tutorial.active, "The upper kick lesson waits while the player is still hanging");
   const health = kid.health;
   const selected = kid.activeWeapon;
-  key("keydown", 38, { shiftKey: true });
   try {
-    await until(() => s.tutorial.active && s.tutorial.active.id === "upper-ledge-kick", "top-of-ascent kick lesson");
+    await until(() => s.tutorial.active && s.tutorial.active.id === "upper-ledge-kick", "hanging kick reminder");
   } finally {
-    key("keyup", 38, { shiftKey: true });
     key("keyup", 16);
   }
+  check(
+    ["hang", "hangstraight"].includes(kid.action),
+    "A nearby guard triggers the kick reminder before the climb finishes"
+  );
   check(kid.health === health, "The upper landing lesson appears before the close guards can stab the Prince");
   check(
     s.kick.targets(s.kick.threatOrigin(), 32, false).length > 0,
@@ -554,4 +555,43 @@ async function upperLedgeKick(preview = false) {
   check(kid.health === health, "The kick makes enough room to draw and fire the minigun safely");
   await until(() => !s.tutorial.assist && !kid.specialAction, "post-kick minigun stow");
   check(!s.weaponCtrlKey.isDown && kid.activeWeapon === "minigun", "The follow-up burst releases Ctrl normally");
+}
+
+async function rocketDemolition() {
+  const s = state();
+  if (!s.tutorial.active) {
+    // Stand beside the real stone wall at the left end of the rocket corridor.
+    // The checkpoint leaves terrain, weapon ownership and reactions unchanged.
+    placePrince(11, 35, 1, -1);
+  }
+  await until(() => s.tutorial.active && s.tutorial.active.id === "rocket-demolition", "demolition lesson");
+  const sequence = s.tutorial.sequence;
+  const target = sequence.rocketTarget;
+  const before = snapshot(s);
+  const health = s.kid.health;
+  check(
+    target && !sequence.rocketTargetDestroyed(),
+    "The demolition prompt identifies an intact barrier on the real map"
+  );
+  tap(67);
+  await wait(120);
+  check(
+    s.tutorial.active.id === "rocket-demolition" && snapshot(s) === before,
+    "Wrong keys cannot dismiss demolition or advance the world"
+  );
+  // Touch users confirm through the same displayed keycap.
+  frame.contentDocument.querySelector(".tutorial-key").click();
+  await until(() => sequence.rocketTargetDestroyed(), "real rocket destroys the tutorial barrier", 5000);
+  check(s.kid.health === health, "The demolition demonstration preserves health");
+  await until(() => !s.tutorial.assist && !s.kid.specialAction, "demolition release and stow");
+  check(
+    !s.weaponCtrlKey.isDown && s.kid.activeWeapon === "rocketLauncher",
+    "Demolition releases fire and keeps the selected launcher"
+  );
+  const tile = s.level.getTileAt(target.roomX, target.roomY, target.room);
+  check(!tile.isBarrier(), "The blasted barrier leaves a real usable passage");
+  check(
+    !s.tutorial.active && s.tutorial.completed.has("rocket-demolition"),
+    "The demolition lesson completes once per campaign"
+  );
 }

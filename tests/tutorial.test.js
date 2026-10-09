@@ -447,11 +447,11 @@ test("the whip lesson waits for the actual reachable ankle in the third room lef
   assert.equal(lesson.when(f.state), false);
 });
 
-test("the kick lesson waits for the final upper landing and a reachable close guard", () => {
+test("the first standing kick lesson still requires the final upper landing and a guard in contact range", () => {
   const f = fixture();
   const lesson = f.prince.TutorialLessons.find((item) => item.id === "upper-ledge-kick");
   f.prince.currentLevel = f.state.level.number = 2;
-  f.prince.Kick = { RANGE: 32 };
+  f.prince.Kick = { RANGE: 32, NEAR: 144 };
   f.state.level.rooms = { 22: { x: 9, y: 1 } };
   f.state.kid.room = 22;
   let origin = { room: 22, x: 9 * 320 + 48, y: 189 + 119 };
@@ -472,11 +472,6 @@ test("the kick lesson waits for the final upper landing and a reachable close gu
   assert.equal(lesson.when(f.state), false, "no empty demonstration without a real target");
   targets = [{}];
   assert.equal(lesson.when(f.state), true);
-  f.state.kid.action = "climbup";
-  assert.equal(lesson.when(f.state), true, "C can finish the last part of the native climb");
-  f.state.kid.action = "hangstraight";
-  assert.equal(lesson.when(f.state), false, "wait for the player to start climbing");
-  f.state.kid.action = "stand";
   origin.y += 63;
   assert.equal(lesson.when(f.state), false, "the lower shelf is too early");
   origin.y -= 63;
@@ -486,11 +481,149 @@ test("the kick lesson waits for the final upper landing and a reachable close gu
   f.state.kid.room = 1;
   assert.equal(lesson.when(f.state), false, "the earlier whip floor must not trigger the kick");
   f.state.kid.room = 22;
+  f.tutorial.completed.add(lesson.id);
+  assert.equal(lesson.when(f.state), false, "standing beside a guard must not repeatedly interrupt combat");
+  f.tutorial.completed.delete(lesson.id);
   canPrepare = false;
   assert.equal(lesson.when(f.state), false);
   canPrepare = true;
   f.state.kick.cooldown = 0.2;
   assert.equal(lesson.when(f.state), false, "an unavailable kick cannot be taught yet");
+});
+
+test("level-two kick reminders cover climbing up, down, hanging and landing near reachable threats", () => {
+  const f = fixture();
+  const lesson = f.prince.TutorialLessons.find((item) => item.id === "upper-ledge-kick");
+  f.prince.currentLevel = f.state.level.number = 2;
+  f.prince.Kick = { RANGE: 32, NEAR: 144 };
+  Object.assign(f.state.kid, { room: 1, charBlockY: 1 });
+  const origin = { room: 1, x: 60, y: 119 };
+  let targets = [{}];
+  let canPrepare = true;
+  f.state.kick = {
+    cooldown: 0,
+    actionStage: "hidden",
+    canPrepare: () => canPrepare,
+    threatOrigin: () => origin,
+    targets(point, range, forward) {
+      assert.equal(point, origin);
+      assert.equal(range, 144, "use the native reachable emergency radius during traversal");
+      assert.equal(forward, false);
+      return targets;
+    }
+  };
+  f.tutorial.completed.add(lesson.id);
+  for (const action of ["climbup", "climbdown", "hang", "hangstraight", "climbfail", "softland", "medland"]) {
+    f.state.kid.action = action;
+    assert.equal(lesson.when(f.state), true, action + " may show a reminder even after the first lesson");
+    targets = [];
+    assert.equal(lesson.when(f.state), false, "a blocked or unreachable threat cannot trigger " + action);
+    targets = [{}];
+  }
+  for (const action of ["stand", "running", "turn"]) {
+    f.state.kid.action = action;
+    assert.equal(lesson.when(f.state), false, "ordinary movement does not repeat the reminder");
+  }
+  f.state.kid.action = "climbup";
+  canPrepare = false;
+  assert.equal(lesson.when(f.state), false, "only prompt when the native kick can work");
+  canPrepare = true;
+  f.state.kick.cooldown = 0.2;
+  assert.equal(lesson.when(f.state), false);
+  f.state.kick.cooldown = 0;
+  f.state.kick.actionStage = "kicking";
+  assert.equal(lesson.when(f.state), false);
+  f.state.kick.actionStage = "hidden";
+  f.prince.currentLevel = f.state.level.number = 3;
+  assert.equal(lesson.when(f.state), false, "reminders are limited to level two");
+});
+
+test("kick displays share a 60-second cooldown through retries, while a new game resets it", () => {
+  const f = fixture();
+  const lesson = f.prince.TutorialLessons.find((item) => item.id === "upper-ledge-kick");
+  f.state.kick = { actionStage: "hidden", pending: 0 };
+  f.tutorial.lessons = [{ ...lesson, when: () => true }];
+  f.tutorial.update(0.02);
+  assert.equal(f.tutorial.active.id, lesson.id);
+  f.advance(10000);
+  f.input("keydown", 17);
+  f.input("keyup", 17);
+  assert.equal(f.tutorial.active.id, lesson.id, "wrong keys do not close the reminder");
+  f.tutorial.accept(67, false);
+  f.tutorial.worldUpdated();
+  for (let i = 0; i < 3; i++) {
+    f.tutorial.update(0.05);
+  }
+  assert.equal(f.tutorial.completed.has(lesson.id), true);
+  assert.equal(f.tutorial.show(lesson), false);
+  f.advance(49999);
+  f.tutorial.update(0.02);
+  assert.equal(f.tutorial.active, null, "59,999 ms since display is too soon");
+  f.advance(1);
+  f.tutorial.update(0.02);
+  assert.equal(f.tutorial.active.id, lesson.id, "a completed lesson can repeat after 60,000 ms");
+  f.tutorial.destroy();
+  const retry = new f.prince.Tutorial(f.state);
+  assert.equal(retry.show(lesson), false, "restarting does not bypass the cooldown, even for an unconfirmed prompt");
+  f.advance(60000);
+  assert.equal(retry.show(lesson), true);
+  retry.destroy();
+  f.prince.Init();
+  const fresh = new f.prince.Tutorial(f.state);
+  assert.equal(fresh.show(lesson), true, "a new campaign can teach the kick immediately");
+});
+
+test("rocket demolition waits for a usable selected launcher and a real clear target after the first firing lesson", () => {
+  const f = fixture();
+  const lesson = f.prince.TutorialLessons.find((item) => item.id === "rocket-demolition");
+  f.prince.currentLevel = f.state.level.number = 2;
+  let canFire = true;
+  let target = {};
+  f.state.rocketLauncher = { canFire: () => canFire };
+  f.tutorial.sequence.findRocketTarget = () => target;
+  f.state.kid.activeWeapon = "rocketLauncher";
+  assert.equal(lesson.when(f.state), false);
+  f.tutorial.completed.add("rockets-fire");
+  assert.equal(lesson.when(f.state), true);
+  target = null;
+  assert.equal(lesson.when(f.state), false);
+  target = {};
+  canFire = false;
+  assert.equal(lesson.when(f.state), false);
+  canFire = true;
+  f.state.kid.specialAction = {};
+  assert.equal(lesson.when(f.state), false);
+  f.state.kid.specialAction = null;
+  f.state.kid.action = "running";
+  assert.equal(lesson.when(f.state), false);
+  f.state.kid.action = "stand";
+  f.state.kid.activeWeapon = "minigun";
+  assert.equal(lesson.when(f.state), false);
+  f.state.kid.activeWeapon = "rocketLauncher";
+  f.prince.currentLevel = f.state.level.number = 3;
+  assert.equal(lesson.when(f.state), false);
+});
+
+test("demolition holds the real firing key until the barrier breaks, with a bounded failure timeout", () => {
+  for (const destroyed of [false, true]) {
+    const f = fixture();
+    const lesson = f.prince.TutorialLessons.find((item) => item.id === "rocket-demolition");
+    let broken = false;
+    f.tutorial.sequence.rocketTargetDestroyed = () => broken;
+    f.tutorial.show(lesson);
+    f.tutorial.accept(70, false);
+    f.tutorial.worldUpdated();
+    for (let i = 0; i < 40; i++) {
+      f.tutorial.update(0.05);
+    }
+    assert.equal(f.keys.get(70).isDown, true, "drawing and projectile travel do not release a tap early");
+    broken = destroyed;
+    for (let i = 0; i < (destroyed ? 1 : 41); i++) {
+      f.tutorial.update(0.05);
+    }
+    assert.equal(f.keys.get(70).isDown, false);
+    assert.equal(f.tutorial.assist, null);
+  }
 });
 
 test("the upper kick completes before the repeated minigun selection and firing lessons", () => {

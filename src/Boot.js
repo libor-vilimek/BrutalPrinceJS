@@ -29,6 +29,7 @@ PrinceJS.Init = function () {
   PrinceJS.currentHealth = null;
   PrinceJS.levelInventory = null;
   PrinceJS.completedTutorials = new Set();
+  PrinceJS.tutorialLastShown = new Map();
   PrinceJS.tutorialPauseTime = null;
   PrinceJS.menuPauseTime = null;
   PrinceJS.minutes = PrinceJS.TIME_LIMIT;

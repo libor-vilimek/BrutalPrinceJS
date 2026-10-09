@@ -89,7 +89,8 @@ function fixture() {
     "LevelBuilder",
     "RangedWeapon",
     "RocketLauncherAction",
-    "RocketLauncher"
+    "RocketLauncher",
+    "TutorialSequence"
   ]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "src", file + ".js"), "utf8"), context);
   }
@@ -214,6 +215,73 @@ function fireFrom(f, x, direction, room) {
   }
   assert.equal(f.launcher.bullets.length, 0);
 }
+
+function demolitionSequence(f, muzzle = { x: 60, y: 95, direction: 1 }) {
+  f.launcher.effects.getMuzzle = () => muzzle;
+  f.delegate.rocketLauncher = f.launcher;
+  f.kid.baseX = f.level.rooms[f.kid.room].x * f.PrinceJS.ROOM_WIDTH;
+  f.kid.charX = ((muzzle.x - 18 * muzzle.direction - f.kid.baseX) * 140) / 320;
+  return new f.PrinceJS.TutorialSequence(f.delegate, {});
+}
+
+test("demolition targets real walls, gates and exit doors and observes their actual rocket destruction", () => {
+  for (const element of ["TILE_WALL", "TILE_GATE", "TILE_EXIT_RIGHT"]) {
+    const f = fixture();
+    const tile = f.setTile(1, 3, 1, f.PrinceJS.Level[element]);
+    const sequence = demolitionSequence(f);
+    assert.equal(sequence.findRocketTarget(), tile);
+    assert.equal(sequence.rocketTargetDestroyed(), false);
+    assert.equal(f.launcher.advanceBullet(f.rocket(), 200), false);
+    assert.equal(sequence.rocketTargetDestroyed(), true, "use real debris or the blasted door state");
+    assert.equal(sequence.findRocketTarget(), null, "rubble and destroyed doors cannot trigger another lesson");
+  }
+});
+
+test("demolition follows room links both ways and waits for the actual barrier to become visible", () => {
+  for (const direction of [-1, 1]) {
+    const f = fixture();
+    const tile = f.setTile(direction === 1 ? 2 : 1, direction === 1 ? 0 : 9, 1, f.PrinceJS.Level.TILE_WALL);
+    f.kid.room = direction === 1 ? 1 : 2;
+    const sequence = demolitionSequence(f, { x: direction === 1 ? 280 : 380, y: 95, direction });
+    f.delegate.roomCamera = { camera: { x: 400, y: 0 }, scale: 1, viewWidth: 200, viewHeight: 189 };
+    assert.equal(sequence.findRocketTarget(), null);
+    f.delegate.roomCamera.camera.x = 200;
+    assert.equal(sequence.findRocketTarget(), tile);
+    f.launcher.advanceBullet(f.rocket(direction === 1 ? 280 : 380, direction, f.kid.room), 150);
+    assert.equal(sequence.rocketTargetDestroyed(), true);
+  }
+});
+
+test("demolition requires an unobstructed shot and ignores entrance doors, missing rooms and distant walls", () => {
+  const f = fixture();
+  const door = f.setTile(1, 3, 1, f.PrinceJS.Level.TILE_EXIT_RIGHT);
+  door.doorRole = "entrance";
+  const sequence = demolitionSequence(f);
+  assert.equal(sequence.findRocketTarget(), null, "the protected arrival door is never a demolition target");
+  const wall = f.setTile(1, 6, 1, f.PrinceJS.Level.TILE_WALL);
+  assert.equal(sequence.findRocketTarget(), wall, "rockets pass through the arrival door");
+  const guard = f.enemy(150);
+  assert.equal(sequence.findRocketTarget(), null, "a guard intercepts the shot first");
+  guard.alive = false;
+  assert.equal(sequence.findRocketTarget(), wall);
+  f.setTile(1, 6, 1, f.PrinceJS.Level.TILE_FLOOR);
+  f.setTile(2, 7, 1, f.PrinceJS.Level.TILE_WALL);
+  assert.equal(sequence.findRocketTarget(), null, "only a nearby barrier is useful for the demonstration");
+  f.kid.room = 2;
+  f.kid.charX = (602 * 140) / 320;
+  f.launcher.effects.getMuzzle = () => ({ x: 620, y: 95, direction: 1 });
+  assert.equal(sequence.findRocketTarget(), null, "a missing neighboring room is not a destructible boundary wall");
+});
+
+test("demolition includes the body-to-muzzle sweep instead of overlooking a gate under the barrel", () => {
+  const f = fixture();
+  const gate = f.setTile(1, 2, 1, f.PrinceJS.Level.TILE_GATE);
+  f.setTile(1, 6, 1, f.PrinceJS.Level.TILE_WALL);
+  const sequence = demolitionSequence(f, { x: 116, y: 95, direction: 1 });
+  assert.equal(sequence.findRocketTarget(), gate);
+  f.launcher.fire(f.launcher.effects.getMuzzle());
+  assert.equal(sequence.rocketTargetDestroyed(), true);
+});
 
 test("a rocket replaces a stone wall with permanent rubble that the Prince can walk through", () => {
   const f = fixture();

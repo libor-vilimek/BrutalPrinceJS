@@ -129,29 +129,43 @@ PrinceJS.TutorialLessons = [
     category: "Make room to fight",
     title: "A little breathing room",
     description:
-      "A guard is too close to draw your gun. A roundhouse kick sends him flying and gives you room to fight.",
-    instruction: "Press C to kick the nearby guard away.",
-    hint: "You can also use C to finish a climb quickly when an enemy is close. Your selected weapon stays the same.",
+      "Enemies are close while you are getting your footing. Use a roundhouse kick to finish your climb quickly and make room to fight.",
+    instruction: "Press C for an emergency kick. It can interrupt climbing, drawing or stowing a weapon.",
+    hint: "The kick reaches one tile on either side. Your selected weapon stays the same. Reminders appear at most once a minute in level 2.",
     keys: [{ code: Phaser.Keyboard.C, label: "C" }],
+    repeatAfterMs: 60000,
     holdMs: 100,
     holdUntil: (state) => state.kick.actionStage === "hidden" && state.kick.pending === 0,
     maxHoldMs: 2000,
+    onComplete: (state, tutorial) => {
+      if (state.kid.room === 22 && state.kid.charBlockY === 1) {
+        tutorial.upperLedgeKickDone = true;
+      }
+    },
     when: function (state) {
       if (
         PrinceJS.currentLevel !== 2 ||
         state.level.number !== 2 ||
-        state.kid.room !== 22 ||
         !state.kick ||
         state.kick.cooldown !== 0 ||
         state.kick.actionStage !== "hidden" ||
-        !state.kick.canPrepare() ||
-        ["hang", "hangstraight", "climbdown"].includes(state.kid.action)
+        !state.kick.canPrepare()
       ) {
         return false;
       }
-      // The final climb reaches the left landing in room 22, above the whip
-      // encounter. Use its destination feet while the native climb finishes.
       const origin = state.kick.threatOrigin();
+      if (
+        ["hang", "hangstraight", "climbup", "climbdown", "climbfail", "softland", "medland"].includes(state.kid.action)
+      ) {
+        // Use the same reachable threats as the emergency kick itself. A guard
+        // beyond a wall or on a disconnected floor cannot trigger a reminder.
+        return state.kick.targets(origin, PrinceJS.Kick.NEAR, false).length > 0;
+      }
+      // Keep the original first demonstration on the final upper landing,
+      // without repeating prompts merely for standing there afterwards.
+      if (state.tutorial.completed.has("upper-ledge-kick") || state.kid.room !== 22 || state.kid.specialAction) {
+        return false;
+      }
       const room = state.level.rooms[22];
       return !!(
         origin &&
@@ -176,7 +190,7 @@ PrinceJS.TutorialLessons = [
       state.level.number === 2 &&
       state.kid.room === 22 &&
       state.kid.charBlockY === 1 &&
-      state.tutorial.completed.has("upper-ledge-kick") &&
+      state.tutorial.upperLedgeKickDone &&
       state.kick.actionStage === "hidden" &&
       state.kick.pending === 0 &&
       state.kid.hasMinigun &&
@@ -245,5 +259,30 @@ PrinceJS.TutorialLessons = [
       state.kid.activeWeapon === "rocketLauncher" &&
       state.rocketLauncher.canFire() &&
       !state.kid.specialAction
+  },
+  {
+    id: "rocket-demolition",
+    category: "Make your own doorway",
+    title: "Break through",
+    description:
+      "The barrier ahead is in your line of fire. Rockets can turn walls and gates into rubble and blast open the level's exit doors.",
+    instruction: "Press Ctrl to fire at the barrier and blast it open.",
+    hint: "This tap holds fire until the barrier breaks. A shattered exit still leads to the next level; the entrance door stays protected.",
+    keys: [
+      { code: Phaser.Keyboard.CONTROL, label: "Ctrl" },
+      { code: Phaser.Keyboard.F, label: "F" }
+    ],
+    holdMs: 100,
+    holdUntil: (state) => state.tutorial.sequence.rocketTargetDestroyed(),
+    maxHoldMs: 4000,
+    when: (state) =>
+      PrinceJS.currentLevel === 2 &&
+      state.level.number === 2 &&
+      state.tutorial.completed.has("rockets-fire") &&
+      state.kid.activeWeapon === "rocketLauncher" &&
+      !state.kid.specialAction &&
+      state.kid.action === "stand" &&
+      state.rocketLauncher.canFire() &&
+      !!state.tutorial.sequence.findRocketTarget()
   }
 ];

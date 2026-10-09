@@ -12,6 +12,89 @@ PrinceJS.TutorialSequence = function (state, tutorial) {
 };
 
 PrinceJS.TutorialSequence.prototype = {
+  findRocketTarget: function () {
+    const s = this.state;
+    const launcher = s.rocketLauncher;
+    const muzzle = launcher.effects.getMuzzle();
+    const point = { x: s.kid.baseX + PrinceJS.Utils.convertX(s.kid.charX), y: muzzle.y, room: s.kid.room };
+    this.rocketTarget = null;
+    // Follow the native rocket's two-pixel collision sweep from body to muzzle
+    // and through room links, including barriers underneath the long barrel.
+    // Limit the demonstration to the current room and its visible neighbors.
+    const range = Math.min(launcher.spec.range, PrinceJS.ROOM_WIDTH);
+    for (let distance = 0; distance <= range; distance += 2) {
+      let room = s.level.rooms[point.room];
+      if (!room) {
+        return null;
+      }
+      if (point.x < room.x * PrinceJS.ROOM_WIDTH || point.x >= (room.x + 1) * PrinceJS.ROOM_WIDTH) {
+        point.room = point.x < room.x * PrinceJS.ROOM_WIDTH ? room.links.left : room.links.right;
+        room = s.level.rooms[point.room];
+        if (!room) {
+          return null;
+        }
+      }
+      const tile = launcher.obstacleAt(point, room);
+      if (tile) {
+        const camera = s.roomCamera;
+        const visible =
+          !camera ||
+          (point.x >= camera.camera.x / camera.scale &&
+            point.x < camera.camera.x / camera.scale + camera.viewWidth &&
+            point.y >= camera.camera.y / camera.scale &&
+            point.y < camera.camera.y / camera.scale + camera.viewHeight);
+        if (
+          [PrinceJS.Level.TILE_WALL, PrinceJS.Level.TILE_GATE, PrinceJS.Level.TILE_EXIT_RIGHT].includes(tile.element) &&
+          tile.doorRole !== "entrance" &&
+          !tile.destroyedByRocket &&
+          s.level.rooms[tile.room] &&
+          s.level.getTileAt(tile.roomX, tile.roomY, tile.room) === tile &&
+          visible
+        ) {
+          this.rocketTarget = tile;
+        }
+        return this.rocketTarget;
+      }
+      // Do not announce a demolition shot that would hit a guard first.
+      if (
+        s.enemies.some((enemy) => {
+          if (
+            !enemy.alive ||
+            !enemy.active ||
+            !enemy.visible ||
+            enemy.charFrame === undefined ||
+            enemy.room !== point.room
+          ) {
+            return false;
+          }
+          const bounds = enemy.getCharBounds();
+          return (
+            point.x >= enemy.baseX + bounds.x &&
+            point.x <= enemy.baseX + bounds.x + bounds.width &&
+            point.y >= enemy.baseY + bounds.y &&
+            point.y <= enemy.baseY + bounds.y + bounds.height
+          );
+        })
+      ) {
+        return null;
+      }
+      point.x += muzzle.direction * 2;
+    }
+    return null;
+  },
+
+  rocketTargetDestroyed: function () {
+    const tile = this.rocketTarget;
+    if (!tile) {
+      return false;
+    }
+    const current = this.state.level.getTileAt(tile.roomX, tile.roomY, tile.room);
+    return !!(
+      current &&
+      (current.destroyedByRocket || (current !== tile && current.destroyedElement === tile.element))
+    );
+  },
+
   update: function () {
     const s = this.state;
     const kid = s.kid;

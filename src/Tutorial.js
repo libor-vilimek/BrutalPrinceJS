@@ -7,6 +7,7 @@ PrinceJS.Tutorial = function (delegate) {
   this.game = delegate.game;
   this.lessons = PrinceJS.TutorialLessons;
   this.completed = PrinceJS.completedTutorials;
+  this.lastShown = PrinceJS.tutorialLastShown;
   this.active = null;
   this.assist = null;
   this.downKeys = new Set();
@@ -23,6 +24,14 @@ PrinceJS.Tutorial = function (delegate) {
 };
 
 PrinceJS.Tutorial.prototype = {
+  isAvailable: function (lesson) {
+    if (lesson.repeatAfterMs) {
+      const shown = this.lastShown.get(lesson.id);
+      return shown === undefined || Date.now() - shown >= lesson.repeatAfterMs;
+    }
+    return !this.completed.has(lesson.id);
+  },
+
   show: function (lesson) {
     const kid = this.delegate.kid;
     if (
@@ -30,7 +39,7 @@ PrinceJS.Tutorial.prototype = {
       this.active ||
       this.assist ||
       this.game.paused ||
-      this.completed.has(lesson.id) ||
+      !this.isAvailable(lesson) ||
       !kid.alive ||
       !kid.active ||
       !kid.visible ||
@@ -40,6 +49,7 @@ PrinceJS.Tutorial.prototype = {
       return false;
     }
     this.active = lesson;
+    this.lastShown.set(lesson.id, Date.now());
     this.pauseTime = new Date();
     this.startTime = PrinceJS.startTime;
     PrinceJS.tutorialPauseTime = this.pauseTime;
@@ -222,7 +232,7 @@ PrinceJS.Tutorial.prototype = {
     if (this.sequence) {
       this.sequence.update();
     }
-    const lesson = this.lessons.find((item) => !this.completed.has(item.id) && item.when(this.delegate));
+    const lesson = this.lessons.find((item) => this.isAvailable(item) && item.when(this.delegate));
     if (lesson) {
       this.show(lesson);
     }
