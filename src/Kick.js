@@ -255,10 +255,7 @@ PrinceJS.Kick.prototype = {
   },
 
   sweep: function () {
-    // Both arcs share one direct hit, including targets arriving later in the spin.
-    if (this.chain.size > 0) {
-      return;
-    }
+    // Hit every close target in each arc, but never the same guard twice per spin.
     let time = this.elapsed * PrinceJS.Kick.ANIMATION_SPEED;
     let front = time >= 0.14 && time <= 0.34;
     let back = time >= 0.39 && time <= 0.65;
@@ -272,12 +269,11 @@ PrinceJS.Kick.prototype = {
         continue;
       }
       this.knockDown(enemy, Math.sign(dx) || this.kid.charFace, 1, this.chain);
-      break;
     }
   },
 
   knockDown: function (enemy, direction, strength, chain, secondary = false) {
-    if (!this.canTarget(enemy) || chain.has(enemy) || chain.size >= (secondary ? 2 : 1)) {
+    if (!this.canTarget(enemy) || chain.has(enemy)) {
       return;
     }
     chain.add(enemy);
@@ -300,6 +296,7 @@ PrinceJS.Kick.prototype = {
       position: foot,
       direction,
       chain,
+      toppled: null,
       launchFloor: foot.y,
       recovery: PrinceJS.Kick.RECOVERY + this.random() * 0.45,
       alpha: enemy.alpha,
@@ -337,7 +334,7 @@ PrinceJS.Kick.prototype = {
       this.delegate.bloodEffects.hit(enemy, { weapon: "kick", x: foot.x, y: foot.y - 27, room: foot.room, direction });
     }
     this.effects.impact(foot.x, foot.y - 24, direction);
-    // One per direct sweep, not a noisy sound for every domino victim.
+    // Play the impact sound once per spin, even when a whole crowd is hit.
     if (chain.size === 1) {
       this.game.sound.play("BumpIntoWallSoft", 0.45);
     }
@@ -436,9 +433,9 @@ PrinceJS.Kick.prototype = {
         this.releaseEnemy(enemy);
         return;
       }
-      // Each spin permits one body impact in total, even across later frames,
-      // bounces or another spin. The secondary victim never passes it onward.
-      for (let other of state.secondary || state.chain.size >= 2 ? [] : this.delegate.enemies || []) {
+      // Each directly kicked body can topple one neighbour over its entire flight,
+      // including bounces and later spins. Secondary victims never pass it onward.
+      for (let other of state.secondary || state.toppled ? [] : this.delegate.enemies || []) {
         if (!this.canTarget(other) || state.chain.has(other) || beforeSpeed < 80) {
           continue;
         }
@@ -449,6 +446,7 @@ PrinceJS.Kick.prototype = {
           this.lineClear({ x: state.x, y: state.y, room: state.room }, { x: foot.x, y: foot.y - 20, room: foot.room })
         ) {
           this.knockDown(other, Math.sign(state.vx) || state.direction, 1, state.chain, true);
+          state.toppled = other;
           // The incoming body loses momentum without launching another missile.
           state.vx *= 0.8;
           state.spin *= -0.75;

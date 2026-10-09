@@ -179,6 +179,7 @@ PrinceJS.Game.prototype = {
     this.bloodEffects = new PrinceJS.BloodEffects(this);
     this.enemyDeathEffects = new PrinceJS.EnemyDeathEffects(this);
     this.burningEnemyEffects = new PrinceJS.BurningEnemyEffects(this);
+    this.laserTurret = PrinceJS.LaserTurret.create(this);
 
     this.world.sort("z");
     this.world.alpha = 1;
@@ -215,6 +216,9 @@ PrinceJS.Game.prototype = {
       return;
     }
     const delta = this.game.time.elapsedMS / 1000;
+    if (this.laserTurret) {
+      this.laserTurret.update(delta);
+    }
     if (this.kick) {
       this.kick.update(delta);
     }
@@ -341,6 +345,10 @@ PrinceJS.Game.prototype = {
     }
     this.weapons = [];
     this.twinTorches = this.molotov = this.minigun = this.rocketLauncher = this.whip = null;
+    if (this.laserTurret) {
+      this.laserTurret.destroy();
+      this.laserTurret = null;
+    }
     for (let effects of [this.burningEnemyEffects, this.enemyDeathEffects, this.bloodEffects]) {
       if (effects) {
         effects.destroy();
@@ -604,10 +612,11 @@ PrinceJS.Game.prototype = {
             }
           }
         }
-        if (this.currentCameraRoom === 1 && this.kid.charBlockY === 2 && this.kid.charY >= 185) {
+        if (!this.blockCamera && this.currentCameraRoom === 1 && this.kid.charBlockY === 2 && this.kid.charY >= 185) {
           this.blockCamera = true;
+          const plungeLevel = PrinceJS.currentLevel;
           PrinceJS.Utils.delayed(() => {
-            this.nextLevel(PrinceJS.currentLevel);
+            this.nextLevel(plungeLevel);
           }, 100);
         }
         break;
@@ -659,15 +668,18 @@ PrinceJS.Game.prototype = {
             this.shadow.charY = PrinceJS.Utils.convertBlockYtoY(1);
             this.shadow.setVisible();
             this.shadow.setActive();
-            PrinceJS.Utils.delayed(() => {
-              this.shadow.refracTimer = 9;
-              this.shadow.opponent = this.kid;
-              this.kid.opponent = this.shadow;
-              this.kid.opponentSync = true;
-            }, 1000);
+            // Link damage immediately, including shots fired as the shadow appears.
+            this.shadow.opponent = this.kid;
+            this.kid.opponent = this.shadow;
+            this.kid.opponentSync = true;
           }
           if (
-            !this.shadow.active &&
+            this.kid.alive &&
+            this.shadow.alive &&
+            this.shadow.visible &&
+            (!this.shadow.active || this.shadow.isPeacefulShadow()) &&
+            this.kid.room === this.shadow.room &&
+            this.kid.charBlockY === this.shadow.charBlockY &&
             this.kid.opponent === this.shadow &&
             Math.abs(this.kid.opponentDistance()) <= (this.kid.action.includes("jump") ? 15 : 7) &&
             !this.level.shadowMerge

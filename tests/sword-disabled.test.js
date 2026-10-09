@@ -27,11 +27,12 @@ function fixture(currentLevel = 2) {
     });
   }
   function Signal() {
+    this.add = () => {};
     this.events = [];
     this.dispatch = (...args) => this.events.push(args);
   }
   const context = vm.createContext({ PrinceJS, Phaser: { Sprite, Signal, Keyboard: { SHIFT: 16 } } });
-  for (const file of ["Utils", "Actor", "Fighter", "Kid", "Level"]) {
+  for (const file of ["Utils", "Actor", "Fighter", "Kid", "Enemy", "Level"]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "src", file + ".js"), "utf8"), context);
   }
   const keys = { left: { isDown: false }, right: { isDown: false }, up: { isDown: false }, down: { isDown: false } };
@@ -39,6 +40,7 @@ function fixture(currentLevel = 2) {
   const sounds = [];
   const animations = {
     "kid-anims": JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/anims/kid.json"), "utf8")),
+    "shadow-anims": JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/anims/shadow.json"), "utf8")),
     "sword-anims": JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/anims/sword.json"), "utf8"))
   };
   const game = {
@@ -52,6 +54,7 @@ function fixture(currentLevel = 2) {
   const tiles = new Map();
   const removed = [];
   const level = {
+    number: currentLevel,
     rooms: { 1: { x: 0, y: 0, links: {} } },
     getTileAt: (x, y) => tiles.get(`${x},${y}`) || { element: PrinceJS.Level.TILE_FLOOR, isWalkable: () => true },
     removeObject: (...args) => removed.push(args),
@@ -228,6 +231,48 @@ test("Down still surrenders to the synchronized shadow without using the Prince'
   assert.equal(kid.sword.visible, false);
   kid.updateBehaviour();
   assert.equal(kid.action, "stoop");
+});
+
+test("the level 12 shadow stays vulnerable and never enters sword combat", () => {
+  const { PrinceJS, game, level, kid, keys } = fixture(12);
+  const shadow = new PrinceJS.Enemy(game, level, 11, -1, 1, 3, 0, "shadow");
+  shadow.opponent = kid;
+  kid.opponent = shadow;
+  kid.opponentSync = true;
+  shadow.charFrame = 15;
+  shadow.opponentDistance = () => 20;
+  shadow.isOpponentInSameRoom = () => true;
+  shadow.facingOpponent = () => true;
+  for (let i = 0; i < 150; i++) {
+    shadow.updateBehaviour();
+    shadow.checkFight();
+    shadow.updateSwordFrame();
+    shadow.updateSwordPosition();
+    assert.equal(shadow.action, "stand");
+    assert.equal(shadow.swordDrawn, false);
+    assert.equal(shadow.sword.visible, false);
+  }
+  assert.equal(shadow.active, true);
+  assert.equal(shadow.hasSword, false);
+  keys.down.isDown = true;
+  kid.updateBehaviour();
+  assert.equal(kid.action, "stoop");
+  assert.equal(shadow.active, true, "Down cannot disable the shared damage link");
+  PrinceJS.Utils.flashRedDamage = () => {};
+  const health = kid.health;
+  shadow.health = 2;
+  shadow.damageLife();
+  assert.equal(kid.health, health - 1);
+  shadow.damageLife();
+  assert.equal(shadow.alive, false);
+  assert.equal(kid.alive, false, "killing the peaceful shadow still kills the Prince");
+});
+
+test("other story shadows retain their original behavior", () => {
+  const { PrinceJS, game, level } = fixture(6);
+  const shadow = new PrinceJS.Enemy(game, level, 11, -1, 1, 3, 0, "shadow");
+  assert.equal(shadow.hasSword, true);
+  assert.equal(shadow.isPeacefulShadow(), false);
 });
 
 test("enemy fighters retain their sword stance, rendering, and damaging attacks", () => {

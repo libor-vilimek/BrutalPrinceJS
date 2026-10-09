@@ -261,6 +261,9 @@ PrinceJS.RangedWeapon.prototype = {
           return false;
         }
       }
+      if (this.interceptBullet(bullet)) {
+        return false;
+      }
       let obstacle = this.obstacleAt(bullet, room);
       if (obstacle) {
         bullet.x = previousX;
@@ -288,6 +291,10 @@ PrinceJS.RangedWeapon.prototype = {
       }
     }
     return true;
+  },
+
+  interceptBullet: function () {
+    return false;
   },
 
   impact: function (bullet, enemy) {

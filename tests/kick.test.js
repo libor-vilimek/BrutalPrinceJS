@@ -31,7 +31,7 @@ function setup() {
   return f;
 }
 
-test("one spin hits only one guard across both arcs, keeps the selected weapon and does not damage guards", () => {
+test("one spin hits guards in both arcs, keeps the selected weapon and does not damage guards", () => {
   const f = setup();
   f.placeKid(4);
   const front = f.guard(5);
@@ -53,10 +53,10 @@ test("one spin hits only one guard across both arcs, keeps the selected weapon a
   f.advanceKick(0.2);
   assert.ok(front.kickState && !back.kickState, "front arc hits first");
   f.advanceKick(0.4);
-  assert.ok(!back.kickState, "the rear arc cannot spend the same spin's direct hit again");
+  assert.ok(back.kickState && !back.kickState.secondary, "the rear arc directly kicks the guard behind the Prince");
   assert.equal(front.health, hp);
   assert.equal(back.health, hp);
-  assert.equal(f.delegate.bloodEffects.hits.length, 1);
+  assert.equal(f.delegate.bloodEffects.hits.length, 2);
   f.advanceKick(0.46);
   assert.equal(f.kid.specialAction, null);
   assert.equal(f.kid.cropRect, null);
@@ -139,7 +139,7 @@ test("a directly kicked body topples one neighbour locally, and the secondary fa
   assert.equal(third.health, 3);
 });
 
-test("crowded front and rear arcs each allow only one direct hit in either facing direction", () => {
+test("crowded front and rear arcs directly hit every close guard in either facing direction", () => {
   for (const direction of [-1, 1]) {
     for (const side of [-1, 1]) {
       const f = setup();
@@ -149,15 +149,55 @@ test("crowded front and rear arcs each allow only one direct hit in either facin
       f.advanceKick(side === 1 ? 0.17 : 0.48);
       assert.equal(f.launches.length, 0, "neither arc hits before its slowed contact window");
       f.advanceKick(0.01);
-      assert.equal(f.launches.length, 1, "simultaneous direct contacts choose just one guard");
-      assert.equal(f.launches[0].secondary, false);
+      assert.equal(f.launches.length, 3, "all simultaneous direct contacts launch their guards");
+      assert.ok(f.launches.every((s) => !s.secondary));
       f.advanceKick(1.5);
-      assert.equal(f.launches.filter((s) => !s.secondary).length, 1);
-      assert.equal(f.launches.filter((s) => s.secondary).length, 1);
-      assert.equal(guards.filter((e) => !e.kickState).length, 1);
+      assert.equal(f.launches.length, 3, "later frames and body collisions cannot strike the same guards again");
+      assert.equal(f.kick.chain.size, 3);
       assert.ok(guards.every((e) => e.health === 3));
     }
   }
+});
+
+test("each directly kicked guard has its own allowance to topple one more", () => {
+  for (const direction of [-1, 1]) {
+    const f = setup();
+    f.placeKid(4, 1, 1, direction);
+    const origin = f.kick.position(f.kid);
+    const guards = [16, -16, 48, -48].map((offset) => {
+      const enemy = f.guard(4);
+      f.kick.syncEnemy(enemy, { x: origin.x + direction * offset, y: origin.y, room: origin.room }, 16);
+      return enemy;
+    });
+    f.kick.request();
+    f.advanceKick(0.75);
+    assert.equal(f.launches.filter((s) => !s.secondary).length, 2, "front and rear guards are kicked directly");
+    assert.equal(f.launches.filter((s) => s.secondary).length, 2, "each body topples its own neighbour");
+    assert.equal(guards[0].kickState.toppled, guards[2]);
+    assert.equal(guards[1].kickState.toppled, guards[3]);
+    assert.equal(f.kick.chain.size, 4);
+    f.advanceKick(5);
+    assert.equal(f.launches.length, 4);
+    assert.ok(guards.every((e) => e.health === 3 && !e.kickState && e.alpha === 1));
+  }
+});
+
+test("a guard entering the active arc later is also kicked, without hitting any guard twice", () => {
+  const f = setup();
+  f.placeKid(4);
+  const first = f.guard(5);
+  f.kick.request();
+  f.advanceKick(0.18);
+  assert.ok(first.kickState && !first.kickState.secondary);
+  const origin = f.kick.position(f.kid);
+  const newcomer = f.guard(4);
+  f.kick.syncEnemy(newcomer, { x: origin.x + 8, y: origin.y, room: origin.room }, 16);
+  f.advanceKick(0.01);
+  assert.ok(newcomer.kickState && !newcomer.kickState.secondary);
+  f.advanceKick(1);
+  assert.equal(f.launches.length, 2);
+  assert.equal(first.health, 3);
+  assert.equal(newcomer.health, 3);
 });
 
 test("the directly kicked body can hit only one extra guard, even with simultaneous and later contacts", () => {
@@ -171,6 +211,7 @@ test("the directly kicked body can hit only one extra guard, even with simultane
     f.advanceKick(0.01);
   }
   assert.ok(second.kickState && second.kickState.secondary);
+  assert.equal(first.kickState.toppled, second);
   assert.ok(!third.kickState, "two neighbours sharing a contact point do not both fall");
   // Keep a fresh guard directly in the original body's path across later frames.
   for (let i = 0; i < 20; i++) {

@@ -46,6 +46,9 @@ function fixture() {
       this.draws.push({ x, y, width, height, color: this.color, alpha: this.alpha });
     },
     endFill() {},
+    lineStyle() {},
+    moveTo() {},
+    lineTo() {},
     clear() {
       this.draws = [];
     },
@@ -68,6 +71,7 @@ function fixture() {
     Phaser: {
       Sprite: function () {},
       Signal: function () {
+        this.add = () => {};
         this.dispose = () => {
           this.disposed = true;
         };
@@ -90,13 +94,14 @@ function fixture() {
     "RangedWeapon",
     "RocketLauncherAction",
     "RocketLauncher",
+    "LaserTurret",
     "TutorialSequence"
   ]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "src", file + ".js"), "utf8"), context);
   }
   const game = {
     world: { setBounds() {} },
-    add: { group, graphics: () => ({}) },
+    add: { group, graphics: (x, y) => sprite(x, y) },
     make: { sprite, graphics: (x, y) => sprite(x, y) },
     sound: { play() {} }
   };
@@ -191,7 +196,7 @@ function realDoorFixture(number) {
   // Decorative/trap classes are irrelevant to these door interactions.
   builder.buildTile = function (x, y, room, ...start) {
     const source = this.level.rooms[room].tiles[y * 10 + x];
-    return source.element === f.PrinceJS.Level.TILE_EXIT_RIGHT
+    return [f.PrinceJS.Level.TILE_EXIT_RIGHT, f.PrinceJS.Level.TILE_GATE].includes(source.element)
       ? buildTile.call(this, x, y, room, ...start)
       : new f.PrinceJS.Tile.Base(f.game, source.element, source.modifier, map.type);
   };
@@ -203,6 +208,93 @@ function realDoorFixture(number) {
   f.kid.charBlockY = Math.floor(map.prince.location / 10);
   return { ...f, map, builder };
 }
+
+function turretFixture() {
+  const f = realDoorFixture(6);
+  f.PrinceJS.currentLevel = 6;
+  f.delegate.specialEvents = true;
+  f.turret = f.delegate.laserTurret = f.PrinceJS.LaserTurret.create(f.delegate);
+  return f;
+}
+
+test("the level 6 shadow gate intercepts repeated rockets from both sides before they hit", () => {
+  for (const direction of [-1, 1]) {
+    const f = turretFixture();
+    const gate = f.level.getTileAt(2, 1, 1);
+    const y = f.level.rooms[1].y * 189 + 95;
+    assert.equal(f.turret.gate, gate);
+    assert.ok(f.turret.y < f.level.rooms[1].y * 189 + gate.roomY * 63);
+    for (let i = 0; i < 5; i++) {
+      const rocket = { ...f.rocket(f.turret.x - direction * 70, direction), y };
+      assert.equal(f.launcher.advanceBullet(rocket, 150), false);
+      assert.ok((rocket.x - f.turret.x) * direction < 0);
+      assert.equal(f.level.getTileAt(2, 1, 1), gate);
+    }
+    assert.equal(f.turret.shots.length, 5);
+    assert.equal(f.launcher.effects.impacts, 0, "laser sparks do not trigger rocket splash damage");
+    gate.raise();
+    for (let i = 0; i < 48; i++) {
+      gate.update();
+    }
+    assert.ok(gate.canCross(40), "the protected gate still opens through its normal mechanism");
+    const rocket = { ...f.rocket(f.turret.x - direction * 70, direction), y };
+    assert.equal(f.launcher.advanceBullet(rocket, 150), false, "open gate remains protected");
+    f.turret.destroy();
+    assert.equal(f.turret.graphics.destroyed, true);
+    assert.equal(f.turret.intercept(rocket), false);
+  }
+});
+
+test("the turret catches rockets across the room seam and inside the launcher muzzle sweep", () => {
+  const f = turretFixture();
+  const right = f.level.rooms[1].links.right;
+  const room = f.level.rooms[right];
+  const rocket = { ...f.rocket(room.x * 320 + 16, -1, right), y: room.y * 189 + 95 };
+  assert.equal(f.launcher.advanceBullet(rocket, 350), false);
+  assert.equal(f.turret.shots.length, 1);
+  for (const direction of [-1, 1]) {
+    for (const offset of [12, 1]) {
+      f.kid.room = 1;
+      f.kid.baseX = f.level.rooms[1].x * 320;
+      const x = f.turret.x - direction * offset;
+      f.kid.charX = ((x - f.kid.baseX) * 140) / 320;
+      f.launcher.fire({ x: x + direction * 28, y: rocket.y, direction });
+      assert.equal(f.launcher.bullets.length, 0);
+    }
+  }
+  assert.equal(f.turret.shots.length, 5);
+  assert.equal(f.launcher.effects.impacts, 0);
+});
+
+test("the turret ignores unrelated projectiles, levels and floors and clears its beam", () => {
+  const f = turretFixture();
+  const rocket = { ...f.rocket(f.turret.x + 60, -1), y: f.level.rooms[1].y * 189 + 95 };
+  for (const change of [{ room: 2 }, { direction: 1 }, { y: rocket.y - 63 }, { x: f.turret.x + 120 }]) {
+    assert.equal(f.turret.intercept({ ...rocket, ...change }), false);
+  }
+  const bullet = { ...rocket };
+  let impacts = 0;
+  const minigun = Object.assign(Object.create(f.PrinceJS.RangedWeapon.prototype), {
+    level: f.level,
+    delegate: f.delegate,
+    impact: () => impacts++
+  });
+  assert.equal(minigun.advanceBullet(bullet, 100), false);
+  assert.equal(impacts, 1, "ordinary bullets still hit the gate");
+  assert.equal(f.turret.shots.length, 0);
+  assert.equal(f.turret.intercept(rocket), true);
+  for (let i = 0; i < 7; i++) {
+    f.turret.update(0.05);
+  }
+  assert.equal(f.turret.shots.length, 0);
+  for (const level of [1, 5, 12, 99]) {
+    f.PrinceJS.currentLevel = level;
+    assert.equal(f.PrinceJS.LaserTurret.create(f.delegate), null);
+  }
+  f.PrinceJS.currentLevel = 6;
+  f.delegate.specialEvents = false;
+  assert.equal(f.PrinceJS.LaserTurret.create(f.delegate), null);
+});
 
 function fireFrom(f, x, direction, room) {
   f.kid.room = room;

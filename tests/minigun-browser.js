@@ -412,7 +412,7 @@ async function kickChecks(preview = false) {
         await pause(240);
         testGame.paused = true;
         report(
-          "C: slower protected roundhouse. One guard flies and can topple one more; blood is cosmetic. X still uses the whip."
+          "C: protected roundhouse hits all nearby guards. Each flying guard can topple one more; blood is cosmetic. X still uses the whip."
         );
         return;
       }
@@ -464,6 +464,40 @@ async function kickChecks(preview = false) {
       state.weaponCtrlKey.isDown = false;
       state.minigun.cancelAction();
     }
+    const crowdState = await loadMission(4);
+    quietEnemies(crowdState);
+    placeKid(strip.room, (strip.column + 4) * 14, strip.row, 1);
+    await watchCamera(crowdState, () => !crowdState.roomCamera.transition);
+    const crowd = crowdState.enemies.filter((enemy) => enemy.alive && enemy.baseCharName === "guard").slice(0, 6);
+    check(crowd.length === 6, "Six real guards are available for the crowded kick");
+    const origin = crowdState.kick.position(crowdState.kid);
+    crowd.forEach((enemy, i) => {
+      placeGuard(enemy, strip.room, strip.row * 10 + strip.column + 3, i < 3 ? -1 : 1);
+      crowdState.kick.syncEnemy(enemy, { ...origin, x: origin.x + (i < 3 ? 16 : -16) }, 16);
+      enemy.health = 4;
+    });
+    crowdState.kickKey.onDown.dispatch();
+    await pause(850);
+    // Native guards keep moving: a flying body can reach them before the rear arc.
+    check(
+      crowd.every((enemy) => enemy.kickState),
+      "One spin knocks down the whole moving crowd that surrounded the Prince"
+    );
+    check(
+      crowd.filter((enemy) => !enemy.kickState.secondary).length >= 3 &&
+        crowd
+          .filter((enemy) => enemy.kickState.secondary)
+          .every((victim) => crowd.some((enemy) => enemy.kickState.toppled === victim && !enemy.kickState.secondary)),
+      "Several guards are kicked directly and secondary victims belong to those individual bodies"
+    );
+    check(
+      crowd.every((enemy) => enemy.health === 4),
+      "The crowded kick preserves every guard's HP"
+    );
+    check(
+      crowd.every((enemy) => enemy.kickState.phase !== "airborne" || (enemy.kickState.sprite && enemy.alpha === 0)),
+      "Every flying guard uses its replacement sprite without duplicating the native body"
+    );
     const prepared = await prepareMolotov();
     const ledgeState = prepared.state;
     const kid = ledgeState.kid;

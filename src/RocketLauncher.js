@@ -54,6 +54,10 @@ PrinceJS.RocketLauncher.prototype.updateEffects = function (delta) {
 
 PrinceJS.RocketLauncher.prototype.drawBullets = function () {};
 
+PrinceJS.RocketLauncher.prototype.interceptBullet = function (rocket) {
+  return !!this.delegate.laserTurret && this.delegate.laserTurret.intercept(rocket);
+};
+
 PrinceJS.RocketLauncher.prototype.flightDistance = function (age) {
   let accelerationTime = (this.spec.maxSpeed - this.spec.speed) / this.spec.acceleration;
   let accelerating = Math.min(age, accelerationTime);

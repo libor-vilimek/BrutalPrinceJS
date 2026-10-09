@@ -21,6 +21,10 @@ PrinceJS.Enemy = function (game, level, location, direction, room, skill, color,
   this.strikeTimer = 0;
   this.lookBelow = false;
   this.startFight = false;
+  if (this.isPeacefulShadow()) {
+    this.hasSword = false;
+    this.sword.visible = false;
+  }
 
   this.health = PrinceJS.Enemy.EXTRA_STRENGTH[skill] + PrinceJS.Enemy.STRENGTH[this.level.number];
 
@@ -93,6 +97,11 @@ PrinceJS.Enemy.prototype.CMD_TAP = function (data) {
 };
 
 PrinceJS.Enemy.prototype.updateBehaviour = function () {
+  if (this.isPeacefulShadow()) {
+    // Keep the actor active for shared damage, but never enter sword combat.
+    this.startFight = false;
+    return;
+  }
   if (this.isProactiveGuard()) {
     let state = this.game && this.game.state && this.game.state.getCurrentState();
     let opponent = state && state.level === this.level ? state.kid : this.opponent;
@@ -172,6 +181,10 @@ PrinceJS.Enemy.prototype.updateBehaviour = function () {
       }
     }
   }
+};
+
+PrinceJS.Enemy.prototype.isPeacefulShadow = function () {
+  return this.charName === "shadow" && this.level.number === 12;
 };
 
 PrinceJS.Enemy.prototype.isProactiveGuard = function () {
@@ -527,7 +540,7 @@ PrinceJS.Enemy.prototype.fastsheathe = function () {
 
 PrinceJS.Enemy.prototype.setVisible = function () {
   this.visible = true;
-  this.sword.visible = true;
+  this.sword.visible = this.hasSword;
 };
 
 PrinceJS.Enemy.prototype.setInvisible = function () {

@@ -51,7 +51,7 @@ PrinceJS.GameMenu = function (game) {
           <dt>Molotov</dt><dd>Hold Fire to charge; release to throw. Hold ↑ for a high arc. While hanging, Fire lights and drops it straight down.</dd>
           <dt>1 · 2 · 3 · 4</dt><dd>Select torches · molotov · minigun · rocket launcher, when owned</dd>
           <dt>X</dt><dd>Whip: tap for one lash, hold to repeat. A caught ankle pull finishes after release.</dd>
-          <dt>C</dt><dd>Roundhouse kick; hold to repeat. Near an enemy, it can interrupt drawing, stowing or climbing.</dd>
+          <dt>C</dt><dd>Roundhouse kick hits all guards within one tile on either side. Each kicked guard can topple one more, without a further chain. Hold to repeat. Near an enemy, it can interrupt drawing, stowing or climbing.</dd>
           <dt>J</dt><dd>Equip / remove the jetpack, when owned. Fly with the arrows.</dd>
         </dl>
         <h2>Game</h2>

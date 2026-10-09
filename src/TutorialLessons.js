@@ -129,7 +129,7 @@ PrinceJS.TutorialLessons = [
     category: "Make room to fight",
     title: "A little breathing room",
     description:
-      "Enemies are close while you are getting your footing. Use a roundhouse kick to finish your climb quickly and make room to fight.",
+      "A roundhouse kick finishes your climb quickly and launches every guard within one tile on either side. Each kicked guard can topple one more, without a further chain.",
     instruction: "Press C for an emergency kick. It can interrupt climbing, drawing or stowing a weapon.",
     hint: "The kick reaches one tile on either side. Your selected weapon stays the same. Reminders appear at most once a minute in level 2.",
     keys: [{ code: Phaser.Keyboard.C, label: "C" }],

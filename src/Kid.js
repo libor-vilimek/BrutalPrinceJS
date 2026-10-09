@@ -349,8 +349,14 @@ PrinceJS.Kid.prototype.updateBehaviour = function () {
         return this.jump();
       }
       if (this.keyD()) {
-        // The shadow puzzle still uses Down to surrender and merge, without drawing a sword.
-        if (this.opponentSync && this.opponent && this.opponent.charName === "shadow" && this.opponent.active) {
+        // Peaceful shadows can merge directly; legacy encounters still allow surrender.
+        if (
+          this.opponentSync &&
+          this.opponent &&
+          this.opponent.charName === "shadow" &&
+          this.opponent.active &&
+          !this.opponent.isPeacefulShadow?.()
+        ) {
           return this.fastsheathe();
         }
         return this.stoop();

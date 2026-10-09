@@ -48,6 +48,7 @@ function fixture(number, inventory) {
     "Minigun",
     "RocketLauncherAction",
     "RocketLauncher",
+    "LaserTurret",
     "Molotov",
     "GorePhysics",
     "Whip",

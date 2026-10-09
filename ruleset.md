@@ -150,7 +150,7 @@ Navazující implementační rozhodnutí: krátký stisk `X` dokončí jeden šv
 
 ## Nouzový kopanec
 
-- **KICK-01:** Jeden otočný kopanec na `C` přímo srazí nejvýše jednoho těsně blízkého nepřítele před princem nebo za ním. Jeho tělo může povalit nejvýše jednoho dalšího; ten se už jen svalí dozadu a sám nikoho dalšího nepovalí. Celkem tedy jedno kopnutí srazí nejvýše dva protivníky. Limit platí po celou otočku i následný let těla. Samotný kopanec, nárazy ani zotavování neubírají životy.
+- **KICK-01:** Jeden otočný kopanec na `C` přímo odkopne všechny těsně blízké nepřátele v kontaktním dosahu před princem i za ním. Každý přímo odkopnutý nepřítel může svým tělem povalit nejvýše jednoho dalšího; ten se už jen svalí dozadu a sám nikoho dalšího nepovalí. Limit jednoho druhotného zásahu patří každému odkopnutému tělu zvlášť a platí po celý jeho let včetně odrazů a dalších otoček prince. Stejného protivníka jedno kopnutí nesrazí opakovaně. Samotný kopanec, nárazy ani zotavování neubírají životy.
 - **KICK-02:** Je-li poblíž dosažitelný nepřítel, `C` umožní zkrátit probíhající animace a ihned zahájit otočný kop. Platí i pro výlez, tasení a schovávání zbraní včetně biče. Jde o výslovnou výjimku z obvyklých blokujících animací; bez nepřítele se tím animace nepřeskakují. Samotná otočka má pomalejší, čitelnou animaci.
 - **KICK-03:** Sražení nepřátelé se chvíli sbírají ze země a nemohou útočit. Domino vyžaduje skutečný kontakt a respektuje stěny, mříže, podlahy a propojení místností.
 - **KICK-04:** Bič zůstává samostatný na `X` se svým dosavadním dosahem, stahováním z hrany a poškozením. Kopanec jej nemění ani nevybírá jinou zbraň.
@@ -158,7 +158,7 @@ Navazující implementační rozhodnutí: krátký stisk `X` dokončí jeden šv
 - **KICK-06:** Odhození má být výrazné a hravé: strážci létají pod různými úhly, s různou silou a rotací, s částečně náhodnou obměnou. Nemají všichni skončit na jedné hromadě. Krev při kopu a nárazech je kosmetická a nepřidává poškození.
 - **KICK-07:** Princ provede viditelný kop na volné zemi i bez nepřátel v okolí, i když nikoho netrefí. Nouzové přeskakování cizích animací zůstává podmíněné blízkou hrozbou podle KICK-02.
 
-Implementační rozhodnutí: okolí pro nouzovou reakci je 144 světových pixelů, dosah samotného kopu je zkrácený na 32 pixelů (jednu dlaždici) na obě strany. Otočka na jedné opěrné noze trvá 1,05 s, opakování nejdříve po 1,275 s; držení `C` umožňuje opakovat reakci. Animace i její kontaktní okna běží na 80 % předchozí rychlosti: přední oblouk zasahuje přibližně mezi 0,18–0,43 s, zadní mezi 0,49–0,81 s. Oba oblouky sdílejí jediný přímý zásah. Výlez a navazující běžné animace běží osmkrát rychleji přes původní příkazy, akce zbraní se ukončí a schovají. Úvodní sběr pochodní před ukončením dokončí skutečné sejmutí obou pochodní. Pět obměňovaných způsobů přímého odhození kombinuje nízký smyk, vysoký oblouk a přemety; druhotný zásah používá jen krátké svalení bez šíření. Fyzika respektuje stěny, stropy a podlahy. Po dopadu se nad strážcem točí hvězdičky a zotavení trvá 2–2,45 s. Smrt, volný pád, let jetpackem a příběhový odchod do dalšího levelu se kopancem nepřeskakují. Pasti a velké pády nadále používají původní pravidla prostředí; výška získaná samotným odhozením ani krátký pád po kopanci nezpůsobují poškození. Kostlivec a stín si zachovávají zvláštní pravidla.
+Implementační rozhodnutí: okolí pro nouzovou reakci je 144 světových pixelů, dosah samotného kopu je zkrácený na 32 pixelů (jednu dlaždici) na obě strany. Otočka na jedné opěrné noze trvá 1,05 s, opakování nejdříve po 1,275 s; držení `C` umožňuje opakovat reakci. Animace i její kontaktní okna běží na 80 % předchozí rychlosti: přední oblouk zasahuje přibližně mezi 0,18–0,43 s, zadní mezi 0,49–0,81 s. Každý oblouk odkopne všechny dosažitelné protivníky ve svém krátkém dosahu, včetně těch, kteří do něj vstoupí během kontaktního okna. Oba oblouky sdílejí seznam již sražených protivníků, aby nikoho nezasáhly dvakrát. Výlez a navazující běžné animace běží osmkrát rychleji přes původní příkazy, akce zbraní se ukončí a schovají. Úvodní sběr pochodní před ukončením dokončí skutečné sejmutí obou pochodní. Pět obměňovaných způsobů přímého odhození kombinuje nízký smyk, vysoký oblouk a přemety; druhotný zásah používá jen krátké svalení bez šíření. Fyzika respektuje stěny, stropy a podlahy. Po dopadu se nad strážcem točí hvězdičky a zotavení trvá 2–2,45 s. Smrt, volný pád, let jetpackem a příběhový odchod do dalšího levelu se kopancem nepřeskakují. Pasti a velké pády nadále používají původní pravidla prostředí; výška získaná samotným odhozením ani krátký pád po kopanci nezpůsobují poškození. Kostlivec a stín si zachovávají zvláštní pravidla.
 
 ## Jetpack
 
@@ -179,6 +179,9 @@ Implementační rozhodnutí: zničitelné části jsou původní uvolněné podl
 - **ENEMY-05:** Smrt raketometem rozmetá části těla napříč prostředím. Fragmenty a těla se pohybují a střetávají se s okolím.
 - **ENEMY-06:** Hořící nepřítel je pro boj ihned mrtvý. Jeho hořící tělo ještě pět sekund pobíhá doleva/doprava; může spadnout nebo se napíchnout do pastí. Po pěti sekundách animace končí smrtí/kolapsem. Během této doby nesmí znovu útočit jako živý strážce.
 - **ENEMY-07:** Hořící nepřátelé křičí, ale současně smějí být slyšet nejvýše dva překrývající se křiky hoření. Je to výjimka pro hoření, nikoli návrat obecného zvuku při každém zabití podle ENEMY-03.
+- **ENEMY-08:** Stín prince v levelu 12 vůbec neútočí mečem. Princ se s ním může přímo sloučit při přiblížení, bez nutnosti nejprve kapitulovat. Zabití stínu dál zabije i prince; sdílené poškození zůstává zachované.
+
+Implementační rozhodnutí pro stín: od objevení je ihned propojený s princem a zůstává aktivní pro zásahy zbraněmi, ale netasí meč ani nezahajuje boj. Sloučení vyžaduje oba živé ve stejné místnosti a patře; zachovává původní bonus života, animaci a zpřístupnění neviditelného mostu. Šipka dolů u tohoto pasivního stínu běžně přikrčí prince.
 
 ## Krev a její vrstvy
 
@@ -205,6 +208,9 @@ Implementační rozhodnutí: zničitelné části jsou původní uvolněné podl
 - **DOOR-02:** Zničené výstupní dveře stále umožňují přejít do dalšího levelu.
 - **DOOR-03:** Dveře, kterými princ do současného levelu přišel, se od výstupu rozlišují a nelze je takto zničit. Ochrana platí pro obě poloviny vstupních dveří. Rakety oběma polovinami volně prolétají bez nárazu či exploze, ať jsou vstupní dveře otevřené, nebo zavřené.
 - **DOOR-04:** Poničení dveří nesmí přesunout krev z jejich zadní plochy před prince.
+- **DOOR-05:** Nad mříží v nejlevější koncové místnosti levelu 6 se stínem prince je laserová věžička. Rakety mířící na tuto mříž zničí laserem ještě před dopadem, takže ji nelze raketometem probourat.
+
+Implementační rozhodnutí pro věžičku: chrání mříž ve sloupci 2, řádku 1 místnosti 1 původního levelu 6. Zachytává rakety na stejném patře z obou stran, včetně výstřelu těsně u mříže a ze sousední místnosti; zásah vytvoří krátký paprsek a jiskry bez ničivé exploze. Ostatní dveře a mříže používají dosavadní pravidla. Tlačítka, stín a pád do dalšího levelu fungují dál.
 
 ## Čas a zobrazení v prohlížeči
 
@@ -239,7 +245,8 @@ Tento přehled brání návratu ke starším požadavkům. Nejde o aktivní alte
 | Raketomet automaticky od levelu 3                       | Sebrat v levelu 2 nebo 3; vlastnictví se přenáší, od levelu 4 je automatické.                   |
 | První pickup raketometu až v levelu 3                   | Nově v levelu 2 za ukázkou biče; v levelu 3 zůstává záložní pickup pro ty, kdo ho dosud nemají. |
 | Raketomet vedle biče u vstupních dveří levelu 2          | Raketomet je přesunut dál do místnosti 11, bič zůstává u vstupu. |
-| Kop s dlouhým dosahem a více přímými či druhotnými zásahy | Krátký dosah; jeden přímý zásah a nejvýše jeden další sražený tělem, bez dalšího šíření.      |
+| Kop s dlouhým dosahem a více druhotnými zásahy jednoho těla | Krátký dosah; každé přímo odkopnuté tělo srazí nejvýše jednoho dalšího, bez dalšího šíření. |
+| Nejvýše jeden přímý zásah a celkem dva sražení na kop | Kop přímo odkopne všechny protivníky v krátkém dosahu před princem i za ním; každý může tělem srazit ještě jednoho dalšího. |
 | Bez nepřítele nelze kopnout                             | Na volné zemi lze kopnout naprázdno; jen nouzové zkracování cizích animací vyžaduje hrozbu.     |
 | Jetpack dostupný dříve                                  | Poprvé u startu levelu 12, automaticky od levelu 13.                                            |
 | Ostré horizontální přechody a pouze jedna obrazovka     | Plynulé boční posouvání a oddálený záběr celé hlavní místnosti se sousedy.                      |
