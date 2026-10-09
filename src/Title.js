@@ -33,6 +33,7 @@ PrinceJS.Title.prototype = {
 
     this.prince = this.game.add.image(0, 0, "title", "prince");
     this.prince.visible = false;
+    this.createBrutalTitle();
 
     this.textBack = this.game.add.image(0, this.world.height, "title", "in_the_absence");
     this.textBack.anchor.setTo(0, 1);
@@ -53,6 +54,75 @@ PrinceJS.Title.prototype = {
     });
 
     this.input.keyboard.onDownCallback = this.play.bind(this);
+  },
+
+  createBrutalTitle: function () {
+    this.brutalBitmap = this.game.add.bitmapData(224, 60);
+    const context = this.brutalBitmap.ctx;
+    context.font = 'bold 60px Georgia, "Times New Roman", serif';
+    context.textAlign = "center";
+    context.lineJoin = "round";
+    context.lineWidth = 3;
+    context.strokeStyle = "#260008";
+    context.strokeText("Brutal", 112, 54, 208);
+    const red = context.createLinearGradient(0, 10, 0, 56);
+    red.addColorStop(0, "#ff6650");
+    red.addColorStop(0.25, "#ff3030");
+    red.addColorStop(0.6, "#df101b");
+    red.addColorStop(1, "#89000b");
+    context.fillStyle = red;
+    context.fillText("Brutal", 112, 54, 208);
+    this.brutalBitmap.dirty = true;
+
+    this.brutal = this.game.make.image((PrinceJS.SCREEN_WIDTH - 224) / 2, 18, this.brutalBitmap);
+    // Inherit the original logo's visibility and stay behind the story text wipe.
+    this.prince.addChild(this.brutal);
+    this.brutalBlood = this.game.make.graphics(0, 0);
+    this.brutal.addChild(this.brutalBlood);
+    this.brutalElapsed = 0;
+    this.brutalDrips = [];
+
+    // Attach every stream to actual ink, including when the serif fallback is used.
+    const pixels = context.getImageData(0, 0, 224, 60).data;
+    for (let x = 10; x < 214; x += 9) {
+      for (let y = 57; y >= 45; y--) {
+        const pixel = (y * 224 + x) * 4;
+        if (pixels[pixel + 3] > 160 && pixels[pixel] > 100 && pixels[pixel + 1] < 70) {
+          const index = this.brutalDrips.length;
+          this.brutalDrips.push({ x, y, length: 7 + ((index * 7) % 11), period: 2.1 + (index % 5) * 0.31 });
+          break;
+        }
+      }
+    }
+    this.updateBrutalTitle(0);
+  },
+
+  updateBrutalTitle: function (dt) {
+    this.brutalElapsed += dt;
+    const blood = this.brutalBlood;
+    blood.clear();
+    this.brutalDrips.forEach((drip, index) => {
+      const phase = ((this.brutalElapsed + index * 0.37) % drip.period) / drip.period;
+      const length = Math.round(drip.length * (0.55 + 0.45 * Math.min(1, phase / 0.75)));
+      blood.beginFill(0x390009);
+      blood.drawRect(drip.x - 1, drip.y, 3, length + 1);
+      blood.endFill();
+      blood.beginFill(0xb30816);
+      blood.drawRect(drip.x, drip.y - 1, 2, 3);
+      blood.drawRect(drip.x, drip.y, 1, length);
+      blood.drawRect(drip.x - 1, drip.y + length - 1, 3, 2);
+      blood.endFill();
+      blood.beginFill(0xf12b32);
+      blood.drawRect(drip.x, drip.y + 1, 1, Math.max(1, length - 3));
+      blood.endFill();
+      if (phase > 0.75) {
+        const fall = (phase - 0.75) / 0.25;
+        const y = drip.y + drip.length + 3 + Math.round(fall * fall * 8);
+        blood.beginFill(0xcf1020, 1 - fall);
+        blood.drawRect(drip.x, y, 2, 3);
+        blood.endFill();
+      }
+    });
   },
 
   update: function () {
@@ -86,6 +156,10 @@ PrinceJS.Title.prototype = {
         break;
     }
 
+    if (this.prince.visible) {
+      this.updateBrutalTitle(Math.min(this.game.time.elapsedMS, 100) / 1000);
+    }
+
     this.tick++;
     this.textBack.updateCrop();
 
@@ -104,6 +178,12 @@ PrinceJS.Title.prototype = {
     this.stopMusic();
     this.input.keyboard.onDownCallback = null;
     this.state.start("Cutscene");
+  },
+
+  shutdown: function () {
+    this.brutal.destroy();
+    this.brutalBitmap.destroy();
+    this.brutalDrips = [];
   },
 
   stopMusic: function () {

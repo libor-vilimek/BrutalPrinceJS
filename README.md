@@ -1,12 +1,42 @@
-# Prince of Persia (JS) - princejs.com
+# BrutalPrinceJS
 
-Prince of Persia reimplementation written in HTML5 / JavaScript (MS-DOS version)
+This game's foundation is forked from [oklemenz/PrinceJS](https://github.com/oklemenz/PrinceJS), the HTML5 / JavaScript reimplementation of the MS-DOS Prince of Persia. A huge thank you to Oliver Klemenz and all PrinceJS contributors for making this project possible!
+
+Everything added in this fork is pure **AI vibecoding**: a classic platformer turned into a playground of spinning fire, heavy weapons, flying guards and destructible scenery.
 
 Project decisions and contribution guidance: [ruleset.md](ruleset.md) and [AGENTS.md](AGENTS.md).
 
-## Play Online
+The opening title adds a large red **Brutal** above the original **Prince of Persia** logo, with animated blood streams and falling drops. It follows the original logo's timing and the following story wipe; the intro can still be skipped as usual.
 
-- Browser: https://princejs.com
+## What you can do
+
+| Equipment             | Controls                                 | What it does                                                                                                                                                                                                                                                |
+| --------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Twin torches**      | `1`, then hold `CTRL` / `F`              | Spin with a torch in each hand, ignite nearby guards and block sword hits during the spin. Burning enemies stop fighting immediately, run for five seconds, then collapse into charred bodies.                                                              |
+| **Molotov cocktails** | `2`, hold `CTRL` / `F`, release to throw | Charge the throwing distance; hold `Up` for a higher arc. Fire on the floor burns enemies. Bottles shatter against walls and ceilings, dropping burning oil below. While hanging from a ledge, press `CTRL` / `F` to light and drop a bottle straight down. |
+| **Minigun**           | `3`, then hold `CTRL` / `F`              | Unleash rapid fire with unlimited ammunition, muzzle flashes and persistent piles of brass. Guards die in five different ways, from tumbling knockbacks to dismemberment.                                                                                   |
+| **Rocket launcher**   | `4`, then hold `CTRL` / `F`              | Fire accelerating rockets that scatter enemy body parts and blast through walls, gates and level exits. A shattered exit still takes you to the next level.                                                                                                 |
+| **Whip**              | Tap or hold `X`                          | Lash nearby guards or catch an enemy above you by the ankle and drag them off a ledge. Short falls hurt and stun; long falls and traps can kill. The whip is separate from weapon selection.                                                                |
+| **Roundhouse kick**   | Tap or hold `C`                          | Spin and launch nearby guards on both sides. Each flying body can topple one more guard. The kick itself deals no HP damage; it buys time with knockback and recovery. Near a reachable enemy, it can interrupt drawing, stowing or climbing.               |
+| **Jetpack**           | `J`, then arrow keys                     | Equip, fly and hover; press `J` again to remove it. Smash loose floor slabs from below with your head and fly through the opening. Solid terrain still blocks you.                                                                                          |
+
+Torches are collected automatically at the start. Find the molotov on level 1's starting platform and the minigun in the room below. Level 2 introduces the whip near the entrance and the rocket launcher farther along the route. Collected equipment carries into later levels; missed equipment becomes available according to the progression described below. The kick is available from the beginning; the jetpack first appears in level 12 and is automatically owned from level 13. `SHIFT` remains walk / drink / grab, and the original sword combat is disabled.
+
+Other features include:
+
+- Crowds of guards that pursue you when they can reach you on the same floor.
+- Persistent blood, bodies, debris and shell casings, with collisions against the real level geometry.
+- A wider camera view with smooth horizontal room transitions.
+- Ten starting health points, extra healing potions, maximum-health upgrades and a 600-minute campaign clock.
+- Contextual tutorials that pause the action and let you try each new mechanic.
+- Keyboard, controller and optional on-screen controls, responsive portrait / landscape layouts, and separate sound and music settings.
+- The original campaign and bundled custom level sets.
+
+See the [gameplay screenshots](#gameplay-screenshots) at the end of this README.
+
+## Play and controls
+
+- Start this fork with the [local setup](#play-locally), or open its deployed URL. [princejs.com](https://princejs.com) hosts the original PrinceJS game.
 - Keyboard
   - `Cursor keys`: Movement
     - `Left / Right key`: Move Left/Right, Advance/Retreat
@@ -120,7 +150,9 @@ Settings provides independent **Sound effects** and **Music** sliders (0–100%)
 
 The **Controls** button opens the complete keyboard, touch / mouse and controller reference. Both panels pause gameplay and the campaign clock. Closing settings during a tutorial returns to that tutorial without dismissing its lesson. Preferences survive level changes, restarts and page reloads; private browsers that deny storage retain them only for the session.
 
-## Play on Apple Watch
+## Original PrinceJS on Apple Watch
+
+These upstream instructions open the original game at [princejs.com](https://princejs.com).
 
 - Mail/Message
   - Send mail or message to yourself with body: https://princejs.com
@@ -131,14 +163,15 @@ The **Controls** button opens the complete keyboard, touch / mouse and controlle
   - Watch out for correct localized pronunciation
 - Play using Touch Controls as on Mobile
 
-## Play GitHub Version
+## Original PrinceJS on GitHub Pages
 
-- Browser: https://oklemenz.github.io/PrinceJS
+- Browser: [oklemenz.github.io/PrinceJS](https://oklemenz.github.io/PrinceJS) (the original game).
 
 ## Play Locally
 
 - Install [Node.js](https://nodejs.org)
-- Clone: `https://github.com/oklemenz/PrinceJS.git`
+- Clone this fork: `git clone https://github.com/libor-vilimek/BrutalPrinceJS.git`
+- Enter the checkout: `cd BrutalPrinceJS`
 - Terminal:
   - `npm install`
   - `npm start`
@@ -232,5 +265,74 @@ Converted levels from https://www.popot.org/custom_levels.php:
 
 ## Credits
 
+- [Oliver Klemenz and the PrinceJS contributors](https://github.com/oklemenz/PrinceJS) — the project this game is forked from. Thank you for the foundation!
 - https://github.com/ultrabolido ([PrinceJS](https://github.com/ultrabolido/PrinceJS))
 - https://github.com/jmechner ([Prince-of-Persia-Apple-II](https://github.com/jmechner/Prince-of-Persia-Apple-II))
+
+## Gameplay screenshots
+
+Captured from the real game with sound muted. Combat scenes are staged with the repository's browser playtest helpers so the actions and their effects are easy to see; they use the actual weapons, animations, collision physics and level scenery.
+
+### Twin torches: burn everyone within reach
+
+Hold `CTRL` / `F` with `1` selected to spin both torches. These guards are already out of the fight, but their burning bodies keep running before collapsing.
+
+![The Prince spins his twin torches between two burning guards in a dungeon corridor](docs/screenshots/twin-torches.png)
+
+### Molotov: throw, ignite, or drop from a ledge
+
+Charge and release a throw to send a burning bottle toward the guards. Its impact leaves real ground fire that ignites them.
+
+| Bottle in flight                                                                             | Guards burning in the ground fire                                                                                 |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| ![A lit molotov flies toward three guards in the palace](docs/screenshots/molotov-throw.png) | ![The shattered molotov leaves flames on the palace floor and ignites guards](docs/screenshots/molotov-burns.png) |
+
+While hanging, press `CTRL` / `F` to light and drop the bottle below without letting go of the ledge.
+
+![The Prince holds a ledge with one hand while preparing a lit molotov with the other](docs/screenshots/molotov-ledge-drop.png)
+
+### Minigun: rapid fire and varied deaths
+
+Hold the trigger to cut through a crowd. Minigun kills cycle through tumbling face hits, torn arms, waist splits, severed heads and leg collapses; spent casings collect on the floor.
+
+![The Prince fires a minigun across a palace corridor as guards tumble and body parts scatter](docs/screenshots/minigun-deaths.png)
+
+### Rocket launcher: explosive dismemberment
+
+Rockets accelerate into their targets and scatter body parts through the surrounding room. Fragments collide with the scenery and leave blood behind.
+
+![A rocket explodes among guards, scattering limbs and blood across the dungeon](docs/screenshots/rocket-deaths.png)
+
+### Rocket launcher: break the exit and keep going
+
+A rocket can shatter the next-level exit into flying fragments. The damaged doorway stays open and usable. Arrival doors remain protected.
+
+| Exit destruction                                                                                                    | The permanent, usable breach                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| ![A rocket blast shatters the exit's panels and sends fragments into the room](docs/screenshots/exit-explosion.png) | ![The Prince stands beside the ruined exit, with rubble around its open doorway](docs/screenshots/destroyed-exit.png) |
+
+### Whip: strike or pull an enemy off a ledge
+
+`X` can finish a weakened guard with a direct lash, or catch an enemy above you by the ankle and pull them into a real gap. A short fall costs a life and leaves them recovering; longer drops can be fatal.
+
+| A lethal direct strike                                                                     | An ankle caught above a gap                                                                                          |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| ![A guard reels from a lethal whip strike in the palace](docs/screenshots/whip-strike.png) | ![The whip wraps around an upper guard's ankle as the Prince pulls from below](docs/screenshots/whip-ledge-pull.png) |
+
+### Roundhouse kick: make some room
+
+`C` launches nearby guards and can start a body-to-body knockdown. The blood is cosmetic: the kick itself does not remove HP. Guards recover after landing, while traps and fatal drops keep their normal effects.
+
+![The Prince's roundhouse sends a guard flying toward the other soldiers](docs/screenshots/roundhouse-kick.png)
+
+### Jetpack: take the upper route
+
+From level 12, collect the jetpack, equip it with `J` and fly with the arrow keys. Hover between platforms or break loose floor slabs from below.
+
+![The Prince flies above the level entrance with the jetpack's thrusters burning](docs/screenshots/jetpack-flight.png)
+
+### The aftermath stays
+
+Blood stains, fallen body parts and brass remain throughout the level, even after leaving and revisiting the room. Restarting or changing levels clears them.
+
+![Blood covers the dungeon floor and pillars, with bodies, fragments and spent casings left after a minigun fight](docs/screenshots/persistent-blood.png)

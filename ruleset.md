@@ -218,8 +218,11 @@ Implementační rozhodnutí pro věžičku: chrání mříž ve sloupci 2, řád
 - **VIEW-01:** Hra se v prohlížeči vejde do viditelné plochy bez vodorovných i svislých scrollbarů. Při změně velikosti okna se přizpůsobí a zachová správné proporce.
 - **VIEW-02:** Titulek karty prohlížeče zní přesně `Brutal Pince of Persia`.
 - **VIEW-03:** Celá hra včetně HUD se vejde na mobilní web v orientaci na výšku i na šířku. Na šířku hra využívá celou dostupnou plochu bez místa vyhrazeného pro ovládání; dotykový panel ji překrývá vlevo dole. Na výšku zůstává panel pod obrazem a nezakrývá jej. Hra zachovává proporce a neořezává obraz.
+- **VIEW-04:** V úvodní sekvenci je nad původním nápisem „Prince of Persia“ velké červené slovo „Brutal“, ze kterého stékají pramínky krve.
 - **MENU-01:** Malá ikona menu vpravo nahoře je stále viditelná, pokud je zobrazené dotykové ovládání. Jinak se ukáže na začátku levelu a poté při přiblížení myši nebo kliknutí či dotyku v tomto rohu.
 - **AUDIO-01:** Nastavení poskytuje samostatnou hlasitost zvukových efektů a hudby včetně možnosti ztlumení každé kategorie.
+
+Implementační rozhodnutí pro úvodní nápis: „Brutal“ se objeví a skryje společně s původním logem. Červené patkové písmo má tmavý obrys a animované pramínky s kapkami nad původním názvem; následující příběhová obrazovka překryje oba nápisy. Časování úvodu a jeho přeskočení zůstávají zachované.
 
 Implementační rozhodnutí pro menu: bez zobrazeného dotykového panelu trvá úvodní zobrazení ikony 3,5 s a opakuje se při restartu i postupu. Menu zpřístupňuje také klávesa ESC a fokus klávesnice. Nastavení i přehled Controls pozastaví hru a její čas; návrat do rozpracované lekce tutoriál neodklikne. Hlasitosti 0–100 %, samostatná ztlumení a výslovná volba dotykového panelu se ukládají do localStorage; při nedostupném úložišti platí do obnovení stránky. Ztlumení si pamatuje nastavenou hlasitost. K hudbě patří původní soubory z assets/music včetně krátkých hudebních motivů, k efektům assets/sfx. Responzivní zobrazení používá dynamickou výšku viewportu a bezpečné okraje zařízení. Pro ovládací panel rezervuje prostor pod obrazem jen na výšku; na šířku používá částečně průhledný překryv, jehož prázdné mezery nezachytávají dotyky.
 
