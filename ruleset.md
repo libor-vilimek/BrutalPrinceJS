@@ -13,6 +13,7 @@ Tento dokument zachycuje aktuální přání z celé této konverzace. Změny zd
 ## Navigace
 
 - [Ovládání a inventář](#ovládání-a-inventář)
+- [Tutoriál](#tutoriál)
 - [Levely a získávání vybavení](#levely-a-získávání-vybavení)
 - [Životy a lahvičky](#životy-a-lahvičky)
 - [Vzhled prince a animace zbraní](#vzhled-prince-a-animace-zbraní)
@@ -41,6 +42,15 @@ Tento dokument zachycuje aktuální přání z celé této konverzace. Změny zd
 - **INPUT-07:** `C` je samostatný otočný kopanec, dostupný od začátku bez sběru a bez změny vybrané zbraně.
 
 Navazující implementační rozhodnutí: pořadí zbraní je `1` pochodně, `2` molotov, `3` minigun, `4` raketomet. Pochodně jsou výchozí volba při vstupu do levelu. Bič zůstává automaticky dostupný od levelu 3, samostatně na `X`. Tato doplnění navazují na současné ovládání a postup inventáře; uživatel výslovně určil pořadí pochodní a molotovu a následně vyjmutí biče z výběru zbraní.
+
+## Tutoriál
+
+- **TUTORIAL-01:** Novou mechaniku vysvětlí oranžová obrazovka s ornamentálním rámem ve stylu Prince of Persia. Obsahuje popis a požadovanou klávesu.
+- **TUTORIAL-02:** Během obrazovky je hra pozastavená. Stisk požadované klávesy obrazovku zavře, obnoví hru a provede danou akci. Nesouvisející klávesa obrazovku nezavře.
+- **TUTORIAL-03:** Lekce může požadovanou klávesu uměle podržet, aby proběhla vyučovaná sekvence i po krátkém stisku. Délka je nastavitelná pro konkrétní lekci; běžné ovládání a pravidla animací zůstávají platné.
+- **TUTORIAL-04:** Systém má být rozšiřitelný o další lekce a jeho aktuální obsah i způsob rozšíření musí být popsaný v anglické dokumentaci.
+
+Implementační rozhodnutí: první lekce vysvětluje pochodně po dokončení jejich úvodního sběru v levelu 1, když princ stojí a může je použít. Přijímá CTRL i F a podrží vstup alespoň 1,8 sekundy herního času. Vyobrazené klávesy jsou také tlačítka pro dotyk/myš; akční tlačítka ovladače mají stejný význam. Skutečné delší držení klávesnice se nezkracuje. Čtení nespotřebovává čas kampaně. Dokončené lekce se během jedné hry při restartu levelu ani postupu neopakují; nová hra nebo obnovení stránky je resetuje. Ztráta fokusu, smrt a odchod z levelu zruší umělé držení. Obsah a rozšíření popisuje `docs/tutorials.md`.
 
 ## Levely a získávání vybavení
 

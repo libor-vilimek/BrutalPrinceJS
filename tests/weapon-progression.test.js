@@ -228,13 +228,14 @@ function fixture(number, inventory) {
     this.effects.destroy();
   };
   PrinceJS.WeaponAudio =
+    PrinceJS.Tutorial =
     PrinceJS.RoomCamera =
     PrinceJS.Jetpack =
     PrinceJS.BloodEffects =
     PrinceJS.EnemyDeathEffects =
     PrinceJS.BurningEnemyEffects =
       function () {
-        this.update = this.destroy = () => {};
+        this.update = this.worldUpdated = this.destroy = () => {};
       };
   PrinceJS.Interface = function () {
     this.setPlayerLive = () => {};

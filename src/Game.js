@@ -201,10 +201,14 @@ PrinceJS.Game.prototype = {
     }
     PrinceJS.Utils.resetFlipScreen();
     PrinceJS.Utils.updateQuery();
+    this.tutorial = new PrinceJS.Tutorial(this);
     this.twinTorches.startIntro();
   },
 
   update: function () {
+    if (this.tutorial && this.tutorial.active) {
+      return;
+    }
     const delta = this.game.time.elapsedMS / 1000;
     if (this.kick) {
       this.kick.update(delta);
@@ -261,9 +265,21 @@ PrinceJS.Game.prototype = {
         this.nextLevel(PrinceJS.currentLevel, true, true);
       }
     }
+    if (this.tutorial) {
+      this.tutorial.update(delta);
+    }
+  },
+
+  pauseUpdate: function () {
+    if (this.tutorial) {
+      this.tutorial.pauseUpdate();
+    }
   },
 
   updateWorld: function () {
+    if (this.tutorial && this.tutorial.active) {
+      return;
+    }
     this.level.update();
     this.kid.updateActor();
     if (this.hordeEnabled) {
@@ -279,9 +295,16 @@ PrinceJS.Game.prototype = {
     this.ui.updateUI();
     this.checkTimers();
     this.firstUpdate = false;
+    if (this.tutorial) {
+      this.tutorial.worldUpdated();
+    }
   },
 
   shutdown: function () {
+    if (this.tutorial) {
+      this.tutorial.destroy();
+      this.tutorial = null;
+    }
     if (this.kick) {
       this.kick.destroy();
       this.kick = null;
@@ -925,11 +948,20 @@ PrinceJS.Game.prototype = {
   },
 
   onPause: function () {
+    if (this.tutorial) {
+      if (this.tutorial.active) {
+        return;
+      }
+      this.tutorial.cancelAssist();
+    }
     PrinceJS.Utils.updateQuery();
     this.ui.showGamePaused();
   },
 
   onResume: function () {
+    if (this.tutorial && this.tutorial.active) {
+      return;
+    }
     PrinceJS.Utils.restoreQuery();
     this.showRemainingMinutes(true);
   },

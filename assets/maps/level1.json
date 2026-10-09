@@ -2667,6 +2667,14 @@
       "colors": 2,
       "type": "guard",
       "direction": -1
+    },
+    {
+      "room": 1,
+      "location": 13,
+      "skill": 0,
+      "colors": 2,
+      "type": "guard",
+      "direction": -1
     }
   ],
   "events": [

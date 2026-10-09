@@ -35,6 +35,14 @@ Project decisions and contribution guidance: [ruleset.md](ruleset.md) and [AGENT
   - `Plus Button`: Next Level
   - `Any`: Continue Game
 
+## Tutorials
+
+Contextual lessons pause the game on an orange, ornamented panel and explain a new mechanic beside its required key. Press that key to resume and try it. Some lessons briefly keep the input held for you so a quick tap completes the demonstration. The keycaps also accept touch/mouse input; supported controller buttons work as equivalents.
+
+The first lesson, **The twin flames**, follows the opening torch collection in level 1. Press `CTRL` or `F` to draw the torches and try a full spin, with 1.8 seconds of assisted holding. Afterward, hold and release normally. Reading a lesson does not consume game time. Completed lessons do not repeat on a level retry; a new game or page reload resets them.
+
+See [Tutorials](docs/tutorials.md) for the current lesson list, input/pause behavior, and instructions for extending it. Use [the tutorial browser playtest](tests/tutorial-browser.html) on the local server to check it with sound disabled.
+
 ## Camera
 
 Gameplay uses 70% zoom, framing the complete current room with more than two extra tile columns on each side and a glimpse of the rooms above and below. Approaching a side exit gently expands the preview to more than four columns of the next room; entering it finishes a short smooth pan to frame the complete new room, even when the Prince stops just inside the entrance. Transitions up or down still cut immediately. The health display stays fixed at its original size, and gates and choppers in all partially visible neighboring rooms remain audible. Menus and cutscenes keep their original zoom.

@@ -1,0 +1,324 @@
+.tutorial-overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(8px, 3vmin, 32px);
+  box-sizing: border-box;
+  background: radial-gradient(ellipse at center, #3b2415c9, #130d0aeb);
+  color: #3d1d10;
+  font-family: Georgia, "Times New Roman", serif;
+  touch-action: manipulation;
+}
+
+.tutorial-overlay[hidden] {
+  display: none;
+}
+
+.tutorial-panel {
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  width: min(660px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #965228 #dc9b56;
+  padding: 32px 68px 28px;
+  border: 2px solid #f1c582;
+  outline: 1px solid #6a351e;
+  outline-offset: 4px;
+  background:
+    radial-gradient(ellipse at 50% 15%, #ffdeb17a, transparent 65%),
+    repeating-linear-gradient(0deg, #773e1505 0 1px, transparent 1px 4px),
+    linear-gradient(125deg, #b96b32, #f3b967 24%, #e9a255 65%, #c97a37);
+  box-shadow:
+    0 24px 90px #000a,
+    inset 0 0 0 7px #7d3e21,
+    inset 0 0 0 9px #efbe74,
+    inset 0 0 0 13px #a35f30,
+    inset 0 0 65px #873d1933;
+  text-align: center;
+}
+
+.tutorial-panel::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 19px;
+  border: 1px solid #7a431e88;
+  pointer-events: none;
+}
+
+.tutorial-corners {
+  position: absolute;
+  inset: 22px;
+  pointer-events: none;
+}
+
+.tutorial-corners svg {
+  position: absolute;
+  width: 82px;
+  height: 82px;
+  stroke: #664126;
+  stroke-width: 1.3;
+}
+
+.tutorial-corners svg:nth-child(1) {
+  top: 0;
+  left: 0;
+}
+.tutorial-corners svg:nth-child(2) {
+  top: 0;
+  right: 0;
+  transform: rotate(90deg);
+}
+.tutorial-corners svg:nth-child(3) {
+  bottom: 0;
+  right: 0;
+  transform: rotate(180deg);
+}
+.tutorial-corners svg:nth-child(4) {
+  bottom: 0;
+  left: 0;
+  transform: rotate(270deg);
+}
+.tutorial-ornament-fill {
+  fill: #315850;
+  stroke: #315850;
+}
+
+.tutorial-eyebrow,
+.tutorial-category,
+.tutorial-prompt,
+.tutorial-footer {
+  font-family: "Trebuchet MS", sans-serif;
+  text-transform: uppercase;
+}
+
+.tutorial-eyebrow {
+  margin: 0 0 14px;
+  font-size: 10px;
+  letter-spacing: 3.5px;
+}
+
+.tutorial-emblem svg {
+  display: block;
+  width: 90px;
+  height: 90px;
+  margin: 0 auto 10px;
+  stroke: #704225;
+  stroke-width: 1;
+}
+
+.tutorial-emblem svg > path:first-child {
+  fill: #9d602422;
+}
+.tutorial-flame {
+  fill: #71351c;
+  stroke: #71351c;
+}
+
+.tutorial-category {
+  margin: 0 0 8px;
+  color: #38584d;
+  font-weight: bold;
+  font-size: 10px;
+  letter-spacing: 2.5px;
+}
+
+.tutorial-panel h1 {
+  margin: 0 0 14px;
+  font-size: clamp(27px, 4.6vmin, 40px);
+  font-weight: normal;
+  line-height: 1.1;
+}
+
+.tutorial-description {
+  max-width: 420px;
+  margin: 0 auto;
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.tutorial-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 16px auto 13px;
+  color: #315850;
+  font-size: 9px;
+}
+
+.tutorial-divider::before,
+.tutorial-divider::after {
+  content: "";
+  width: 72px;
+  height: 1px;
+  background: #8c562c80;
+}
+
+.tutorial-prompt {
+  margin: 0 0 10px;
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+
+.tutorial-keys {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+}
+
+.tutorial-key {
+  min-width: 76px;
+  padding: 10px 21px;
+  border: 1px solid #e4bb7c;
+  border-radius: 5px;
+  background: linear-gradient(#493120, #2d2018);
+  box-shadow:
+    0 4px 0 #1f160f,
+    0 5px 0 #b87739,
+    inset 0 0 0 3px #ffffff0b;
+  color: #ffe0a2;
+  font:
+    24px Georgia,
+    "Times New Roman",
+    serif;
+  cursor: pointer;
+}
+
+.tutorial-key:hover {
+  background: #523a26;
+}
+.tutorial-key:focus-visible {
+  outline: 3px solid #315850;
+  outline-offset: 5px;
+}
+.tutorial-key:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #1f160f;
+}
+.tutorial-or {
+  color: #6a3c23;
+  font-size: 16px;
+  font-style: italic;
+}
+
+.tutorial-instruction {
+  margin: 18px 0 7px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+.tutorial-hint {
+  margin: 0;
+  color: #63381e;
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.5;
+}
+.tutorial-footer {
+  margin: 24px 0 0;
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: #654323;
+}
+
+@media (max-height: 650px), (max-width: 600px) {
+  .tutorial-panel {
+    width: min(600px, 100%);
+    padding: 25px 45px 22px;
+  }
+  .tutorial-corners svg {
+    width: 56px;
+    height: 56px;
+  }
+  .tutorial-eyebrow {
+    margin-bottom: 8px;
+    font-size: 9px;
+  }
+  .tutorial-emblem svg {
+    width: 58px;
+    height: 58px;
+    margin-bottom: 7px;
+  }
+  .tutorial-panel h1 {
+    margin-bottom: 10px;
+  }
+  .tutorial-description {
+    font-size: 15px;
+    line-height: 1.4;
+  }
+  .tutorial-divider {
+    margin: 11px auto;
+  }
+  .tutorial-key {
+    min-width: 65px;
+    padding: 8px 18px;
+    font-size: 21px;
+  }
+  .tutorial-instruction {
+    margin-top: 14px;
+    font-size: 13px;
+  }
+  .tutorial-hint {
+    font-size: 12px;
+  }
+  .tutorial-footer {
+    margin-top: 18px;
+    font-size: 8px;
+  }
+}
+
+@media (max-height: 460px) {
+  .tutorial-panel {
+    width: min(700px, 100%);
+    padding: 23px 42px;
+  }
+  .tutorial-emblem {
+    display: none;
+  }
+  .tutorial-eyebrow {
+    margin-bottom: 7px;
+  }
+  .tutorial-category {
+    font-size: 9px;
+    margin-bottom: 5px;
+  }
+  .tutorial-panel h1 {
+    font-size: 27px;
+  }
+  .tutorial-description {
+    max-width: 530px;
+    font-size: 14px;
+  }
+  .tutorial-divider {
+    margin: 8px auto;
+  }
+  .tutorial-prompt {
+    margin-bottom: 7px;
+  }
+  .tutorial-instruction {
+    margin: 11px 0 3px;
+  }
+  .tutorial-footer {
+    margin-top: 12px;
+  }
+}
+
+@media (max-width: 380px) {
+  .tutorial-panel {
+    padding-right: 30px;
+    padding-left: 30px;
+  }
+  .tutorial-corners svg {
+    width: 40px;
+    height: 40px;
+  }
+  .tutorial-eyebrow {
+    letter-spacing: 2px;
+  }
+}

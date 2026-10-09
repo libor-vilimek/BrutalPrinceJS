@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tutorial playtest — muted</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+        box-sizing: border-box;
+        background: #17130f;
+        color: #f1d6a7;
+        font: 14px monospace;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+      button {
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      iframe {
+        flex: 1;
+        width: 100%;
+        min-height: 0;
+        border: 0;
+      }
+      #results {
+        white-space: pre-wrap;
+        max-height: 22vh;
+        overflow: auto;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span>Tutorial playtest · sound disabled</span>
+      <button id="replay" type="button">Replay opening</button>
+      <button id="run" type="button">Run tutorial checks</button>
+    </header>
+    <iframe id="game" title="Muted game and tutorial" src="../index.html?level=1"></iframe>
+    <pre id="results">Loading the real opening and tutorial…</pre>
+    <script src="tutorial-browser.js"></script>
+  </body>
+</html>

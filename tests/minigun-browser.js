@@ -60,6 +60,12 @@ async function settleOpeningIntro() {
       continue;
     }
     const torches = state.twinTorches;
+    // Combat fixtures exercise their own inputs; tutorial input/pause behavior
+    // has a separate, muted fixture at tutorial-browser.html.
+    if (state.tutorial) {
+      state.tutorial.destroy();
+      state.tutorial = null;
+    }
     if (!torches || (!torches.introPending && torches.actionStage !== "intro")) {
       return;
     }

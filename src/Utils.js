@@ -322,7 +322,7 @@ PrinceJS.Utils = {
         seconds: -1
       };
     }
-    let diff = (PrinceJS.endTime || new Date()).getTime() - PrinceJS.startTime.getTime();
+    let diff = (PrinceJS.endTime || PrinceJS.tutorialPauseTime || new Date()).getTime() - PrinceJS.startTime.getTime();
     let minutes = Math.floor(diff / 60000);
     let seconds = Math.floor(diff / 1000) % 60;
     return { minutes, seconds };
