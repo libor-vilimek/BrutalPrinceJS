@@ -2670,11 +2670,12 @@
     },
     {
       "room": 1,
-      "location": 13,
+      "location": 12,
       "skill": 0,
       "colors": 2,
       "type": "guard",
-      "direction": -1
+      "direction": 1,
+      "active": false
     }
   ],
   "events": [

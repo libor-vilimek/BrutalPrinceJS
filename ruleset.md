@@ -49,6 +49,7 @@ Navazující implementační rozhodnutí: pořadí zbraní je `1` pochodně, `2`
 - **TUTORIAL-02:** Během obrazovky je hra pozastavená. Stisk požadované klávesy obrazovku zavře, obnoví hru a provede danou akci. Nesouvisející klávesa obrazovku nezavře.
 - **TUTORIAL-03:** Lekce může požadovanou klávesu uměle podržet, aby proběhla vyučovaná sekvence i po krátkém stisku. Délka je nastavitelná pro konkrétní lekci; běžné ovládání a pravidla animací zůstávají platné.
 - **TUTORIAL-04:** Systém má být rozšiřitelný o další lekce a jeho aktuální obsah i způsob rozšíření musí být popsaný v anglické dokumentaci.
+- **TUTORIAL-05:** U úvodních pochodní v levelu 1 stojí jeden strážce otočený k princi zády, který na něj nereaguje. Je v dosahu první otočky tutoriálu, aby ho princ zapálil po dokončení sběru a vytažení pochodní bez ztráty životů. Jde o výslovnou výjimku pro tohoto strážce z ENEMY-02.
 
 Implementační rozhodnutí: první lekce vysvětluje pochodně po dokončení jejich úvodního sběru v levelu 1, když princ stojí a může je použít. Přijímá CTRL i F a podrží vstup alespoň 1,8 sekundy herního času. Vyobrazené klávesy jsou také tlačítka pro dotyk/myš; akční tlačítka ovladače mají stejný význam. Skutečné delší držení klávesnice se nezkracuje. Čtení nespotřebovává čas kampaně. Dokončené lekce se během jedné hry při restartu levelu ani postupu neopakují; nová hra nebo obnovení stránky je resetuje. Ztráta fokusu, smrt a odchod z levelu zruší umělé držení. Obsah a rozšíření popisuje `docs/tutorials.md`.
 
@@ -153,7 +154,7 @@ Implementační rozhodnutí: zničitelné části jsou původní uvolněné podl
 ## Nepřátelé a jejich smrti
 
 - **ENEMY-01:** Ve všech levelech má být mnoho nepřátel.
-- **ENEMY-02:** Viditelní strážci na stejném patře, kteří prince mohou skutečně dosáhnout, ho mají aktivně začít pronásledovat. Samotná blízkost přes neprůchodnou překážku nebo z jiného patra nestačí.
+- **ENEMY-02:** Viditelní strážci na stejném patře, kteří prince mohou skutečně dosáhnout, ho mají aktivně začít pronásledovat. Samotná blízkost přes neprůchodnou překážku nebo z jiného patra nestačí. Výjimkou je pasivní úvodní strážce tutoriálu podle TUTORIAL-05.
 - **ENEMY-03:** Zvuk při zabití nepřítele je odstraněný, protože při hromadném zabíjení ruší. Nezapínat ho znovu pro každého padlého strážce.
 - **ENEMY-04:** Minigun má několik různých smrtí: například zásah do obličeje s odhozením těla o několik dlaždic, ztrátu částí těla a různé pohyby či převracení těla. Nemá používat jedinou opakovanou nehybnou smrt.
 - **ENEMY-05:** Smrt raketometem rozmetá části těla napříč prostředím. Fragmenty a těla se pohybují a střetávají se s okolím.

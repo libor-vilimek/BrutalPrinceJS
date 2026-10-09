@@ -10,6 +10,10 @@ The tutorial is an expanding collection of short, contextual lessons. Each lesso
 
 The torch lesson explains that holding the attack key draws both torches and spins in place to ignite nearby enemies, and releasing it stows them. Its first attempt needs only a tap. The regular torch controls, reach, damage rules, animations, inventory and opening collection are unchanged.
 
+One guard stands beside the opening torches, facing away from the Prince. He does not turn, approach or attack, so the collection and first draw finish without losing health. He is within torch reach from the Prince's landing position: the assisted spin ignites him through the normal fire attack and burning death animation. This guard is a deliberate exception to the usual guard pursuit behavior; the other enemies remain reactive.
+
+The target is defined in `assets/maps/level1.json`, in room 1 at location 12, facing right (`direction: 1`) with `active: false`. The existing inactive-enemy setting disables his combat reactions while leaving him visible and vulnerable to the torches. Restarting the level restores him in the same passive pose, even when the lesson has already been completed.
+
 Completed lessons stay completed through level restarts and level changes in the current game session. Starting a new game or reloading the page resets tutorial progress. Progress is not stored in the saved URL or browser storage.
 
 ## Adding a lesson
@@ -54,4 +58,4 @@ Phaser pause does not suspend native JavaScript `setTimeout` callbacks. Existing
 
 ## Verification
 
-Run `npm test`. Open [tests/tutorial-browser.html](../tests/tutorial-browser.html) through the local server for a muted browser check of the real opening, pause, wrong keys, assisted torch draw/spin/stow, restart and level transition. The page also allows replaying the first lesson and inspecting its responsive layout. Existing combat browser checks suppress tutorial prompts so their scenarios retain control of input. Keep audio off while testing.
+Run `npm test`. Open [tests/tutorial-browser.html](../tests/tutorial-browser.html) through the local server for a muted browser check of the real opening, the passive guard's placement and ignition without health loss, pause, wrong keys, assisted torch draw/spin/stow, restart and level transition. The page also allows replaying the first lesson and inspecting its responsive layout. Existing combat browser checks suppress tutorial prompts so their scenarios retain control of input. Keep audio off while testing.

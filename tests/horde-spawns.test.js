@@ -302,7 +302,10 @@ test("mission one opens with two molotov targets under the shaft and a clear app
     guards.some((guard) => guard.room === nextRoom && guard.location === 13),
     "the first crowd starts beyond the three-column entrance clearance"
   );
-  assert.ok(!guards.some((guard) => guard.room === json.prince.room), "the molotov's starting floor remains peaceful");
+  assert.ok(
+    !guards.some((guard) => guard.room === json.prince.room),
+    "no crowds join the passive torch tutorial guard"
+  );
 });
 
 function battleFixture() {

@@ -95,10 +95,14 @@ async function run() {
       "Both actual wall torches are collected before the lesson"
     );
     check(game.paused && s.kid.action === "stand" && !s.kid.specialAction, "Lesson pauses at a usable standing pose");
-    const target = s.enemies.find((enemy) => enemy.room === s.kid.room && enemy.charBlockY === s.kid.charBlockY);
-    check(target && target.alive && target.active && target.visible, "A live guard waits on the torch landing");
-    results.textContent += "Opening: health " + s.kid.health + "/" + s.kid.maxHealth +
-      ", Prince x=" + s.kid.charX + ", guard x=" + target.charX + ", action=" + target.action + "\n";
+    const targets = s.enemies.filter((enemy) => enemy.room === s.kid.room && enemy.charBlockY === s.kid.charBlockY);
+    const target = targets[0];
+    check(targets.length === 1 && target.alive && target.visible, "One live guard waits on the torch landing");
+    check(
+      !target.active && target.action === "stand" && target.charX > s.kid.charX && target.charFace === 1,
+      "The opening guard faces away and does not react to the Prince"
+    );
+    check(s.twinTorches.canReach(target), "The waiting guard is within the first torch spin's reach");
     check(s.kid.health === s.kid.maxHealth, "The guard cannot hurt the Prince during the opening collection");
     const frozen = snapshot(s);
     for (const code of [27, 13, 32, 39, 50, 67, 74, 88]) {
@@ -159,6 +163,15 @@ async function run() {
     await until(() => state().kid !== kid && state().tutorial && state().twinTorches.introDone, "level restart");
     s = state();
     check(!s.tutorial.active && s.tutorial.completed.has("twin-torches"), "A retry remembers the completed lesson");
+    const retryTarget = s.enemies.find((enemy) => enemy.room === s.kid.room && enemy.charBlockY === s.kid.charBlockY);
+    check(
+      retryTarget &&
+        retryTarget.alive &&
+        !retryTarget.active &&
+        retryTarget.charFace === 1 &&
+        s.kid.health === s.kid.maxHealth,
+      "A retry restores the passive guard and the opening still costs no health"
+    );
     check(
       !frame.contentDocument.querySelector(".tutorial-overlay:not([hidden])"),
       "No old overlay remains after restart"
