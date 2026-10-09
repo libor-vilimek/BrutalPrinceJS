@@ -17,8 +17,9 @@ PrinceJS.Kick = function (delegate) {
 
 PrinceJS.Kick.RANGE = 32;
 PrinceJS.Kick.NEAR = 144;
-PrinceJS.Kick.DURATION = 0.84;
-PrinceJS.Kick.COOLDOWN = 1.02;
+PrinceJS.Kick.ANIMATION_SPEED = 0.8;
+PrinceJS.Kick.DURATION = 0.84 / PrinceJS.Kick.ANIMATION_SPEED;
+PrinceJS.Kick.COOLDOWN = 1.02 / PrinceJS.Kick.ANIMATION_SPEED;
 PrinceJS.Kick.RECOVERY = 2;
 PrinceJS.Kick.TOPPLE_DURATION = 0.38;
 
@@ -251,10 +252,13 @@ PrinceJS.Kick.prototype = {
   },
 
   sweep: function () {
-    // Match the foot's front extension and rear sweep; newcomers can be caught
-    // during each arc, but one spin can launch any individual only once.
-    let front = this.elapsed >= 0.14 && this.elapsed <= 0.34;
-    let back = this.elapsed >= 0.39 && this.elapsed <= 0.65;
+    // Both arcs share one direct hit, including targets arriving later in the spin.
+    if (this.chain.size > 0) {
+      return;
+    }
+    let time = this.elapsed * PrinceJS.Kick.ANIMATION_SPEED;
+    let front = time >= 0.14 && time <= 0.34;
+    let back = time >= 0.39 && time <= 0.65;
     if (!front && !back) {
       return;
     }
@@ -265,11 +269,12 @@ PrinceJS.Kick.prototype = {
         continue;
       }
       this.knockDown(enemy, Math.sign(dx) || this.kid.charFace, 1, this.chain);
+      break;
     }
   },
 
   knockDown: function (enemy, direction, strength, chain, secondary = false) {
-    if (!this.canTarget(enemy) || chain.has(enemy)) {
+    if (!this.canTarget(enemy) || chain.has(enemy) || chain.size >= (secondary ? 2 : 1)) {
       return;
     }
     chain.add(enemy);
@@ -428,9 +433,9 @@ PrinceJS.Kick.prototype = {
         this.releaseEnemy(enemy);
         return;
       }
-      // Only the body actually struck by the foot can bowl over neighbours.
-      // Those neighbours fall back in place and never pass the impact onward.
-      for (let other of state.secondary ? [] : this.delegate.enemies || []) {
+      // Each spin permits one body impact in total, even across later frames,
+      // bounces or another spin. The secondary victim never passes it onward.
+      for (let other of state.secondary || state.chain.size >= 2 ? [] : this.delegate.enemies || []) {
         if (!this.canTarget(other) || state.chain.has(other) || beforeSpeed < 80) {
           continue;
         }
@@ -444,6 +449,7 @@ PrinceJS.Kick.prototype = {
           // The incoming body loses momentum without launching another missile.
           state.vx *= 0.8;
           state.spin *= -0.75;
+          break;
         }
       }
       for (let contact of result.contacts) {

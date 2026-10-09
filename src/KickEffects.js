@@ -138,12 +138,14 @@ PrinceJS.KickEffects.prototype = {
     this.cropBody();
     this.pose.clear();
     this.pose.visible = this.head.visible = true;
-    let time = Math.min(PrinceJS.Kick.DURATION, state.elapsed);
+    // Retiming the whole pose keeps the foot aligned with both contact windows.
+    let time = Math.min(PrinceJS.Kick.DURATION, state.elapsed) * PrinceJS.Kick.ANIMATION_SPEED;
+    let remaining = Math.max(0, PrinceJS.Kick.DURATION - state.elapsed) * PrinceJS.Kick.ANIMATION_SPEED;
     let spin = Math.max(0, Math.min(1, (time - 0.08) / 0.7));
     let angle = spin * Math.PI * 2 - Math.PI * 0.4;
     let turn = Math.cos(angle);
     let depth = Math.sin(angle);
-    let extension = Math.min(1, time / 0.14) * Math.min(1, (PrinceJS.Kick.DURATION - time) / 0.19);
+    let extension = Math.min(1, time / 0.14) * Math.min(1, remaining / 0.19);
     extension = Math.max(0, extension);
     let hip = { x: -7, y: -18 };
     let foot = { x: hip.x + turn * 22 * extension, y: -2 - extension * (24 + depth * 3) };

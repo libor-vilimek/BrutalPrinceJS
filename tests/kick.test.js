@@ -31,7 +31,7 @@ function setup() {
   return f;
 }
 
-test("roundhouse winds up, sweeps both sides, keeps the selected weapon and does not damage guards", () => {
+test("one spin hits only one guard across both arcs, keeps the selected weapon and does not damage guards", () => {
   const f = setup();
   f.placeKid(4);
   const front = f.guard(5);
@@ -52,12 +52,12 @@ test("roundhouse winds up, sweeps both sides, keeps the selected weapon and does
   assert.ok(!front.kickState && !back.kickState, "readable wind-up before contact");
   f.advanceKick(0.2);
   assert.ok(front.kickState && !back.kickState, "front arc hits first");
-  f.advanceKick(0.3);
-  assert.ok(back.kickState, "rear arc catches enemies behind the Prince");
+  f.advanceKick(0.4);
+  assert.ok(!back.kickState, "the rear arc cannot spend the same spin's direct hit again");
   assert.equal(front.health, hp);
   assert.equal(back.health, hp);
-  assert.equal(f.delegate.bloodEffects.hits.length, 2);
-  f.advanceKick(0.36);
+  assert.equal(f.delegate.bloodEffects.hits.length, 1);
+  f.advanceKick(0.46);
   assert.equal(f.kid.specialAction, null);
   assert.equal(f.kid.cropRect, null);
 });
@@ -69,7 +69,7 @@ test("the full spin blocks repeated sword strikes including wind-up and recovery
   f.kid.damageLife = () => f.kid.health--;
   f.kid.showSplash = () => {};
   f.kick.request();
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 20; i++) {
     f.PrinceJS.Kid.prototype.stabbed.call(f.kid);
     f.advanceKick(0.05);
   }
@@ -84,22 +84,22 @@ test("the full spin blocks repeated sword strikes including wind-up and recovery
 test("direct kicks retain varied trajectories, flips, cosmetic blood and separated landing positions", () => {
   const f = setup();
   f.placeKid(4);
-  const guards = [5, 5, 3, 3].map((x) => f.guard(x));
-  const hp = guards.map((enemy) => enemy.health);
-  f.kick.request();
-  f.advanceKick(0.13);
-  assert.equal(f.launches.length, 0);
-  f.advanceKick(1.4);
-  assert.equal(f.launches.length, 4, "both arcs reach only the guards next to the Prince");
+  const guards = [];
+  for (let i = 0; i < 5; i++) {
+    const enemy = f.guard(5);
+    guards.push(enemy);
+    f.kick.request();
+    f.advanceKick(0.17);
+    assert.equal(f.launches.length, i, "the slower wind-up precedes contact on every kick");
+    f.advanceKick(5.5);
+    enemy.active = false;
+  }
+  assert.equal(f.launches.length, 5, "each new spin can launch one guard");
   assert.ok(f.launches.every((s) => !s.secondary));
   assert.ok(new Set(f.launches.map((s) => Math.round(s.vx))).size >= 3);
   assert.ok(new Set(f.launches.map((s) => Math.round(s.vy))).size >= 3);
   assert.ok(f.launches.some((s) => s.spin < 0) && f.launches.some((s) => s.spin > 0));
-  f.advanceKick(4);
-  assert.deepEqual(
-    guards.map((e) => e.health),
-    hp
-  );
+  assert.ok(guards.every((e) => e.health === 3));
   const xs = guards.map((e) => f.kick.position(e).x);
   assert.ok(Math.max(...xs) - Math.min(...xs) > 100, "landing spread exceeds three tiles: " + xs);
   assert.ok(new Set(xs.map((x) => Math.round(x / 16))).size >= 3, "at least three distinct landing spots");
@@ -107,7 +107,7 @@ test("direct kicks retain varied trajectories, flips, cosmetic blood and separat
   assert.ok(f.delegate.bloodEffects.bursts.length > 0);
 });
 
-test("a directly kicked body topples neighbours locally, and secondary falls cannot propagate", () => {
+test("a directly kicked body topples one neighbour locally, and the secondary fall cannot propagate", () => {
   const f = setup();
   const first = f.guard(2);
   const second = f.guard(3);
@@ -139,6 +139,69 @@ test("a directly kicked body topples neighbours locally, and secondary falls can
   assert.equal(third.health, 3);
 });
 
+test("crowded front and rear arcs each allow only one direct hit in either facing direction", () => {
+  for (const direction of [-1, 1]) {
+    for (const side of [-1, 1]) {
+      const f = setup();
+      f.placeKid(4, 1, 1, direction);
+      const guards = [0, 1, 2].map(() => f.guard(4 + direction * side));
+      f.kick.request();
+      f.advanceKick(side === 1 ? 0.17 : 0.48);
+      assert.equal(f.launches.length, 0, "neither arc hits before its slowed contact window");
+      f.advanceKick(0.01);
+      assert.equal(f.launches.length, 1, "simultaneous direct contacts choose just one guard");
+      assert.equal(f.launches[0].secondary, false);
+      f.advanceKick(1.5);
+      assert.equal(f.launches.filter((s) => !s.secondary).length, 1);
+      assert.equal(f.launches.filter((s) => s.secondary).length, 1);
+      assert.equal(guards.filter((e) => !e.kickState).length, 1);
+      assert.ok(guards.every((e) => e.health === 3));
+    }
+  }
+});
+
+test("the directly kicked body can hit only one extra guard, even with simultaneous and later contacts", () => {
+  const f = setup();
+  const first = f.guard(2);
+  const second = f.guard(3);
+  const third = f.guard(3);
+  const fourth = f.guard(4);
+  f.kick.request();
+  for (let i = 0; i < 100 && !second.kickState; i++) {
+    f.advanceKick(0.01);
+  }
+  assert.ok(second.kickState && second.kickState.secondary);
+  assert.ok(!third.kickState, "two neighbours sharing a contact point do not both fall");
+  // Keep a fresh guard directly in the original body's path across later frames.
+  for (let i = 0; i < 20; i++) {
+    const state = first.kickState;
+    f.kick.syncEnemy(fourth, { x: state.x, y: state.y + 20, room: state.room }, 16);
+    f.advanceKick(0.01);
+  }
+  assert.ok(!fourth.kickState, "the body's hit allowance does not reset on the next frame");
+  f.advanceKick(4);
+  assert.equal(f.launches.length, 2);
+  assert.ok([first, second, third, fourth].every((e) => e.health === 3 && !e.kickState));
+});
+
+test("holding C waits for the slower spin and cooldown before restoring the direct hit", () => {
+  const f = setup();
+  f.guard(2);
+  f.delegate.kickKey.isDown = true;
+  f.kick.request();
+  f.advanceKick(1);
+  assert.equal(f.kid.specialAction.type, "kick");
+  f.advanceKick(0.06);
+  assert.equal(f.kid.specialAction, null);
+  f.guard(2);
+  f.advanceKick(0.21);
+  assert.equal(f.kid.specialAction, null, "holding C respects the retimed cooldown");
+  f.advanceKick(0.02);
+  assert.equal(f.kid.specialAction.type, "kick");
+  f.advanceKick(0.18);
+  assert.equal(f.launches.filter((s) => !s.secondary).length, 2);
+});
+
 test("an empty kick stays visible and direct contact stops at one tile in both directions", () => {
   for (const direction of [-1, 1]) {
     const f = setup();
@@ -149,14 +212,14 @@ test("an empty kick stays visible and direct contact stops at one tile in both d
     f.kick.request();
     assert.equal(f.kid.specialAction.type, "kick");
     assert.equal(f.kick.effects.pose.visible, true);
-    f.advanceKick(0.83);
+    f.advanceKick(1.04);
     assert.ok(!distant.kickState, "a guard beyond the foot's short range stays upright");
     assert.equal(f.kick.effects.pose.visible, true);
     f.advanceKick(0.3);
     distant.active = false;
     f.kick.request();
     assert.equal(f.kid.specialAction.type, "kick", "no eligible enemy is required on free ground");
-    f.advanceKick(0.86);
+    f.advanceKick(1.06);
     assert.equal(f.kid.specialAction, null);
     assert.equal(f.kid.cropRect, null);
     assert.equal(f.kick.effects.pose.visible, false);
@@ -185,7 +248,7 @@ test("walls and closed gates block both the sweep and flying bodies", () => {
     f.setTile(1, 2, 1, element);
     f.kick.request();
     assert.equal(f.kid.specialAction.type, "kick", "a blocked target does not prevent an empty kick");
-    f.advanceKick(1.1);
+    f.advanceKick(1.3);
     assert.ok(!behind.kickState);
     f.PrinceJS.HordeSpawns.place(behind, 15);
     const near = f.guard(2);

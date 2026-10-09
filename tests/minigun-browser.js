@@ -326,7 +326,7 @@ async function kickChecks(preview = false) {
       state.kick.actionStage === "kicking" && state.kick.effects.pose.visible,
       "C visibly kicks even in an empty corridor"
     );
-    await pause(900);
+    await pause(1150);
     check(!state.kid.specialAction && !state.kid.cropRect, "An empty kick finishes and restores normal movement");
     const guards = state.enemies.filter((enemy) => enemy.alive && enemy.baseCharName === "guard").slice(0, 4);
     const arrange = async (direction) => {
@@ -367,7 +367,7 @@ async function kickChecks(preview = false) {
         await pause(240);
         testGame.paused = true;
         report(
-          "C: protected roundhouse. Guards scatter, tumble and see stars; blood is cosmetic. X still uses the whip."
+          "C: slower protected roundhouse. One guard flies and can topple one more; blood is cosmetic. X still uses the whip."
         );
         return;
       }
@@ -375,15 +375,22 @@ async function kickChecks(preview = false) {
       state.kid.stabbed();
       await pause(400);
       state.kid.stabbed();
-      await pause(350);
+      await pause(550);
       state.kid.stabbed();
       check(state.kid.health === health, "Sword hits cannot hurt the Prince during wind-up, spin or follow-through");
-      await pause(350);
+      // Unhit guards can still attack when the spin ends. Isolate the follow-up
+      // draw check to the two fallen guards whose recovery it is testing.
+      guards.filter((enemy) => !enemy.kickState).forEach((enemy) => {
+        enemy.setInactive();
+        enemy.setInvisible();
+      });
+      await pause(250);
       check(
         guards[0].kickState &&
           !guards[0].kickState.secondary &&
-          guards.slice(1).some((enemy) => enemy.kickState && enemy.kickState.secondary),
-        "Only the nearest guard is kicked directly; body contact topples secondary victims facing " + direction
+          guards.filter((enemy) => enemy.kickState).length === 2 &&
+          guards.slice(1).filter((enemy) => enemy.kickState && enemy.kickState.secondary).length === 1,
+        "One guard is kicked directly and its body topples exactly one more facing " + direction
       );
       check(
         guards
@@ -432,6 +439,7 @@ async function kickChecks(preview = false) {
   } catch (error) {
     report("FAIL: " + error.message);
   } finally {
+    gameState().weaponCtrlKey.isDown = gameState().weaponFireKey.isDown = false;
     busy = false;
   }
 }
