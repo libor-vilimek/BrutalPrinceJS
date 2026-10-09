@@ -26,6 +26,9 @@
     "url": "https://github.com/oklemenz/PrinceJS/issues"
   },
   "homepage": "https://github.com/oklemenz/PrinceJS#readme",
+  "dependencies": {
+    "http-server": "^14.1.1"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.4.0",
@@ -33,7 +36,6 @@
     "eslint-config-prettier": "^10.1.8",
     "fast-xml-parser": "^5.8.0",
     "globals": "^17.6.0",
-    "http-server": "^14.1.1",
     "prettier": "^3.8.3"
   },
   "license": "SEE LICENSE IN LICENSE"

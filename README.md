@@ -120,6 +120,12 @@ Run `npm test` for camera, weapon collision and inventory tests. Open `http://lo
 
 The local server serves this checkout directly with browser caching disabled; no build is needed. If the game was opened before this setting changed, restart the server and press `Ctrl+F5` once to clear the previously cached version. The online links above point to the original game, not this local version.
 
+## Deploy to Heroku
+
+Deploy the repository with Heroku's Node.js buildpack and include both `package.json` and `package-lock.json`. Heroku runs `npm start` automatically; no build step or Procfile is needed. The server binds to `0.0.0.0` and reads the port from Heroku's `PORT` environment variable.
+
+`http-server` is a runtime dependency because it serves the game in production. Keep it under `dependencies`: Heroku removes `devDependencies` before starting the app, which otherwise causes `http-server: not found` and an H10 crash. After changing dependencies, redeploy so Heroku installs the updated lockfile.
+
 ## Options
 
 Url parameters are leveraged to save game state automatically (shortcut in brackets)
