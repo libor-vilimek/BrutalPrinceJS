@@ -22,6 +22,7 @@ PrinceJS.TutorialOverlay = function (accept) {
       <p class="tutorial-category"></p>
       <h1 id="tutorial-title"></h1>
       <p id="tutorial-description" class="tutorial-description"></p>
+      <div class="tutorial-inventory" hidden></div>
       <div class="tutorial-divider" aria-hidden="true"><span>◆</span></div>
       <p class="tutorial-prompt">Press to try</p>
       <div class="tutorial-keys"></div>
@@ -66,11 +67,29 @@ PrinceJS.TutorialOverlay.prototype = {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "tutorial-key";
-      button.setAttribute("aria-label", "Press " + key.label + " to try " + lesson.title);
-      button.textContent = key.label;
+      const label = [...(key.modifiers || []).map((code) => (code === 16 ? "Shift" : String(code))), key.label].join(
+        " + "
+      );
+      button.setAttribute("aria-label", "Press " + label + " to try " + lesson.title);
+      button.textContent = label;
       button.addEventListener("click", () => this.accept(key.code));
       keys.appendChild(button);
     });
+    const inventory = this.root.querySelector(".tutorial-inventory");
+    inventory.replaceChildren();
+    inventory.hidden = !lesson.inventory || !lesson.inventory.length;
+    for (const id of lesson.inventory || []) {
+      const weapon = PrinceJS.TutorialOverlay.WEAPONS[id];
+      const card = document.createElement("div");
+      card.className = "tutorial-weapon";
+      const picture = document.createElement("div");
+      picture.className = "tutorial-weapon-picture";
+      picture.innerHTML = '<svg viewBox="0 0 64 40" aria-hidden="true">' + weapon.art + "</svg>";
+      const label = document.createElement("span");
+      label.textContent = weapon.key + " · " + weapon.label;
+      card.append(picture, label);
+      inventory.appendChild(card);
+    }
     this.root.hidden = false;
     this.panel.focus({ preventScroll: true });
   },
@@ -92,5 +111,29 @@ PrinceJS.TutorialOverlay.prototype = {
 
   destroy: function () {
     this.root.remove();
+  }
+};
+
+// Vector versions of the game's pixel equipment: crisp at every panel size.
+PrinceJS.TutorialOverlay.WEAPONS = {
+  twinTorches: {
+    key: "1",
+    label: "Twin torches",
+    art: '<path fill="#704127" d="m17 34 4-22 4 1-4 22zm25 0-4-22 4-1 4 22z"/><path fill="#ffd269" d="M18 15V8l4-7 2 8 4-3v9zm18 0V7l5-6 1 7 4-2v9z"/><path fill="#f07726" d="m20 14 1-6 4 6zm19 0 2-7 3 7z"/>'
+  },
+  molotov: {
+    key: "2",
+    label: "Molotov",
+    art: '<path fill="#deb67d" d="M32 7V2h6v3h-3v4z"/><path fill="#244d39" d="M29 6h6v8l5 5v17H24V19l5-5z"/><path fill="#679366" d="M27 20h3v13h-3z"/><path fill="#e5d3a1" d="M25 24h14v7H25z"/><path fill="#ad7346" d="M29 26h6v3h-6z"/>'
+  },
+  minigun: {
+    key: "3",
+    label: "Minigun",
+    art: '<path fill="#3d4142" d="M6 15h17v-5h16v6h19v12H30v7h-9v-8H6z"/><path fill="#8b9699" d="M29 17h28v3H29zm0 7h28v3H29zM11 16h9v8h-9z"/><path fill="#ba9873" d="M23 28h5v6h-5z"/><path fill="#24282a" d="M49 14h5v16h-5z"/>'
+  },
+  rocketLauncher: {
+    key: "4",
+    label: "Rockets",
+    art: '<path fill="#3e5148" d="M5 15h48v13H5z"/><path fill="#859184" d="M7 16h44v4H7z"/><path fill="#303b39" d="M3 12h7v18H3zm46 0h8v19h-8zM20 27h7v9h-7z"/><path fill="#bfa678" d="M28 12h9v3h-9z"/><path fill="#242c2b" d="M55 16h5v11h-5z"/>'
   }
 };

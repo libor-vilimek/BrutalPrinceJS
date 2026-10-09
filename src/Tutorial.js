@@ -10,8 +10,10 @@ PrinceJS.Tutorial = function (delegate) {
   this.active = null;
   this.assist = null;
   this.downKeys = new Set();
+  this.heldKeys = new Set();
   this.destroyed = false;
   this.overlay = new PrinceJS.TutorialOverlay((code) => this.accept(code, false));
+  this.sequence = PrinceJS.TutorialSequence ? new PrinceJS.TutorialSequence(delegate, this) : null;
   this.keyDown = this.onKeyDown.bind(this);
   this.keyUp = this.onKeyUp.bind(this);
   this.blur = this.onBlur.bind(this);
@@ -63,12 +65,23 @@ PrinceJS.Tutorial.prototype = {
       if (event.keyCode === Phaser.Keyboard.TAB) {
         this.overlay.focusKey(event.shiftKey ? -1 : 1);
       } else if (!wasDown && !event.repeat && !event.altKey && !event.metaKey) {
-        this.accept(event.keyCode, true);
+        const key = this.active.keys.find((item) => {
+          const codes = [...(item.modifiers || []), item.code];
+          return codes.includes(event.keyCode) && codes.every((code) => this.downKeys.has(code));
+        });
+        if (key) {
+          this.accept(key.code, true);
+        }
       }
-    } else if (this.assist && this.assist.code === event.keyCode) {
+    } else if (this.assist && this.assist.entries.some((entry) => entry.code === event.keyCode)) {
       // Phaser still sees the original press; a re-press during assistance must
       // not duplicate edge-triggered actions, but must keep its real hold.
-      this.assist.physicalDown = true;
+      this.assist.entries.find((entry) => entry.code === event.keyCode).physicalDown = true;
+      this.consume(event);
+    } else if (this.sequence && this.sequence.guiding && event.keyCode === Phaser.Keyboard.C) {
+      // The emergency kick remains available during live guided movement.
+      this.sequence.cancel();
+    } else if (this.heldKeys.has(event.keyCode) || this.isGuidedKey(event.keyCode)) {
       this.consume(event);
     }
   },
@@ -77,10 +90,22 @@ PrinceJS.Tutorial.prototype = {
     this.downKeys.delete(event.keyCode);
     if (this.active) {
       this.consume(event);
-    } else if (this.assist && this.assist.code === event.keyCode) {
-      this.assist.physicalDown = false;
+    } else if (this.assist && this.assist.entries.some((entry) => entry.code === event.keyCode)) {
+      this.assist.entries.find((entry) => entry.code === event.keyCode).physicalDown = false;
+      this.consume(event);
+    } else if (this.heldKeys.has(event.keyCode) || this.isGuidedKey(event.keyCode)) {
       this.consume(event);
     }
+  },
+
+  isGuidedKey: function (code) {
+    // Reserve movement and equipment input, while leaving pause/restart and
+    // other global shortcuts available throughout the short live sequence.
+    return !!(
+      this.sequence &&
+      this.sequence.guiding &&
+      [16, 17, 37, 38, 39, 40, 49, 50, 51, 52, 70, 74, 88].includes(code)
+    );
   },
 
   accept: function (code, physicalDown) {
@@ -90,12 +115,55 @@ PrinceJS.Tutorial.prototype = {
     }
     this.completed.add(lesson.id);
     this.resume();
+    if (lesson.onAccept) {
+      lesson.onAccept(this.delegate, this);
+    }
     const key = this.game.input.keyboard.addKey(code);
-    this.assist = { code, key, physicalDown, remaining: Math.max(0, lesson.holdMs || 0) / 1000, worldUpdated: false };
+    const spec = lesson.keys.find((item) => item.code === code);
+    const entries = [...(spec.modifiers || []), code].map((entryCode) => ({
+      code: entryCode,
+      key: this.game.input.keyboard.addKey(entryCode),
+      physicalDown: physicalDown && this.downKeys.has(entryCode)
+    }));
+    this.assist = {
+      code,
+      key,
+      entries,
+      lesson,
+      elapsed: 0,
+      remaining: Math.max(0, lesson.holdMs || 0) / 1000,
+      worldUpdated: false
+    };
     // Use the real Phaser key signals as well as isDown. No parallel weapon,
     // movement or animation implementation is needed for a new lesson.
-    key.processKeyDown({ keyCode: code, ctrlKey: code === 17, shiftKey: code === 16, altKey: false });
+    for (const entry of entries) {
+      this.pressKey(entry.code);
+    }
     return true;
+  },
+
+  pressKey: function (code) {
+    this.game.input.keyboard.addKey(code).processKeyDown({
+      keyCode: code,
+      ctrlKey: code === 17,
+      shiftKey: code === 16 || this.heldKeys.has(16),
+      altKey: false
+    });
+  },
+
+  holdKey: function (code) {
+    this.heldKeys.add(code);
+    this.pressKey(code);
+  },
+
+  releaseHeldKey: function (code) {
+    if (!this.heldKeys.has(code)) {
+      return;
+    }
+    this.heldKeys.delete(code);
+    if (!this.downKeys.has(code)) {
+      this.game.input.keyboard.addKey(code).processKeyUp({ keyCode: code });
+    }
   },
 
   resume: function () {
@@ -114,6 +182,9 @@ PrinceJS.Tutorial.prototype = {
     // handler cannot round the countdown to a saved whole minute.
     this.game.paused = false;
     this.active = null;
+    for (const code of this.heldKeys) {
+      this.pressKey(code);
+    }
   },
 
   update: function (delta) {
@@ -128,15 +199,28 @@ PrinceJS.Tutorial.prototype = {
       // Match equipment controllers' simulation step cap, even on a slow tab.
       // Weapons poll per frame, while the native actor polls every 80 ms. A tap
       // must reach both clocks before its release, even with holdMs set to zero.
-      this.assist.remaining -= Math.max(0, Math.min(Number(delta) || 0, 0.05));
-      if (this.assist.remaining <= 0 && this.assist.worldUpdated) {
+      const step = Math.max(0, Math.min(Number(delta) || 0, 0.05));
+      this.assist.remaining -= step;
+      this.assist.elapsed += step;
+      const lesson = this.assist.lesson;
+      const reached = !lesson.holdUntil || lesson.holdUntil(this.delegate);
+      const expired = lesson.maxHoldMs && this.assist.elapsed * 1000 >= lesson.maxHoldMs;
+      if (this.assist.worldUpdated && ((this.assist.remaining <= 0 && reached) || expired)) {
         const assist = this.assist;
         this.assist = null;
-        if (!assist.physicalDown) {
-          assist.key.processKeyUp({ keyCode: assist.code, ctrlKey: false, shiftKey: false, altKey: false });
+        if (reached && lesson.onComplete) {
+          lesson.onComplete(this.delegate, this);
+        }
+        for (const entry of assist.entries) {
+          if (!entry.physicalDown && !this.heldKeys.has(entry.code)) {
+            entry.key.processKeyUp({ keyCode: entry.code, ctrlKey: false, shiftKey: false, altKey: false });
+          }
         }
       }
       return;
+    }
+    if (this.sequence) {
+      this.sequence.update();
     }
     const lesson = this.lessons.find((item) => !this.completed.has(item.id) && item.when(this.delegate));
     if (lesson) {
@@ -152,6 +236,12 @@ PrinceJS.Tutorial.prototype = {
   worldUpdated: function () {
     if (this.assist) {
       this.assist.worldUpdated = true;
+    }
+  },
+
+  beforeWorld: function () {
+    if (this.sequence && !this.active && !this.game.paused) {
+      this.sequence.beforeWorld();
     }
   },
 
@@ -172,8 +262,15 @@ PrinceJS.Tutorial.prototype = {
     if (this.assist) {
       // Cleanup must not fire release actions (e.g. a molotov) after death or
       // into a different level. The live controller handles stowing on resume.
-      this.assist.key.reset(false);
+      this.assist.entries.forEach((entry) => entry.key.reset(false));
       this.assist = null;
+    }
+    for (const code of this.heldKeys) {
+      this.game.input.keyboard.addKey(code).reset(false);
+    }
+    this.heldKeys.clear();
+    if (this.sequence) {
+      this.sequence.cancel();
     }
   },
 

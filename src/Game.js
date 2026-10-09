@@ -67,6 +67,7 @@ PrinceJS.Game.prototype = {
         i + 1
       );
       enemy.reinforcement = data.reinforcement === true;
+      enemy.burnRoute = data.burnRoute;
       if (data.health !== undefined) {
         enemy.health = data.health;
       }
@@ -279,6 +280,12 @@ PrinceJS.Game.prototype = {
   updateWorld: function () {
     if (this.tutorial && this.tutorial.active) {
       return;
+    }
+    if (this.tutorial && this.tutorial.beforeWorld) {
+      this.tutorial.beforeWorld();
+      if (this.tutorial.active) {
+        return;
+      }
     }
     this.level.update();
     this.kid.updateActor();

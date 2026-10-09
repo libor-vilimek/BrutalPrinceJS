@@ -280,7 +280,7 @@ test("level 1 keeps the molotov and places the minigun on clear right-hand floor
   }
 });
 
-test("level 2 grants molotov/minigun and leaves the launcher and whip together left of the spawn", () => {
+test("level 2 grants molotov/minigun, keeps the whip at the entrance and places rockets after its ledge encounter", () => {
   const { state, messages, sounds, keys, keyboardCodes } = fixture(2);
   assert.equal(state.kid.hasMolotov, true);
   assert.equal(state.kid.hasMinigun, true);
@@ -288,11 +288,14 @@ test("level 2 grants molotov/minigun and leaves the launcher and whip together l
   assert.equal(state.kid.hasJetpack, false);
   assert.equal(state.rocketLauncher.pickup.collected, false);
   assert.equal(state.rocketLauncher.effects.pickupVisible, true);
-  assert.equal(state.rocketLauncher.pickup.room, 5);
+  assert.equal(state.rocketLauncher.pickup.room, 11);
   const startRoom = state.level.rooms[5];
-  assert.equal(state.rocketLauncher.pickup.worldX - startRoom.x * 320, 48);
-  assert.equal(state.rocketLauncher.pickup.worldY - startRoom.y * 189, 119);
-  assert.equal(state.level.getTileAt(1, 1, 5).isSafeWalkable(), true);
+  const rocketRoom = state.level.rooms[11];
+  assert.equal(rocketRoom.x, startRoom.x - 4);
+  assert.equal(rocketRoom.y, startRoom.y - 1);
+  assert.equal(state.rocketLauncher.pickup.worldX - rocketRoom.x * 320, 272);
+  assert.equal(state.rocketLauncher.pickup.worldY - rocketRoom.y * 189, 119);
+  assert.equal(state.level.getTileAt(8, 1, 11).isSafeWalkable(), true);
   assert.equal(state.level.getTileAt(2, 1, 5).isExitDoor(), true);
   assert.equal(state.kid.activeWeapon, "twinTorches");
   assert.equal(state.kid.twinTorchesEquipped, true);
@@ -301,8 +304,8 @@ test("level 2 grants molotov/minigun and leaves the launcher and whip together l
   assert.equal(state.whip.pickup.collected, false);
   assert.equal(state.whip.effects.pickupVisible, true);
   assert.equal(state.whip.pickup.worldX - startRoom.x * 320, 80);
-  assert.equal(state.whip.pickup.worldX - state.rocketLauncher.pickup.worldX, 32);
-  assert.equal(state.whip.pickup.worldY, state.rocketLauncher.pickup.worldY);
+  assert.equal(state.whip.pickup.room, 5);
+  assert.equal(state.whip.pickup.worldY - startRoom.y * 189, 119);
   assert.equal(state.weapons.includes(state.whip), false);
   assert.equal(state.whip.actionKey, keys.get(keyboardCodes.X));
   keys.get(keyboardCodes.X).onDown.dispatch();

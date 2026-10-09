@@ -152,6 +152,34 @@
   font-size: 9px;
 }
 
+.tutorial-inventory {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 16px auto 0;
+}
+.tutorial-inventory[hidden] {
+  display: none;
+}
+.tutorial-weapon {
+  flex: 1;
+  max-width: 150px;
+  padding: 8px 4px;
+  border: 1px solid #81502d70;
+  background: #ffdc9e45;
+  font:
+    12px "Trebuchet MS",
+    sans-serif;
+}
+.tutorial-weapon-picture svg {
+  display: block;
+  width: 80px;
+  max-width: 100%;
+  height: 50px;
+  margin: 0 auto 5px;
+  shape-rendering: crispEdges;
+}
+
 .tutorial-divider::before,
 .tutorial-divider::after {
   content: "";

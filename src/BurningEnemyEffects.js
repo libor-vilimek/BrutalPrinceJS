@@ -59,6 +59,7 @@ PrinceJS.BurningEnemyEffects.prototype = {
       direction: direction,
       age: 0,
       phase: "burning",
+      route: enemy.burnRoute === "opening-shaft" ? { room: enemy.room, stage: "landing" } : null,
       turnTime: 0.75 + this.random() * 0.3,
       turns: 0,
       speed: 70 + this.random() * 16,
@@ -298,11 +299,13 @@ PrinceJS.BurningEnemyEffects.prototype = {
       burn.phase = "collapsing";
     }
     if (burn.phase === "burning" && !burn.trap) {
-      burn.turnTime -= delta;
-      if (burn.turnTime <= 0 || this.bodyBlocked(burn, delta)) {
-        this.reverse(burn);
+      if (!this.followOpeningRoute(burn, delta)) {
+        burn.turnTime -= delta;
+        if (burn.turnTime <= 0 || this.bodyBlocked(burn, delta)) {
+          this.reverse(burn);
+        }
+        burn.vx = burn.direction * burn.speed * (burn.grounded ? 1 : 0.7);
       }
-      burn.vx = burn.direction * burn.speed * (burn.grounded ? 1 : 0.7);
     } else if (burn.trap) {
       burn.vx = 0;
     }
@@ -318,7 +321,7 @@ PrinceJS.BurningEnemyEffects.prototype = {
       this.render(burn);
       return false;
     }
-    if (burn.phase === "burning" && !burn.trap && result.contacts.some((contact) => contact.normalX)) {
+    if (burn.phase === "burning" && !burn.trap && !burn.route && result.contacts.some((contact) => contact.normalX)) {
       this.reverse(burn);
     }
     this.touchSupport(burn, result);
@@ -329,6 +332,33 @@ PrinceJS.BurningEnemyEffects.prototype = {
     }
     this.render(burn);
     return !burn.settled;
+  },
+
+  followOpeningRoute: function (burn, delta) {
+    if (!burn.route) {
+      return false;
+    }
+    const room = this.level.rooms[burn.route.room];
+    if (!room) {
+      burn.route = null;
+      return false;
+    }
+    // Cross the opening gap, land on the lower shelf, then stand on the real
+    // loose board until its native shake/fall opens the shaft. No teleporting
+    // or special floor destruction: touchSupport and normal gravity do it.
+    const landingY = room.y * PrinceJS.ROOM_HEIGHT + 182;
+    if (burn.route.stage === "landing" && burn.grounded && burn.y + burn.radius >= landingY - 2) {
+      burn.route.stage = "shaft";
+    }
+    const targetX = room.x * PrinceJS.ROOM_WIDTH + (burn.route.stage === "landing" ? 144 : 208);
+    const distance = targetX - burn.x;
+    burn.direction = 1;
+    burn.vx =
+      Math.abs(distance) > 0.5 ? Math.sign(distance) * Math.min(84, Math.abs(distance) / Math.max(delta, 0.001)) : 0;
+    if (burn.room !== burn.route.room && burn.grounded) {
+      burn.route = null;
+    }
+    return true;
   },
 
   updateAudio: function () {

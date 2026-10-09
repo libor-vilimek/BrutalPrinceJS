@@ -90,6 +90,9 @@ async function run() {
   try {
     await replay();
     let s = state();
+    // The longer campaign flow has its own checks below. Keep these focused
+    // controller tests at the first landing after the demonstration.
+    s.tutorial.sequence = null;
     check(
       s.twinTorches.introDone && s.twinTorches.introTorches.every((torch) => torch.captured && torch.tile.taken),
       "Both actual wall torches are collected before the lesson"
@@ -206,6 +209,185 @@ async function run() {
 }
 
 document.getElementById("run").addEventListener("click", run);
+document.getElementById("inspect").addEventListener("click", () => {
+  const s = state();
+  if (!s.tutorial) {
+    results.textContent += "No active game. Replay the opening to inspect its tutorial.\n";
+    return;
+  }
+  results.textContent +=
+    JSON.stringify(
+      {
+        lesson: s.tutorial.active && s.tutorial.active.id,
+        sequence: s.tutorial.sequence && s.tutorial.sequence.stage,
+        prince: {
+          room: s.kid.room,
+          x: s.kid.charX,
+          y: s.kid.charY,
+          column: s.kid.charBlockX,
+          row: s.kid.charBlockY,
+          face: s.kid.charFace,
+          action: s.kid.action,
+          health: s.kid.health,
+          molotov: s.kid.hasMolotov
+        },
+        board: s.level.getTileAt(6, 2, 1).element,
+        burns: s.burningEnemyEffects.burns.map((burn) => ({
+          x: burn.x,
+          y: burn.y,
+          room: burn.room,
+          age: burn.age,
+          stage: burn.route && burn.route.stage,
+          grounded: burn.grounded
+        }))
+      },
+      null,
+      2
+    ) + "\n";
+});
+async function runCampaign(preview = false) {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  results.textContent = "";
+  try {
+    await replay();
+    let s = state();
+    const target = s.enemies.find((enemy) => enemy.burnRoute === "opening-shaft");
+    const guards = s.enemies.filter((enemy) => enemy.room === 2 && enemy.reinforcement);
+    check(target && guards.length === 2, "The opening has its torch target and two molotov targets");
+    tap(17);
+    await until(() => target.burningDeath, "first ignition");
+    await until(() => s.tutorial.active && s.tutorial.active.id === "ledge-hang", "guided walk to the shaft", 25000);
+    check(
+      s.level.getTileAt(6, 2, 1).element === 0 && target.room === 2,
+      "The burning guard runs through the real loose floor and falls into the next room"
+    );
+    check(
+      s.kid.hasMolotov && s.kid.health === s.kid.maxHealth,
+      "The Prince collects the actual bottle and follows the guided jump without losing health"
+    );
+    tap(40);
+    check(s.tutorial.active.id === "ledge-hang", "Down alone cannot confirm the Shift + Down lesson");
+    key("keydown", 16);
+    key("keydown", 40, { shiftKey: true });
+    key("keyup", 40, { shiftKey: true });
+    key("keyup", 16);
+    await until(() => s.tutorial.active && s.tutorial.active.id === "ledge-molotov", "real climb down");
+    check(["hang", "hangstraight"].includes(s.kid.action), "Shift + Down really hangs the Prince over the shaft");
+    check(
+      guards.every((enemy) => enemy.alive && enemy.visible),
+      "Both molotov targets are visible and alive below"
+    );
+    tap(17);
+    await until(() => s.molotov.bottles.length > 0, "hanging bottle release");
+    check(s.molotov.throwState.hanging, "Ctrl performs the real one-handed hanging throw");
+    await until(() => guards.every((enemy) => !enemy.alive && enemy.burningDeath), "both guards ignite");
+    check(
+      guards.every((enemy) => enemy.burningDeath.weapon === "molotov"),
+      "The real molotov ignites both guards below"
+    );
+    await until(() => !s.kid.specialAction && s.kid.action === "stand" && s.kid.room === 2, "landing after the throw");
+    key("keydown", 39);
+    await until(() => s.tutorial.active && s.tutorial.active.id === "minigun-select", "minigun room entry", 15000);
+    key("keyup", 39);
+    check(s.kid.hasMinigun && s.kid.room === 3, "Walking right collects the minigun and enters the next room");
+    check(
+      frame.contentDocument.querySelectorAll(".tutorial-weapon").length === 3,
+      "The weapon lesson shows pictures and number keys for torches, molotovs and minigun"
+    );
+    if (preview) {
+      results.textContent =
+        "Weapon-card preview reached through the real opening, hanging throw and minigun pickup. Press 3 to continue. Sound stays disabled.";
+      return;
+    }
+    tap(51);
+    await until(() => s.tutorial.active && s.tutorial.active.id === "minigun-fire", "minigun firing lesson");
+    const shots = s.minigun.effects.shots;
+    tap(17);
+    await until(() => s.minigun.effects.shots >= shots + 10, "assisted minigun burst");
+    await until(() => !s.tutorial.assist && !s.kid.specialAction, "minigun stow");
+    check(!s.weaponCtrlKey.isDown && s.kid.activeWeapon === "minigun", "The burst ends and keeps the selected gun");
+    results.textContent += "All level-one campaign lessons passed.\n";
+    s.nextLevel(1, true, true);
+    await until(() => game.state.current === "Cutscene", "second level transition");
+    game.state.start("Game");
+    await until(() => state().level && state().level.number === 2 && state().tutorial, "second level");
+    s = state();
+    key("keydown", 37);
+    await until(() => s.kid.hasWhip, "collect the entrance whip");
+    key("keyup", 37);
+    check(
+      !s.kid.hasRocketLauncher && s.rocketLauncher.pickup.room === 11,
+      "Only the whip is collected at the entrance; rockets wait in the later corridor"
+    );
+    // Jump between distant test checkpoints, retaining the real map, actors,
+    // collected inventory and tutorial state. Local actions remain native.
+    // The checkpoint represents having fought through the lower corridor;
+    // leave the upper guards untouched for the actual ledge demonstration.
+    for (const enemy of s.enemies.filter((enemy) => enemy.room === 1 && enemy.charBlockY === 1)) {
+      enemy.setInactive();
+    }
+    placePrince(1, 70, 1, -1);
+    const snag = s.enemies.find((enemy) => s.whip.findSnag(enemy));
+    check(snag, "An existing guard above the third room left can really be caught around the ledge");
+    const beforeWhip = s.kid.activeWeapon;
+    await until(() => s.tutorial.active && s.tutorial.active.id === "whip-pull", "whip lesson");
+    tap(88);
+    await until(() => snag.whipState, "real ankle catch");
+    await until(
+      () => !snag.alive || (snag.whipState && ["falling", "recovering"].includes(snag.whipState.phase)),
+      "guard pulled into the gap"
+    );
+    check(s.kid.activeWeapon === beforeWhip, "X pulls the guard without switching the selected weapon");
+    await until(() => !s.kid.specialAction, "whip stow");
+    placePrince(11, 133, 1, -1);
+    key("keydown", 37);
+    await until(() => s.tutorial.active && s.tutorial.active.id === "rockets-select", "rocket pickup lesson");
+    key("keyup", 37);
+    check(
+      s.kid.hasRocketLauncher && s.rocketLauncher.pickup.collected,
+      "Walking over the relocated launcher collects the real pickup"
+    );
+    tap(52);
+    await until(() => s.tutorial.active && s.tutorial.active.id === "rockets-fire", "rocket firing lesson");
+    const rockets = s.rocketLauncher.effects.shots;
+    tap(17);
+    await until(() => s.rocketLauncher.effects.shots > rockets, "real rocket launch", 3000).catch((error) => {
+      results.textContent +=
+        JSON.stringify({
+          health: s.kid.health,
+          action: s.kid.action,
+          weapon: s.kid.activeWeapon,
+          stage: s.rocketLauncher.actionStage,
+          held: s.weaponCtrlKey.isDown,
+          enemies: s.enemies
+            .filter((enemy) => enemy.room === 11 && enemy.alive)
+            .map((enemy) => [enemy.charX, enemy.action, enemy.active])
+        }) + "\n";
+      throw error;
+    });
+    await until(() => !s.tutorial.assist && !s.kid.specialAction, "rocket stow");
+    check(
+      !s.weaponCtrlKey.isDown && s.kid.activeWeapon === "rocketLauncher",
+      "The rocket lesson releases its assisted input"
+    );
+    check(game.sound.mute && game.sound.volume === 0, "All campaign lessons preserve muted sound");
+    game.paused = true;
+    results.textContent += "All campaign tutorial checks passed.\n";
+  } catch (error) {
+    results.textContent += "FAIL: " + error.message + "\n";
+  } finally {
+    if (game && game.sound) {
+      game.sound.mute = true;
+      game.sound.volume = 0;
+    }
+    busy = false;
+  }
+}
+document.getElementById("campaign").addEventListener("click", () => runCampaign());
+document.getElementById("cards").addEventListener("click", () => runCampaign(true));
 document.getElementById("replay").addEventListener("click", async () => {
   if (busy) {
     return;
@@ -229,7 +411,30 @@ frame.addEventListener("load", () => {
         }
       })
       .catch((error) => {
-        results.textContent = error.message;
+        if (!busy) {
+          results.textContent = error.message;
+        }
       });
   }
 });
+
+function placePrince(room, x, row, face) {
+  const s = state();
+  game.input.reset(false);
+  const kid = s.kid;
+  kid.room = room;
+  kid.charX = x;
+  kid.charY = (row + 1) * 63 - 10;
+  kid.charBlockX = Math.floor((x - 7) / 14);
+  kid.charBlockY = row;
+  if (kid.charFace !== face) {
+    kid.changeFace();
+  }
+  kid.action = "stand";
+  kid.charXVel = kid.charYVel = 0;
+  kid.inFallDown = kid.inJumpUp = false;
+  kid.updateBase();
+  kid.processCommand();
+  kid.updateCharPosition();
+  s.changeRoom(room);
+}

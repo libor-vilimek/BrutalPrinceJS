@@ -1583,6 +1583,8 @@ async function pickupChecks(previewLevel = 0) {
     if (previewLevel) {
       if (previewLevel === 1) {
         placeKid(2, 70, 1, 1);
+      } else if (previewLevel === 2) {
+        placeKid(11, 133, 1, -1);
       }
       await watchCamera(state, () => !state.roomCamera.transition);
       await pause(100);
@@ -1593,7 +1595,7 @@ async function pickupChecks(previewLevel = 0) {
       report(
         previewLevel === 1
           ? "Minigun on the right, on clear floor between the columns."
-          : "Whip beside the launcher, together on the left of the starting Prince."
+          : "The launcher waits on clear floor in the corridor beyond the whip encounter, four rooms left and one above the start."
       );
       return;
     }
@@ -1606,27 +1608,30 @@ async function pickupChecks(previewLevel = 0) {
     state = await loadMission(2);
     quietEnemies(state);
     pickup = state.rocketLauncher.pickup;
-    room = state.level.rooms[5];
+    room = state.level.rooms[11];
     check(
       !state.kid.hasRocketLauncher &&
-        pickup.room === 5 &&
-        pickup.worldX === room.x * 320 + 48 &&
+        pickup.room === 11 &&
+        pickup.worldX === room.x * 320 + 272 &&
         state.rocketLauncher.effects.ground.visible,
-      "Level-two launcher is visible on the left of the starting doors"
+      "Level-two launcher is visible in the corridor after the whip encounter"
     );
     check(
       !state.kid.hasWhip &&
         state.whip.effects.ground.visible &&
-        state.whip.pickup.worldX === pickup.worldX + 32 &&
-        state.whip.pickup.worldY === pickup.worldY,
-      "The visible whip sits directly beside the launcher, to the left of the spawn"
+        state.whip.pickup.room === 5 &&
+        state.whip.pickup.worldX === state.level.rooms[5].x * 320 + 80,
+      "The visible whip remains to the left of the arrival doors"
     );
-    await walkUntil(() => state.kid.hasRocketLauncher, "Walking left from the real start collects the launcher", -1);
+    await walkUntil(() => state.kid.hasWhip, "Walking left from the real start collects the whip", -1);
+    check(!state.kid.hasRocketLauncher, "Collecting the entrance whip does not grant the launcher early");
+    placeKid(11, 133, 1, -1);
+    await walkUntil(() => state.kid.hasRocketLauncher, "Walking along the later corridor collects the launcher", -1);
     check(
       state.kid.activeWeapon === "rocketLauncher" && !state.rocketLauncher.effects.ground.visible,
       "The collected launcher is usable and its pickup disappears"
     );
-    check(state.kid.hasWhip && !state.whip.effects.ground.visible, "The same leftward walk collects the whip first");
+    check(state.kid.hasWhip && !state.whip.effects.ground.visible, "The previously collected whip remains owned");
     state = await freshLevel(3);
     check(
       state.kid.hasRocketLauncher && !state.rocketLauncher.effects.ground.visible,

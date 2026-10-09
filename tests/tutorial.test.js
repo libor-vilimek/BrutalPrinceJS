@@ -28,8 +28,24 @@ function fixture() {
       listeners.get(type).delete(fn);
     }
   };
-  const context = vm.createContext({ Date: Clock, window, Phaser: { Keyboard: { CONTROL: 17, F: 70, TAB: 9 } } });
-  for (const file of ["Boot", "Utils", "Game", "Tutorial", "TutorialLessons"]) {
+  const context = vm.createContext({
+    Date: Clock,
+    window,
+    Phaser: {
+      Keyboard: {
+        CONTROL: 17,
+        F: 70,
+        TAB: 9,
+        SHIFT: 16,
+        DOWN: 40,
+        THREE: 51,
+        FOUR: 52,
+        C: 67,
+        X: 88
+      }
+    }
+  });
+  for (const file of ["Boot", "Utils", "Game", "Tutorial", "TutorialLessons", "TutorialSequence"]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "../src", file + ".js"), "utf8"), context);
   }
   const prince = vm.runInContext("PrinceJS", context);
@@ -85,8 +101,9 @@ function fixture() {
     kid: { alive: true, active: true, visible: true, action: "stand", activeWeapon: "twinTorches" },
     level: { number: 1, update: () => events.push("world") },
     twinTorches: { introDone: true, introPending: false, canBegin: () => !state.kid.specialAction },
+    molotov: { throwState: null, cooldown: 0 },
     showRemainingMinutes: () => events.push("regular-resume"),
-    ui: { showGamePaused: () => events.push("regular-pause") }
+    ui: { showGamePaused: () => events.push("regular-pause"), showText() {} }
   });
   prince.Utils.updateQuery = () => {};
   prince.Utils.restoreQuery = () => {};
@@ -357,4 +374,109 @@ test("controller confirmation requires a new action-button press and resumes thr
   f.tutorial.pauseUpdate();
   assert.equal(f.game.paused, false);
   assert.deepEqual(f.events, [["down", 17]]);
+});
+
+test("the ledge chord requires both keys in either order and waits for the actual hanging pose", () => {
+  for (const order of [
+    [16, 40],
+    [40, 16]
+  ]) {
+    const f = fixture();
+    const lesson = f.prince.TutorialLessons.find((item) => item.id === "ledge-hang");
+    f.tutorial.show(lesson);
+    f.input("keydown", order[0]);
+    assert.equal(f.game.paused, true);
+    f.input("keydown", order[1]);
+    assert.equal(f.game.paused, false);
+    f.input("keyup", 16);
+    f.input("keyup", 40);
+    f.tutorial.worldUpdated();
+    f.tutorial.update(0.05);
+    assert.equal(f.keys.get(16).isDown, true);
+    assert.equal(f.keys.get(40).isDown, true);
+    assert.ok(f.tutorial.assist, "the initial actor tick must not release a still-climbing Prince");
+    f.state.kid.action = "hang";
+    f.tutorial.update(0.05);
+    assert.equal(f.tutorial.assist, null);
+    assert.equal(f.keys.get(40).isDown, false);
+    assert.equal(f.keys.get(16).isDown, true, "the grip carries into the molotov lesson");
+    assert.deepEqual(f.events.slice(0, 2), [
+      ["down", 16],
+      ["down", 40]
+    ]);
+    f.tutorial.show({ ...f.lesson, id: "following-lesson" });
+    f.tutorial.accept(17, false);
+    assert.equal(f.keys.get(16).isDown, true, "Phaser's pause reset must not lose the carried grip");
+    f.input("blur");
+    assert.equal(f.keys.get(16).isDown, false);
+    assert.equal(f.keys.get(17).isDown, false);
+    assert.equal(f.tutorial.heldKeys.size, 0);
+  }
+});
+
+test("touch confirmation forwards the complete chord and a failed climb has a bounded hold", () => {
+  const f = fixture();
+  const lesson = f.prince.TutorialLessons.find((item) => item.id === "ledge-hang");
+  f.tutorial.show(lesson);
+  f.tutorial.accept(40, false);
+  f.tutorial.worldUpdated();
+  for (let i = 0; i < 62; i++) {
+    f.tutorial.update(0.05);
+  }
+  assert.equal(f.tutorial.assist, null);
+  assert.equal(f.keys.get(16).isDown, false);
+  assert.equal(f.keys.get(40).isDown, false);
+  assert.equal(f.tutorial.heldKeys.size, 0, "a failed climb must not carry an artificial grip");
+});
+
+test("the whip lesson waits for the actual reachable ankle in the third room left", () => {
+  const f = fixture();
+  const lesson = f.prince.TutorialLessons.find((item) => item.id === "whip-pull");
+  f.prince.currentLevel = f.state.level.number = 2;
+  f.state.kid.room = 1;
+  f.state.enemies = [{}];
+  let snag = null;
+  f.state.whip = { canAct: () => true, findSnag: () => snag };
+  assert.equal(lesson.when(f.state), false);
+  snag = {};
+  assert.equal(lesson.when(f.state), true);
+  f.state.kid.specialAction = {};
+  assert.equal(lesson.when(f.state), false);
+  f.state.kid.specialAction = null;
+  f.state.kid.room = 5;
+  assert.equal(lesson.when(f.state), false);
+});
+
+test("live guidance reserves movement but preserves restart shortcuts and the emergency kick", () => {
+  const f = fixture();
+  f.tutorial.sequence.guiding = true;
+  assert.equal(f.input("keydown", 39).consumed, true);
+  assert.equal(f.input("keyup", 39).consumed, true);
+  assert.equal(f.keys.has(39), false);
+  assert.ok(!f.input("keydown", 82, { ctrlKey: true }).consumed);
+  assert.equal(f.keys.get(82).isDown, true);
+  assert.ok(!f.input("keydown", 67).consumed);
+  assert.equal(f.keys.get(67).isDown, true);
+  assert.equal(f.tutorial.sequence.guiding, false);
+  f.input("keyup", 67);
+  assert.equal(f.keys.get(67).isDown, false);
+});
+
+test("a retry waits for the restored target to burn before guiding the Prince toward the shaft", () => {
+  const f = fixture();
+  const enemy = { burnRoute: "opening-shaft" };
+  f.state.enemies = [enemy];
+  Object.assign(f.state.kid, { room: 1, charBlockY: 1 });
+  f.tutorial.completed.add("twin-torches");
+  f.tutorial.sequence = new f.prince.TutorialSequence(f.state, f.tutorial);
+  f.tutorial.sequence.update();
+  assert.equal(f.tutorial.sequence.guiding, false);
+  enemy.burningDeath = {};
+  f.input("keydown", 67);
+  f.tutorial.sequence.update();
+  assert.equal(f.tutorial.sequence.guiding, false, "guidance must not reset a physically held emergency kick");
+  f.input("keyup", 67);
+  f.tutorial.sequence.update();
+  assert.equal(f.tutorial.sequence.guiding, true);
+  assert.equal(f.tutorial.sequence.stage, "collect");
 });

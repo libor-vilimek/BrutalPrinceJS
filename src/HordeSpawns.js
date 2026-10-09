@@ -76,6 +76,11 @@ PrinceJS.HordeSpawns = {
           continue;
         }
         for (let column = 0; column < 10; column++) {
+          // A clear arrival beside level two's launcher leaves time to draw
+          // it after the lesson before firing left into the corridor.
+          if (json.id === undefined && level.number === 2 && roomId === 11 && row === 1 && column >= 5) {
+            continue;
+          }
           // The upper-left landing joins the invisible leap-of-faith bridge.
           if (
             json.id === undefined &&

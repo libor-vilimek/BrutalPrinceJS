@@ -208,6 +208,49 @@ test("ignition kills health/combat immediately and dispatches native damage and 
   assert.equal(f.effects.burns.length, 1);
 });
 
+test("the opening burn follows the real two-tier landing and waits for the loose board at different frame rates", () => {
+  for (const fps of [30, 60, 120]) {
+    const f = fixture({ downRoom: true, rightRoom: false });
+    const map = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/maps/level1.json")));
+    for (const [id, original] of [
+      [1, 1],
+      [3, 2]
+    ]) {
+      const room = map.room.find((item) => item.id === original);
+      room.tile.forEach((tile, index) => {
+        f.level.rooms[id].tiles[index].element = tile.element;
+      });
+    }
+    const board = f.level.getTileAt(6, 2, 1);
+    let shakeAt = null;
+    let elapsed = 0;
+    board.shake = () => {
+      if (shakeAt === null) {
+        shakeAt = elapsed;
+      }
+    };
+    f.effects.random = () => (fps === 30 ? 0 : 1);
+    const guard = f.actor({ x: 96, feet: 119, burnRoute: "opening-shaft" });
+    const burn = f.effects.ignite(guard, { weapon: "twinTorches" });
+    let passedLanding = false;
+    let waited = false;
+    for (; elapsed < 4.5 && guard.room === 1; elapsed += 1 / fps) {
+      if (shakeAt !== null && elapsed - shakeAt >= 0.72) {
+        board.element = 0;
+      }
+      f.effects.update(1 / fps);
+      passedLanding ||= burn.route && burn.route.stage === "shaft";
+      waited ||= shakeAt !== null && board.element === 11 && Math.abs(burn.x - 208) < 1;
+    }
+    assert.equal(passedLanding, true);
+    assert.equal(waited, true, "the guard stands on the board while it shakes");
+    assert.equal(board.element, 0);
+    assert.equal(guard.room, 3, "gravity takes the guard through the real downward link");
+    assert.equal(burn.phase, "burning");
+    assert.equal(guard.deadSignals, 1);
+  }
+});
+
 test("a burning guard uses its original pixels, runs both ways and collapses into permanent charred remains at five seconds", () => {
   const f = fixture();
   const guard = f.actor();

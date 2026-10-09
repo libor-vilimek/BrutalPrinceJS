@@ -25,12 +25,13 @@ PrinceJS.RocketLauncher.prototype.constructor = PrinceJS.RocketLauncher;
 PrinceJS.RocketLauncher.prototype.findPickup = function (direction) {
   let pickup = PrinceJS.RangedWeapon.prototype.findPickup.call(this, direction);
   if (PrinceJS.currentLevel === 2 && this.level.number === 2 && this.kid.room === 5) {
-    let room = this.level.rooms[5];
-    let tile = this.level.getTileAt(1, 1, 5);
-    if (tile.element === PrinceJS.Level.TILE_TORCH) {
-      // The torch is on the back wall: the clear floor below it is immediately
-      // left of the arrival doors, with the whip beside it on the right.
-      pickup.worldX = room.x * PrinceJS.ROOM_WIDTH + PrinceJS.BLOCK_WIDTH + 16;
+    let room = this.level.rooms[11];
+    let tile = room && this.level.getTileAt(8, 1, 11);
+    if (tile && tile.element === PrinceJS.Level.TILE_FLOOR) {
+      // After the ledge/whip encounter: four rooms left and one room above
+      // the entrance. Keep the tube visible on plain floor in this corridor.
+      pickup.room = 11;
+      pickup.worldX = room.x * PrinceJS.ROOM_WIDTH + 8 * PrinceJS.BLOCK_WIDTH + 16;
       pickup.worldY = room.y * PrinceJS.ROOM_HEIGHT + PrinceJS.Utils.convertBlockYtoY(1) + 3;
     }
   }

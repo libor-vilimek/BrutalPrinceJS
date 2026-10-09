@@ -50,6 +50,12 @@ Navazující implementační rozhodnutí: pořadí zbraní je `1` pochodně, `2`
 - **TUTORIAL-03:** Lekce může požadovanou klávesu uměle podržet, aby proběhla vyučovaná sekvence i po krátkém stisku. Délka je nastavitelná pro konkrétní lekci; běžné ovládání a pravidla animací zůstávají platné.
 - **TUTORIAL-04:** Systém má být rozšiřitelný o další lekce a jeho aktuální obsah i způsob rozšíření musí být popsaný v anglické dokumentaci.
 - **TUTORIAL-05:** U úvodních pochodní v levelu 1 stojí jeden strážce otočený k princi zády, který na něj nereaguje. Je v dosahu první otočky tutoriálu, aby ho princ zapálil po dokončení sběru a vytažení pochodní bez ztráty životů. Jde o výslovnou výjimku pro tohoto strážce z ENEMY-02.
+- **TUTORIAL-06:** První zapálený strážce má předdefinovaný útěk: přes nižší plošinu na skutečné propadliště první obrazovky, kterým spadne. Ostatní hořící strážci si zachovávají obvyklý pohyb.
+- **TUTORIAL-07:** Po první ukázce pochodní tutoriál krátce převezme prince a navede ho na nižší plošinu k okraji otevřené šachty. Obrazovka vyžaduje současně `SHIFT` a šipku dolů; potvrzení prince skutečně zavěsí. Následující obrazovka vyžaduje `CTRL` a skutečný molotov shozený z visu na dva strážce dole.
+- **TUTORIAL-08:** Po získání minigunu a přechodu doprava do další místnosti prvního levelu hráč potvrdí jeho výběr klávesou `3`, i když už je vybraný. Obrazovka ukazuje také obrázky pochodní na `1` a molotovu na `2`. Další obrazovka vyžaduje `CTRL` a chvíli podrží skutečnou střelbu.
+- **TUTORIAL-09:** Ve třetí místnosti vlevo od startu levelu 2 se lekce biče objeví, jakmile je nad princem nepřítel skutečně dosažitelný pro chycení za nohu. `X` předvede stažení do mezery. Následuje raketomet dál v chodbě čtyři místnosti vlevo, o řadu výše než start, s vlastním tutoriálem.
+
+Implementační rozhodnutí pro navazující sekvenci: před krátkým skokem princ dojde pro skutečný molotov na horní plošině. Navedení používá původní kroky, otočení a skok; propadliště otevře váha hořícího strážce. Po restartu nedokončené navedení počká na nové zapálení strážce. Kopanec na `C` navedení přeruší a zůstávají dostupné globální zkratky. Tutoriál podrží úchop přes navazující hod, pak jej uvolní, pokud hráč sám SHIFT nedrží. Minigun má 2,3 s asistence, bič 0,55 s a raketomet po výběru na `4` má 1 s asistence na `CTRL`/`F`. Raketomet leží v místnosti 11, sloupci 8, řádku 1; bič se nemění a zůstává u vstupu. Ztráta fokusu, běžná pauza, smrt a odchod z levelu ruší řízené vstupy.
 
 Implementační rozhodnutí: první lekce vysvětluje pochodně po dokončení jejich úvodního sběru v levelu 1, když princ stojí a může je použít. Přijímá CTRL i F a podrží vstup alespoň 1,8 sekundy herního času. Vyobrazené klávesy jsou také tlačítka pro dotyk/myš; akční tlačítka ovladače mají stejný význam. Skutečné delší držení klávesnice se nezkracuje. Čtení nespotřebovává čas kampaně. Dokončené lekce se během jedné hry při restartu levelu ani postupu neopakují; nová hra nebo obnovení stránky je resetuje. Ztráta fokusu, smrt a odchod z levelu zruší umělé držení. Obsah a rozšíření popisuje `docs/tutorials.md`.
 
@@ -59,14 +65,14 @@ Implementační rozhodnutí: první lekce vysvětluje pochodně po dokončení j
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1, startovní obrazovka  | Princ automaticky získá dvě skutečné pochodně ze stěny úvodní animací. Molotov zůstává na původním místě na horní startovní plošině. Minigun na této obrazovce není.        |
 | 1, místnost pod startem | Několik nepřátel poskytuje první příležitost použít molotov. Minigun leží dobře viditelně v pravé části této druhé obrazovky na pevné podlaze, mimo padající část a sloupy. |
-| 2                       | Molotov a minigun jsou automaticky vlastněné. Bič je k sebrání vlevo od prince vedle raketometu u vstupních dveří.                                                          |
+| 2                       | Molotov a minigun jsou automaticky vlastněné. Bič je vlevo od prince u vstupních dveří; raketomet je přesunut dál za ukázku biče, do místnosti 11.                           |
 | 3                       | Raketomet sebraný v levelu 2 zůstává vlastněný. Pokud ho princ dosud nemá, je k sebrání na začátku. Molotov a minigun jsou automaticky vlastněné.                           |
 | 4 a dál                 | Raketomet je automaticky vlastněný společně s dříve dostupnými zbraněmi.                                                                                                    |
 | 1–11                    | Jetpack není dostupný.                                                                                                                                                      |
 | 12                      | Jetpack je k sebrání hned u startu. Použij existující grafiku, pokud už je hotová.                                                                                          |
 | 13 a dál                | Jetpack je automaticky vlastněný; není nutné ho znovu sbírat.                                                                                                               |
 
-- **LEVEL-01:** Raketomet je nově k sebrání vlevo u startu levelu 2. Dřívější pickup na začátku levelu 3 slouží jako další příležitost, pokud ho princ dosud nemá; od levelu 4 je automaticky vlastněný. Již sebraná zbraň při postupu nezmizí.
+- **LEVEL-01:** Raketomet v levelu 2 je přesunut od vstupních dveří dál za ukázku biče: do chodby čtyři místnosti vlevo a o řadu výše než start (místnost 11). Původní pickup u vstupu už nezůstává. Pickup na začátku levelu 3 slouží jako další příležitost, pokud ho princ dosud nemá; od levelu 4 je automaticky vlastněný. Již sebraná zbraň při postupu nezmizí.
 - **LEVEL-02:** Minigun v první místnosti pod startem (druhé obrazovce prvního levelu) musí být dobře viditelný a dosažitelný po doskoku. Aktuální umístění je vpravo na pevné podlaze, mimo sloup, který by ho zakrýval.
 - **LEVEL-03:** Vybavení automaticky přidělené v pozdějších levelech nemá vyžadovat další sběr. Samotné vlastnictví jetpacku ještě nespouští let.
 
@@ -120,7 +126,7 @@ Implementační rozhodnutí: levely 1–13 obsahují celkem 56 dalších léčiv
 
 ## Bič
 
-- **WHIP-01:** Bič je v druhém levelu vlevo od startujícího prince, přímo vedle raketometu u vstupních dveří, aby byl dobře viditelný a šel sebrat cestou k raketometu.
+- **WHIP-01:** Bič je v druhém levelu vlevo od startujícího prince u vstupních dveří, aby byl dobře viditelný a šel sebrat cestou k raketometu. Po přesunu raketometu podle LEVEL-01 zůstává bič na původním místě.
 - **WHIP-02:** Lze jím normálně práskat a zraňovat nepřátele jako zbraní.
 - **WHIP-03:** Jestli nad princem blízko okraje stojí nepřítel, bič ho může chytit za nohu a posunout do skutečné díry, do níž spadne. Funguje i přímo pod protivníkem při otočení prince na obě strany: bič se vede kolem volného okraje plošiny. Nejde o přesun skrz souvislou podlahu nebo strop.
 - **WHIP-04:** I při krátkém pádu dopadne na obličej a ztratí jeden život. Velký pád ho zabije podle původních pravidel pádu.
@@ -213,7 +219,8 @@ Tento přehled brání návratu ke starším požadavkům. Nejde o aktivní alte
 | Bič jako pátá zbraň na `5`, útok na `CTRL`/`F`          | Samostatný bič na `X`, mimo výběr zbraní; použití ponechá vybranou zbraň.                       |
 | Raketomet zatím bez nové grafiky                        | Má mít odpovídající grafiku a animace jako minigun.                                             |
 | Raketomet automaticky od levelu 3                       | Sebrat v levelu 2 nebo 3; vlastnictví se přenáší, od levelu 4 je automatické.                   |
-| První pickup raketometu až v levelu 3                   | Nově už vlevo u startu levelu 2; v levelu 3 zůstává záložní pickup pro ty, kdo ho dosud nemají. |
+| První pickup raketometu až v levelu 3                   | Nově v levelu 2 za ukázkou biče; v levelu 3 zůstává záložní pickup pro ty, kdo ho dosud nemají. |
+| Raketomet vedle biče u vstupních dveří levelu 2          | Raketomet je přesunut dál do místnosti 11, bič zůstává u vstupu. |
 | Kop s dlouhým dosahem a více přímými či druhotnými zásahy | Krátký dosah; jeden přímý zásah a nejvýše jeden další sražený tělem, bez dalšího šíření.      |
 | Bez nepřítele nelze kopnout                             | Na volné zemi lze kopnout naprázdno; jen nouzové zkracování cizích animací vyžaduje hrozbu.     |
 | Jetpack dostupný dříve                                  | Poprvé u startu levelu 12, automaticky od levelu 13.                                            |

@@ -138,23 +138,25 @@ function fixture(number = 3, owned = false, direction = -1, changeMap) {
   return { PrinceJS, kid, level, delegate, launcher, ctrlKey, sounds, messages };
 }
 
-test("the level 2 launcher is visible immediately left of the arrival doors and collects on foot", () => {
+test("the level 2 launcher waits on clear corridor floor after the whip encounter and collects on foot", () => {
   for (const direction of [-1, 1]) {
     const { PrinceJS, kid, level, launcher } = fixture(2, false, direction);
     const { pickup, effects } = launcher;
-    assert.equal(pickup.room, 5);
-    assert.equal(pickup.worldX - kid.baseX, 48);
-    assert.equal(pickup.worldY - kid.baseY, 116);
-    const floor = level.getTileAt(1, 1, pickup.room);
+    assert.equal(pickup.room, 11);
+    const room = level.rooms[11];
+    assert.equal(pickup.worldX - room.x * 320, 272);
+    assert.equal(pickup.worldY - room.y * 189, 119);
+    const floor = level.getTileAt(8, 1, pickup.room);
     assert.equal(floor.isSafeWalkable(), true);
     assert.equal(floor.isBarrier(), false);
-    assert.equal(floor.element, PrinceJS.Level.TILE_TORCH, "the torch is on the back wall above the pickup");
-    assert.equal(level.getTileAt(2, 1, pickup.room).element, PrinceJS.Level.TILE_EXIT_LEFT);
-    assert.equal(level.getTileAt(3, 1, pickup.room).element, PrinceJS.Level.TILE_EXIT_RIGHT);
+    assert.equal(floor.element, PrinceJS.Level.TILE_FLOOR, "no pillar or doorway conceals the tube");
     assert.equal(effects.ground.visible, true);
     launcher.checkPickup();
     assert.equal(kid.hasRocketLauncher, false, "the introductory turn does not collect the weapon");
-    kid.charX = PrinceJS.Utils.convertBlockXtoX(1);
+    kid.room = pickup.room;
+    kid.baseX = room.x * 320;
+    kid.baseY = room.y * 189 + 3;
+    kid.charX = PrinceJS.Utils.convertBlockXtoX(8);
     kid.inFallDown = true;
     launcher.checkPickup();
     assert.equal(kid.hasRocketLauncher, false);
