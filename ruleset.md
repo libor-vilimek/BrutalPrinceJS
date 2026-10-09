@@ -106,8 +106,9 @@ Navazující implementační rozhodnutí: při postupu se uloží výbava přine
 - **WHIP-03:** Jestli nad princem blízko okraje stojí nepřítel, bič ho může chytit za nohu a posunout do skutečné díry, do níž spadne. Funguje i přímo pod protivníkem při otočení prince na obě strany: bič se vede kolem volného okraje plošiny. Nejde o přesun skrz souvislou podlahu nebo strop.
 - **WHIP-04:** I při krátkém pádu dopadne na obličej a ztratí jeden život. Velký pád ho zabije podle původních pravidel pádu.
 - **WHIP-05:** Přeživší nepřítel se musí chvíli sbírat ze země, než začne znovu útočit. Samotné zotavování neodebírá opakovaně další životy.
+- **WHIP-06:** Po chycení nepřítele za nohu puštění `X` nepřeruší stažení z hrany ani dokončení švihu a schování biče. Princ během této sekvence stojí na místě a běžný pohyb, jiný útok ani přepnutí zbraně ji nepřeskočí. Dosavadní výjimka pro nouzový kopanec podle KICK-02 zůstává.
 
-Navazující implementační rozhodnutí: krátký stisk `X` dokončí jeden švih, držení švihy opakuje. Po uvolnění princ bič schová a teprve pak se obnoví pohyb a přepínání zbraní; výjimkou je nouzový kopanec podle KICK-02. Bič nepřerušuje jinou právě probíhající akci ani schovávání střelné zbraně.
+Navazující implementační rozhodnutí: krátký stisk `X` dokončí jeden švih, držení švihy opakuje. Po chycení za nohu celý švih i skutečné stažení do díry doběhnou před schováním nebo dalším švihem. Následný pád a zotavování nepřítele pokračují samostatně. Po uvolnění princ bič schová a teprve pak se obnoví pohyb a přepínání zbraní; výjimkou je nouzový kopanec podle KICK-02. Bič nepřerušuje jinou právě probíhající akci ani schovávání střelné zbraně.
 
 ## Nouzový kopanec
 

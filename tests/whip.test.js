@@ -111,6 +111,119 @@ test("a quick X tap completes one strike and stows the whip with any main weapon
   }
 });
 
+test("releasing X before or just after catching an ankle finishes the pull and swing before stowing", () => {
+  for (const face of [-1, 1]) {
+    for (const quickTap of [false, true]) {
+      const f = fixture();
+      const enemy = f.makeLedge();
+      f.placeKid(3, 1, 1, face);
+      const x = f.kid.charX;
+      f.whipKey.isDown = true;
+      f.advance(quickTap ? 0.02 : 0.45);
+      f.whipKey.isDown = false;
+      if (quickTap) {
+        f.advance(0.43);
+      }
+      assert.equal(enemy.whipState.phase, "pulling");
+      f.advance(0.06);
+      assert.equal(f.whip.actionStage, "cracking", "key release cannot skip the caught swing's follow-through");
+      assert.equal(f.whip.effects.tether.enemy, enemy, "the cord remains visibly attached to the ankle");
+      assert.equal(f.kid.specialAction.owner, f.whip);
+      assert.equal(f.whip.effects.cord.visible, true);
+      f.tickEnemies();
+      assert.equal(enemy.whipState.phase, "pulling");
+      assert.equal(f.whip.effects.tether.enemy, enemy);
+      f.tickEnemies();
+      assert.equal(enemy.whipState.phase, "falling");
+      assert.equal(f.whip.actionStage, "cracking", "the Prince still finishes the whole swing after the drag");
+      f.advance(0.08);
+      assert.equal(f.whip.actionStage, "holstering");
+      assert.equal(f.kid.specialAction.owner, f.whip);
+      assert.equal(f.whip.cracks, 1);
+      f.advance(0.2);
+      assert.equal(f.whip.actionStage, "hidden");
+      assert.equal(f.kid.specialAction, null);
+      assert.equal(f.kid.cropRect, null);
+      assert.equal(f.whip.effects.cord.visible, false);
+      assert.equal(f.kid.charX, x);
+      assert.equal(f.kid.activeWeapon, "minigun");
+      f.tickEnemies(30);
+      assert.equal(enemy.whipState, undefined);
+      assert.equal(enemy.health, 2, "the completed fall still costs exactly one life");
+    }
+  }
+});
+
+test("neither releasing nor holding X can finish a caught swing before the native drag reaches the gap", () => {
+  for (const held of [false, true]) {
+    const f = fixture();
+    const enemy = f.makeLedge();
+    f.whipKey.isDown = true;
+    f.advance(0.45);
+    f.whipKey.isDown = held;
+    // Actor movement and render animations use separate clocks. Delay the actor ticks.
+    f.advance(0.6);
+    assert.equal(f.whip.actionStage, "cracking");
+    assert.equal(f.whip.cracks, 1, "holding X cannot replace an unfinished pull with another swing");
+    assert.equal(f.whip.effects.tether.enemy, enemy);
+    assert.equal(f.kid.specialAction.owner, f.whip);
+    f.tickEnemies(2);
+    assert.equal(enemy.whipState.phase, "falling");
+    assert.equal(f.whip.actionStage, held ? "cracking" : "holstering");
+    assert.equal(f.whip.cracks, held ? 2 : 1);
+    f.whipKey.isDown = false;
+    f.advance(0.6);
+    assert.equal(f.kid.specialAction, null);
+    assert.equal(f.kid.cropRect, null);
+  }
+});
+
+test("a caught swing still finishes and unlocks if its target dies, burns, disappears or meets a new wall", () => {
+  for (const interruption of ["death", "fire", "removed", "wall"]) {
+    const f = fixture();
+    const enemy = f.makeLedge();
+    f.whipKey.isDown = true;
+    f.advance(0.45);
+    f.whipKey.isDown = false;
+    if (interruption === "death") {
+      enemy.alive = false;
+    } else if (interruption === "fire") {
+      enemy.burningDeath = {};
+    } else if (interruption === "removed") {
+      enemy.exists = false;
+    } else {
+      f.setTile(1, 4, 0, 20);
+      f.tickEnemies(3);
+    }
+    f.advance(0.6);
+    assert.equal(enemy.whipState, undefined);
+    assert.equal(f.whip.actionStage, "hidden");
+    assert.equal(f.whip.effects.tether, null);
+    assert.equal(f.kid.specialAction, null);
+    assert.equal(f.kid.cropRect, null);
+  }
+});
+
+test("a nearby threat still allows the emergency kick to interrupt a caught swing", () => {
+  const f = fixture();
+  const enemy = f.makeLedge();
+  f.whipKey.isDown = true;
+  f.advance(0.45);
+  f.whipKey.isDown = false;
+  f.guard(5);
+  const kick = new f.PrinceJS.Kick(f.delegate);
+  kick.request();
+  assert.equal(f.kid.specialAction.owner, kick);
+  assert.equal(f.whip.actionStage, "hidden");
+  assert.equal(f.whip.effects.tether, null);
+  for (let i = 0; i < 40 && enemy.whipState; i++) {
+    enemy.updateActor();
+    f.advance(0.08);
+  }
+  assert.equal(enemy.whipState, undefined);
+  assert.equal(enemy.health, 2, "the guard's already started fall still completes independently");
+});
+
 test("Ctrl, F and the shared weapon action cannot trigger the standalone whip", () => {
   const f = fixture();
   const enemy = f.guard(3);

@@ -15,6 +15,7 @@ PrinceJS.Whip = function (delegate, direction) {
   this.elapsed = 0;
   this.cooldown = 0;
   this.cracks = 0;
+  this.snaggedEnemy = null;
   this.pulledEnemies = new Set();
   this.destroyed = false;
 };
@@ -75,7 +76,7 @@ PrinceJS.Whip.prototype = {
     kid.hasWhip = this.pickup.collected = true;
     this.effects.collect();
     this.game.sound.play("UnsheatheSword", 0.5);
-    this.delegate.ui.showText("X WHIP - CRACK / HOLD TO LASH / PULL GUARDS OFF LEDGES", "weapon");
+    this.delegate.ui.showText("X WHIP - TAP / HOLD - ANKLE PULLS FINISH AFTER RELEASE", "weapon");
     this.delegate.ui.hideTextTimer = 90;
     return true;
   },
@@ -117,6 +118,7 @@ PrinceJS.Whip.prototype = {
     this.actionStage = "cracking";
     this.elapsed = 0;
     this.hitDone = false;
+    this.snaggedEnemy = null;
     this.effects.target = null;
     this.effects.tether = null;
     this.cracks++;
@@ -129,6 +131,7 @@ PrinceJS.Whip.prototype = {
     this.actionStage = "hidden";
     this.elapsed = 0;
     this.firing = false;
+    this.snaggedEnemy = null;
     this.effects.target = this.effects.tether = null;
     this.effects.hide();
   },
@@ -165,12 +168,16 @@ PrinceJS.Whip.prototype = {
         this.hitDone = true;
         this.attack();
       }
-      // A quick X tap completes one strike; holding X repeats it until release.
-      if (!requested && this.hitDone) {
+      let snagState = this.snaggedEnemy && this.snaggedEnemy.whipState;
+      let pulling = snagState && snagState.owner === this && snagState.phase === "pulling";
+      let complete = this.elapsed >= PrinceJS.Whip.CRACK_DURATION && !pulling;
+      // Once an ankle is caught, finish the drag and follow-through even after X is released.
+      // Held X must also wait for the native actor ticks before starting another swing.
+      if (!requested && this.hitDone && (!this.snaggedEnemy || complete)) {
         this.actionStage = "holstering";
         this.elapsed = 0;
         this.effects.tether = null;
-      } else if (this.elapsed >= PrinceJS.Whip.CRACK_DURATION) {
+      } else if (complete) {
         this.beginCrack();
       }
     }
@@ -321,6 +328,7 @@ PrinceJS.Whip.prototype = {
       .sort((a, b) => Math.abs(a.foot.x - kid.x) - Math.abs(b.foot.x - kid.x));
     if (snags.length) {
       this.pullEnemy(snags[0]);
+      this.snaggedEnemy = snags[0].enemy;
       this.effects.target = snags[0].foot;
       this.effects.tether = snags[0];
     } else {

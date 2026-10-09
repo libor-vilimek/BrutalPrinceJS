@@ -248,6 +248,32 @@ async function whipChecks() {
         "X catches the upper guard's ankle without selecting another weapon"
       );
       state.whipKey.isDown = false;
+      const kid = state.kid;
+      const x = kid.charX;
+      const keyR = kid.keyR;
+      try {
+        kid.keyR = () => true;
+        state.weaponCtrlKey.isDown = true;
+        state.selectWeapon("molotov");
+        await pause(100);
+        check(
+          state.whip.actionStage === "cracking" &&
+            state.whip.effects.tether &&
+            state.whip.effects.tether.enemy === target &&
+            state.whip.effects.cord.visible,
+          "Releasing X after the catch keeps the full swing and visible ankle tether"
+        );
+        check(
+          kid.specialAction &&
+            kid.specialAction.owner === state.whip &&
+            kid.charX === x &&
+            kid.activeWeapon === selected,
+          "Movement, Ctrl attacks and weapon selection cannot interrupt the caught swing"
+        );
+      } finally {
+        kid.keyR = keyR;
+        state.weaponCtrlKey.isDown = false;
+      }
       for (let i = 0; i < 80 && target.alive && target.whipState && target.whipState.phase !== "recovering"; i++) {
         await pause(25);
       }
@@ -266,6 +292,10 @@ async function whipChecks() {
         "Recovery releases the guard without repeating fall damage"
       );
       check(state.kid.activeWeapon === selected, "Using X preserves the previously selected main weapon");
+      check(
+        state.whip.cracks === 1 && !kid.specialAction && !kid.cropRect && !state.whip.effects.cord.visible,
+        "The completed pull stows once and restores normal controls and the original Prince sprite"
+      );
     }
     quietEnemies(state);
     placeKid(7, 35, 1, 1);

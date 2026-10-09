@@ -159,7 +159,7 @@ PrinceJS.WhipEffects.prototype = {
     let direction = kid.charFace;
     let x = kid.baseX + PrinceJS.Utils.convertX(kid.charX);
     let floorY = kid.baseY + kid.charY;
-    let progress = state.actionStage === "cracking" ? state.elapsed / PrinceJS.Whip.CRACK_DURATION : 0;
+    let progress = state.actionStage === "cracking" ? Math.min(1, state.elapsed / PrinceJS.Whip.CRACK_DURATION) : 0;
     let snap = Math.max(0, 1 - Math.abs(progress - 0.42) * 4);
     let twist = state.actionStage === "cracking" ? Math.round(Math.sin(progress * Math.PI * 2) * 2) : 0;
     this.pose.x = Math.round(x);
