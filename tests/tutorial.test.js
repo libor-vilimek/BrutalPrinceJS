@@ -466,7 +466,7 @@ test("a retry waits for the restored target to burn before guiding the Prince to
   const f = fixture();
   const enemy = { burnRoute: "opening-shaft" };
   f.state.enemies = [enemy];
-  Object.assign(f.state.kid, { room: 1, charBlockY: 1 });
+  Object.assign(f.state.kid, { room: 1, charBlockY: 2, charBlockX: 4, hasMolotov: true });
   f.tutorial.completed.add("twin-torches");
   f.tutorial.sequence = new f.prince.TutorialSequence(f.state, f.tutorial);
   f.tutorial.sequence.update();
@@ -478,5 +478,30 @@ test("a retry waits for the restored target to burn before guiding the Prince to
   f.input("keyup", 67);
   f.tutorial.sequence.update();
   assert.equal(f.tutorial.sequence.guiding, true);
-  assert.equal(f.tutorial.sequence.stage, "collect");
+  assert.equal(f.tutorial.sequence.stage, "edge");
+});
+
+test("guidance leaves the upper platform and the player's jump alone, then takes over on the lower shelf", () => {
+  const f = fixture();
+  f.state.enemies = [{ burnRoute: "opening-shaft", burningDeath: {} }];
+  Object.assign(f.state.kid, { room: 1, charBlockY: 1, charBlockX: 2, hasMolotov: true });
+  f.tutorial.completed.add("twin-torches");
+  const sequence = (f.tutorial.sequence = new f.prince.TutorialSequence(f.state, f.tutorial));
+  sequence.update();
+  sequence.beforeWorld();
+  assert.equal(sequence.guiding, false, "finishing the torch lesson must not start an upstairs walk or jump");
+  assert.ok(!f.input("keydown", 39).consumed, "movement upstairs remains player-controlled");
+  f.input("keyup", 39);
+
+  Object.assign(f.state.kid, { charBlockY: 2, charBlockX: 4, action: "freefall", inFallDown: true });
+  sequence.update();
+  assert.equal(sequence.guiding, false, "crossing into the lower row in midair is too early");
+  Object.assign(f.state.kid, { action: "stand", inFallDown: false, charBlockX: 7 });
+  sequence.update();
+  assert.equal(sequence.guiding, false, "the opposite side of the shaft is outside the approach");
+
+  f.state.kid.charBlockX = 4;
+  sequence.update();
+  assert.equal(sequence.guiding, true);
+  assert.equal(sequence.stage, "edge");
 });

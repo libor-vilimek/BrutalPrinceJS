@@ -27,18 +27,19 @@ PrinceJS.TutorialSequence.prototype = {
       this.stage !== "waiting" ||
       !this.tutorial.completed.has("twin-torches") ||
       kid.room !== 1 ||
-      ![1, 2].includes(kid.charBlockY) ||
+      kid.charBlockY !== 2 ||
+      ![4, 5].includes(kid.charBlockX) ||
+      !kid.hasMolotov ||
       kid.action !== "stand" ||
       kid.specialAction ||
       kid.inFallDown ||
       kid.inJumpUp ||
-      this.tutorial.downKeys.has(Phaser.Keyboard.C) ||
-      (kid.charBlockY === 2 && (!kid.hasMolotov || ![4, 5].includes(kid.charBlockX)))
+      this.tutorial.downKeys.has(Phaser.Keyboard.C)
     ) {
       return;
     }
     this.guiding = true;
-    this.stage = kid.charBlockY === 1 ? "collect" : "edge";
+    this.stage = "edge";
     s.game.input.reset(false);
     s.ui.showText("FOLLOW THE PRINCE TO THE LEDGE", "tutorial");
     s.ui.hideTextTimer = 45;
@@ -53,28 +54,12 @@ PrinceJS.TutorialSequence.prototype = {
       this.cancel();
       return;
     }
-    if (this.stage === "drop") {
-      if (kid.charBlockY === 2 && kid.action === "stand" && !kid.inFallDown) {
-        this.stage = "edge";
-      } else {
-        return;
-      }
-    }
     if (kid.action !== "stand") {
       return;
     }
     // Clear touch/pad/keyboard motion during this short, explicit guided walk.
     this.state.game.input.reset(false);
-    if (this.stage === "collect") {
-      if (kid.charFace !== 1) {
-        kid.turn();
-      } else if (kid.hasMolotov) {
-        kid.standjump();
-        this.stage = "drop";
-      } else {
-        kid.step();
-      }
-    } else if (this.stage === "edge") {
+    if (this.stage === "edge") {
       if (this.state.level.getTileAt(6, 2, 1).element !== PrinceJS.Level.TILE_SPACE) {
         return;
       }

@@ -39,6 +39,15 @@ function tap(code, extra) {
   key("keydown", code, extra);
   key("keyup", code, extra);
 }
+async function continueCutscene() {
+  // Use the real skip input after the cutscene enables it. Starting Game
+  // directly lets its delayed keyboard callback overwrite gameplay later.
+  await until(
+    () => game.state.current === "Cutscene" && state().scene && game.input.keyboard.onDownCallback,
+    "cutscene skip input"
+  );
+  tap(13);
+}
 function snapshot(s) {
   return JSON.stringify([
     s.kid.charX,
@@ -180,8 +189,7 @@ async function run() {
       "No old overlay remains after restart"
     );
     s.nextLevel(1, true, true);
-    await until(() => game.state.current === "Cutscene", "level transition");
-    game.state.start("Game");
+    await continueCutscene();
     await until(() => state().level && state().level.number === 2 && state().tutorial, "level 2");
     s = state();
     check(
@@ -259,14 +267,34 @@ async function runCampaign(preview = false) {
     check(target && guards.length === 2, "The opening has its torch target and two molotov targets");
     tap(17);
     await until(() => target.burningDeath, "first ignition");
-    await until(() => s.tutorial.active && s.tutorial.active.id === "ledge-hang", "guided walk to the shaft", 25000);
+    await until(() => !s.tutorial.assist && !s.kid.specialAction && s.kid.action === "stand", "torch stow");
+    const upperX = s.kid.charX;
+    await until(() => s.level.getTileAt(6, 2, 1).element === 0 && target.room === 2, "burning guard opens the shaft");
     check(
       s.level.getTileAt(6, 2, 1).element === 0 && target.room === 2,
       "The burning guard runs through the real loose floor and falls into the next room"
     );
     check(
+      !s.tutorial.sequence.guiding && s.kid.charBlockY === 1 && s.kid.charX === upperX,
+      "The Prince stays on the upper platform under player control after the torch lesson"
+    );
+    key("keydown", 16);
+    key("keydown", 39, { shiftKey: true });
+    await until(() => s.kid.hasMolotov, "player walks over the bottle");
+    key("keyup", 39, { shiftKey: true });
+    key("keyup", 16);
+    await until(() => s.kid.action === "stand", "player finishes the step");
+    check(!s.tutorial.sequence.guiding && s.kid.charBlockY === 1, "Collecting the bottle does not trigger guidance");
+    key("keydown", 39);
+    key("keydown", 38);
+    await until(() => s.kid.action === "standjump", "player starts the jump");
+    key("keyup", 38);
+    key("keyup", 39);
+    check(!s.tutorial.sequence.guiding, "The player's jump begins without tutorial control");
+    await until(() => s.tutorial.active && s.tutorial.active.id === "ledge-hang", "guided walk after landing", 15000);
+    check(
       s.kid.hasMolotov && s.kid.health === s.kid.maxHealth,
-      "The Prince collects the actual bottle and follows the guided jump without losing health"
+      "After the player's jump, guidance reaches the edge without losing health or the collected bottle"
     );
     tap(40);
     check(s.tutorial.active.id === "ledge-hang", "Down alone cannot confirm the Shift + Down lesson");
@@ -311,8 +339,7 @@ async function runCampaign(preview = false) {
     check(!s.weaponCtrlKey.isDown && s.kid.activeWeapon === "minigun", "The burst ends and keeps the selected gun");
     results.textContent += "All level-one campaign lessons passed.\n";
     s.nextLevel(1, true, true);
-    await until(() => game.state.current === "Cutscene", "second level transition");
-    game.state.start("Game");
+    await continueCutscene();
     await until(() => state().level && state().level.number === 2 && state().tutorial, "second level");
     s = state();
     key("keydown", 37);

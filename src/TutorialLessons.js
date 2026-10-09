@@ -8,7 +8,7 @@ PrinceJS.TutorialLessons = [
     title: "The twin flames",
     description: "Your torches are more than a light in the dark. Draw them and spin to set nearby enemies ablaze.",
     instruction: "Hold to spin. Release to put the torches away.",
-    hint: "One tap completes the first spin. Then follow the Prince to the ledge.",
+    hint: "One tap completes the first spin. Collect the bottle, then jump down one floor.",
     keys: [
       { code: Phaser.Keyboard.CONTROL, label: "Ctrl" },
       { code: Phaser.Keyboard.F, label: "F" }
