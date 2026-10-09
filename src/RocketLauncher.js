@@ -124,9 +124,9 @@ PrinceJS.RocketLauncher.prototype.obstacleAt = function (rocket, room) {
   if (tile.element === PrinceJS.Level.TILE_EXIT_LEFT) {
     tile = this.level.getTileAt(column + 1, row, rocket.room);
   }
-  // Even an opened exit has a facade to shatter. Entrance panels stop a shot
-  // while closed, but Level.destroyBarrier keeps the arrival door intact.
+  // Arrival doorways never intercept rockets; even an open exit has a facade to shatter.
   return tile.element === PrinceJS.Level.TILE_EXIT_RIGHT &&
+    tile.doorRole !== "entrance" &&
     !tile.destroyedByRocket &&
     (!tile.open || tile.doorRole === "exit")
     ? tile

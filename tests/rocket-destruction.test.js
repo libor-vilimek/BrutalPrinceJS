@@ -445,7 +445,38 @@ test("real dungeon and palace maps classify both door halves using the Prince's 
   }
 });
 
-test("rockets cannot damage either half of the real arrival door, directly or with a nearby blast", () => {
+test("rockets pass both halves of open and closed arrival doors in either direction without exploding", () => {
+  for (const number of [2, 3, 4]) {
+    const f = realDoorFixture(number);
+    const door = f.level.entranceDoors[0];
+    const room = f.level.rooms[door.room];
+    const left = door.leftTile.x - 2;
+    const right = door.x + f.PrinceJS.BLOCK_WIDTH + 2;
+    for (const open of [false, true]) {
+      door.open = open;
+      door.state = open ? f.PrinceJS.Tile.ExitDoor.STATE_OPEN : f.PrinceJS.Tile.ExitDoor.STATE_CLOSED;
+      const state = door.state;
+      for (const direction of [-1, 1]) {
+        const rocket = {
+          x: direction === 1 ? left : right,
+          y: room.y * f.PrinceJS.ROOM_HEIGHT + door.roomY * f.PrinceJS.BLOCK_HEIGHT + 30,
+          room: door.room,
+          direction
+        };
+        assert.equal(f.launcher.advanceBullet(rocket, right - left), true, "level " + number);
+        assert.equal(rocket.x, direction === 1 ? right : left);
+        assert.equal(f.launcher.effects.impacts, 0);
+        assert.equal(door.open, open);
+        assert.equal(door.state, state);
+        assert.equal(door.destroyedByRocket, undefined);
+        assert.equal(door.damagedFacade, undefined);
+        assert.equal(f.level.exitDoorOpen, false);
+      }
+    }
+  }
+});
+
+test("arrival doors remain protected from forced damage and nearby rocket blasts", () => {
   for (const number of [3, 4]) {
     const f = realDoorFixture(number);
     const door = f.level.entranceDoors[0];
@@ -457,7 +488,7 @@ test("rockets cannot damage either half of the real arrival door, directly or wi
     for (const direction of [-1, 1]) {
       for (const half of [left, door]) {
         const rocket = { x: half.x + 16, y: room.y * 189 + door.roomY * 63 + 30, room: door.room, direction };
-        assert.equal(f.launcher.obstacleAt(rocket, room), door);
+        assert.equal(f.launcher.obstacleAt(rocket, room), null);
         f.launcher.impact(rocket, null, half);
         assert.equal(door.destroyedByRocket, undefined);
         assert.equal(door.damagedFacade, undefined);

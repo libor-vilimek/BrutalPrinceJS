@@ -162,7 +162,7 @@ Implementační rozhodnutí: okolí pro nouzovou reakci je 144 světových pixel
 
 - **DOOR-01:** Hlavní dveře určené k přechodu do dalšího levelu lze rozstřelit raketometem. Mají animaci zničení a potom trvale poničený vzhled.
 - **DOOR-02:** Zničené výstupní dveře stále umožňují přejít do dalšího levelu.
-- **DOOR-03:** Dveře, kterými princ do současného levelu přišel, se od výstupu rozlišují a nelze je takto zničit. Ochrana platí pro obě poloviny vstupních dveří.
+- **DOOR-03:** Dveře, kterými princ do současného levelu přišel, se od výstupu rozlišují a nelze je takto zničit. Ochrana platí pro obě poloviny vstupních dveří. Rakety oběma polovinami volně prolétají bez nárazu či exploze, ať jsou vstupní dveře otevřené, nebo zavřené.
 - **DOOR-04:** Poničení dveří nesmí přesunout krev z jejich zadní plochy před prince.
 
 ## Čas a zobrazení v prohlížeči
