@@ -1,5 +1,7 @@
 # BrutalPrinceJS
 
+Play the game at [https://brutalprince.com/](https://brutalprince.com/).
+
 Forked from [oklemenz/PrinceJS](https://github.com/oklemenz/PrinceJS). Thanks to Oliver Klemenz and the PrinceJS contributors for the original game! Everything added in this fork is pure AI vibecoding.
 
 ## Gameplay screenshots
