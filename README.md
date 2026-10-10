@@ -91,6 +91,10 @@ Torches start in level 1; collect the molotov and minigun there, the whip and ro
 
 The game also has persistent blood and casings, tougher crowds, healing and maximum-health potions, a wider camera, contextual tutorials, and optional touch controls. The intro adds a bloody **Brutal** above the original title.
 
+The victory scene has its own animated finale: a bloodied Prince arrives carrying Jaffar's head and a minigun, puts the head down, then kicks it through the window, shattering the glass. He raises the minigun and dances while firing into the ceiling; the Princess draws an AK in each hand and joins him. The original epilogue follows automatically, and the usual cutscene skip still works. These cinematic weapons do not change the playable inventory or combat controls.
+
+For a muted local preview, open `tests/finale-browser.html` on the development server. It runs the actual transition from level 14 and provides replay, pause and key animation moments for inspection.
+
 Exit-door tutorials in levels 2 and 3 teach selecting the rocket launcher with `4` and blasting the doors with `Ctrl` / `F`. Collecting the jetpack in level 12 explains `J` to equip or remove it and the arrow keys to fly.
 
 See [the project rules](ruleset.md) and [tutorial documentation](docs/tutorials.md) for details.

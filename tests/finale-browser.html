@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Finale playtest · muted</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 12px;
+        background: #17130f;
+        color: #f1d6a7;
+        font: 14px monospace;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+      }
+      button,
+      select {
+        padding: 8px;
+      }
+      iframe {
+        display: block;
+        width: 100%;
+        height: calc(100vh - 115px);
+        border: 0;
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span>Victory cinematic · sound disabled</span>
+      <button id="replay">Replay</button>
+      <button id="pause">Pause / play</button>
+      <label
+        >Inspect
+        <select id="moment">
+          <option value="2.8">Arrival</option>
+          <option value="4.3">Stopped</option>
+          <option value="5.4">Placing the head</option>
+          <option value="6.05">Head on the floor</option>
+          <option value="6.5">Kick contact</option>
+          <option value="7.14">Window shattering</option>
+          <option value="8.5">Prince firing</option>
+          <option value="9.1">Princess drawing</option>
+          <option value="10.2">Both dancing and firing</option>
+          <option value="15.3">Persistent debris</option>
+        </select></label
+      >
+      <button id="inspect">Show moment</button>
+    </header>
+    <p id="status">Loading the actual victory cutscene…</p>
+    <iframe id="game" title="Muted victory cutscene" src="../index.html?level=14"></iframe>
+    <script src="finale-browser.js"></script>
+  </body>
+</html>

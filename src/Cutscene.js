@@ -56,15 +56,22 @@ PrinceJS.Cutscene.prototype = {
     this.executeProgram();
 
     this.input.keyboard.onDownCallback = null;
-    PrinceJS.Utils.delayed(() => {
+    this.inputTimer = this.game.time.events.add(1000, () => {
       this.input.keyboard.onDownCallback = this.continue.bind(this);
-    }, 1000);
+    });
 
-    this.game.time.events.loop(120, this.updateScene, this);
+    this.sceneTimer = this.game.time.events.loop(120, this.updateScene, this);
   },
 
   executeProgram: function () {
     if (this.sceneState === PrinceJS.Cutscene.STATE_WAITING) {
+      if (this.waitingForFinale) {
+        if (this.finale.complete) {
+          this.waitingForFinale = false;
+          this.sceneState = PrinceJS.Cutscene.STATE_READY;
+        }
+        return;
+      }
       this.waitingTime--;
       if (this.waitingTime === 0) {
         this.sceneState = PrinceJS.Cutscene.STATE_READY;
@@ -76,6 +83,15 @@ PrinceJS.Cutscene.prototype = {
       let opcode = this.program[this.pc];
       let actor;
       switch (opcode.i) {
+        case "FINALE":
+          this.finale = new PrinceJS.Finale(this.game, this.scene);
+          break;
+
+        case "WAIT_FINALE":
+          this.waitingForFinale = true;
+          this.sceneState = PrinceJS.Cutscene.STATE_WAITING;
+          break;
+
         case "START":
           this.world.sort("z");
           this.sceneState = PrinceJS.Cutscene.STATE_READY;
@@ -146,6 +162,9 @@ PrinceJS.Cutscene.prototype = {
   },
 
   update: function () {
+    if (this.finale) {
+      this.finale.update(this.game.time.elapsedMS / 1000);
+    }
     if (PrinceJS.Utils.continueGame(this.game)) {
       this.continue();
     }
@@ -166,6 +185,10 @@ PrinceJS.Cutscene.prototype = {
   },
 
   endCutscene: function (fadeOut = true) {
+    if (this.ending || this.leaving) {
+      return;
+    }
+    this.ending = true;
     if (fadeOut) {
       this.fadeOut(2000, () => {
         this.next();
@@ -184,12 +207,22 @@ PrinceJS.Cutscene.prototype = {
   },
 
   play: function () {
+    if (this.leaving) {
+      return;
+    }
+    this.leaving = true;
     this.stopMusic();
     this.input.keyboard.onDownCallback = null;
     this.state.start("Game");
   },
 
   next: function () {
+    if (this.leaving) {
+      return;
+    }
+    if ([1, 15, 16].includes(PrinceJS.currentLevel)) {
+      this.leaving = true;
+    }
     this.input.keyboard.onDownCallback = null;
     if (PrinceJS.currentLevel === 1) {
       this.state.start("Credits");
@@ -205,6 +238,11 @@ PrinceJS.Cutscene.prototype = {
   },
 
   reset: function () {
+    this.finale = null;
+    this.waitingForFinale = false;
+    this.ending = false;
+    this.leaving = false;
+    this.fadeTweens = [];
     this.actors = [];
     this.objects = [];
 
@@ -218,20 +256,34 @@ PrinceJS.Cutscene.prototype = {
   },
 
   fadeIn: function (duration = 2000, callback) {
-    this.game.add.tween(this.cover).to({ alpha: 0 }, 2000, Phaser.Easing.Linear.None, true, 0, 0, false);
-    PrinceJS.Utils.delayed(() => {
-      if (callback) {
-        callback();
-      }
-    }, duration);
+    this.fadeTo(0, duration, callback);
   },
 
   fadeOut: function (duration = 2000, callback) {
-    this.game.add.tween(this.cover).to({ alpha: 1 }, 2000, Phaser.Easing.Linear.None, true, 0, 0, false);
-    PrinceJS.Utils.delayed(() => {
-      if (callback) {
-        callback();
-      }
-    }, duration);
+    this.fadeTo(1, duration, callback);
+  },
+
+  fadeTo: function (alpha, duration, callback) {
+    const tween = this.game.add.tween(this.cover).to({ alpha }, 2000, Phaser.Easing.Linear.None, true);
+    this.fadeTweens.push(tween);
+    if (callback) {
+      tween.onComplete.addOnce(() => {
+        if (!this.leaving) {
+          callback();
+        }
+      });
+    }
+  },
+
+  shutdown: function () {
+    this.leaving = true;
+    this.input.keyboard.onDownCallback = null;
+    this.game.time.events.remove(this.inputTimer);
+    this.game.time.events.remove(this.sceneTimer);
+    this.fadeTweens.forEach((tween) => this.game.tweens.remove(tween));
+    if (this.finale) {
+      this.finale.destroy();
+      this.finale = null;
+    }
   }
 };

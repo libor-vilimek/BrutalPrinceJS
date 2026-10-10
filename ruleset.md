@@ -27,6 +27,7 @@ Tento dokument zachycuje aktuální přání z celé této konverzace. Změny zd
 - [Krev a její vrstvy](#krev-a-její-vrstvy)
 - [Kamera, místnosti a prostředí](#kamera-místnosti-a-prostředí)
 - [Dveře mezi levely](#dveře-mezi-levely)
+- [Závěrečná scéna](#závěrečná-scéna)
 - [Čas a zobrazení v prohlížeči](#čas-a-zobrazení-v-prohlížeči)
 - [Způsob práce](#způsob-práce)
 - [Nahrazená rozhodnutí](#nahrazená-rozhodnutí)
@@ -105,9 +106,9 @@ Implementační rozhodnutí: levely 1–13 obsahují celkem 56 dalších léčiv
 ## Vzhled prince a animace zbraní
 
 - **ART-01:** Nové pózy musí odpovídat původnímu modelu prince, zejména velikosti hlavy, barvě a velikosti vlasů, původní světlé barvě oblečení a odhaleným pažím. Krk má mít přirozené původní proporce. Animace nesmí trvale barvit oblečení dožluta; krátké osvětlení zábleskem při střelbě podle ART-04 zůstává. Při střelbě má být úsměv/škleb malý; cenění zubů nesmí vytvářet přehnaně velká ústa.
-- **ART-02:** Zbraň se při běžném pohybu nezobrazuje trvale. Vidět je při vytahování, používání a schovávání.
+- **ART-02:** Zbraň se při běžném pohybu nezobrazuje trvale. Vidět je při vytahování, používání a schovávání. Příběhový příchod ve finále je výjimkou podle END-01.
 - **ART-03:** Vytahování střelných zbraní je krátká blokující sekvence. Výjimkou je výslovně vyžádaný nouzový kopanec na `C` při blízkém nepříteli podle KICK-02.
-- **ART-04:** Při střelbě princ drží minigun i raketomet oběma rukama a stojí na místě. Záblesky ho osvětlují žlutě.
+- **ART-04:** Při střelbě princ drží minigun i raketomet oběma rukama a stojí na místě. Záblesky ho osvětlují žlutě. Závěrečný tanec je výjimkou z nehybného postoje podle END-03.
 - **ART-05:** Když střelba skončí, následuje blokující animace schování zbraně. Pohyb ani přepnutí zbraně ji nesmí přeskočit. Nouzový kopanec na `C` při blízkém nepříteli je výjimkou podle KICK-02.
 - **ART-06:** Animace mají být pěkné a svižné. Nové vybavení nesmí měnit původní proporce ani omylem přidat další ruce či ponechat po skončení neúplný sprite.
 
@@ -134,7 +135,7 @@ Implementační rozhodnutí: levely 1–13 obsahují celkem 56 dalších léčiv
 
 ## Minigun a raketomet
 
-- **GUN-01:** Minigun má animaci sáhnutí dozadu, vytažení, držení oběma rukama, střelby a následného schování. Při střelbě se nelze pohybovat.
+- **GUN-01:** Minigun má animaci sáhnutí dozadu, vytažení, držení oběma rukama, střelby a následného schování. Při střelbě se nelze pohybovat; výjimkou je příběhový tanec v závěru podle END-03.
 - **GUN-02:** Raketomet má grafiku a kvalitu animací podobnou minigunu. Staré odložení práce na jeho grafice již neplatí.
 - **GUN-03:** Rakety znatelně zrychlují. Jejich let nesmí mít pouze konstantní lineární rychlost.
 - **GUN-04:** Raketa doletí alespoň do jedné další propojené místnosti a umožní ji probourat i tehdy, když tam ještě není volný průchod. Směr doprava nesmí mít kratší nebo zablokovaný dosah oproti směru doleva.
@@ -215,6 +216,14 @@ Implementační rozhodnutí pro stín: od objevení je ihned propojený s prince
 - **DOOR-05:** Nad mříží v nejlevější koncové místnosti levelu 6 se stínem prince je laserová věžička. Rakety mířící na tuto mříž zničí laserem ještě před dopadem, takže ji nelze raketometem probourat.
 
 Implementační rozhodnutí pro věžičku: chrání mříž ve sloupci 2, řádku 1 místnosti 1 původního levelu 6. Zachytává rakety na stejném patře z obou stran, včetně výstřelu těsně u mříže a ze sousední místnosti; zásah vytvoří krátký paprsek a jiskry bez ničivé exploze. Ostatní dveře a mříže používají dosavadní pravidla. Tlačítka, stín a pád do dalšího levelu fungují dál.
+
+## Závěrečná scéna
+
+- **END-01:** Ve vítězné scéně s princeznou přijde zakrvácený princ s Jaffarovou hlavou v jedné ruce a minigunem v druhé.
+- **END-02:** Princ se zastaví, položí hlavu na zem a kopne ji ven oknem. Hlava sklo viditelně roztříští a okno zůstane rozbité.
+- **END-03:** Po vykopnutí hlavy princ zvedne minigun nad sebe, střílí do stropu a tancuje. Princezna vytáhne dva kalašnikovy, v každé ruce jeden, a také tancuje a střílí do stropu.
+
+Implementační rozhodnutí: samostatná sekvence nahrazuje původní objetí ve scéně 15. Zachovává původní místnost, hlavy a proporce postav i grafiku minigunu. Příchod, zastavení, položení, nápřah, kop, rozbití okna a zvednutí zbraní mají vlastní časování; teprve pak následuje společný tanec se záblesky, nábojnicemi a zásahy stropu. Princ při střelbě minigun podepírá oběma rukama. Jde pouze o filmový závěr: kalašnikovy nevstupují do inventáře a běžná pravidla pohybu ani střelby se nemění. Scéna automaticky pokračuje do původního epilogu a lze ji přeskočit původním ovládáním. Odchod uklidí efekty, zvuk i čekající přechod.
 
 ## Čas a zobrazení v prohlížeči
 
