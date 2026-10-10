@@ -71,7 +71,7 @@ PrinceJS.TutorialLessons = [
     id: "minigun-select",
     category: "Know your weapons",
     title: "Choose your firepower",
-    description: "Your minigun is ready. Number keys choose a weapon, even when that weapon is already selected.",
+    description: "Your minigun is weapon 3. Use the number keys to choose your weapon.",
     instruction: "Press 3 to select the minigun.",
     hint: "1 brings back the twin torches. 2 selects your molotovs.",
     inventory: ["twinTorches", "molotov", "minigun"],
@@ -260,6 +260,46 @@ PrinceJS.TutorialLessons = [
       state.rocketLauncher.canFire() &&
       !state.kid.specialAction
   },
+  ...[2, 3].flatMap((level) => [
+    {
+      id: `exit-rockets-select-${level}`,
+      category: "The way forward",
+      title: "Break open the exit",
+      description: "These doors lead to the next level. Your rocket launcher can blast them open.",
+      instruction: "Press 4 to select the rocket launcher.",
+      hint: "Then fire with Ctrl or F to shatter the doors.",
+      inventory: ["rocketLauncher"],
+      keys: [{ code: Phaser.Keyboard.FOUR, label: "4" }],
+      when: (state) =>
+        PrinceJS.currentLevel === level &&
+        state.level.number === level &&
+        state.rocketLauncher.canSelect() &&
+        !!state.tutorial.sequence.findExitRocketTarget()
+    },
+    {
+      id: `exit-rockets-fire-${level}`,
+      category: "The way forward",
+      title: "Blast the doors",
+      description: "Fire a rocket at these doors to break them open and reach the next level.",
+      instruction: "Press Ctrl or F to blast open the exit.",
+      hint: "Walk up to the shattered doorway and press Up to leave.",
+      keys: [
+        { code: Phaser.Keyboard.CONTROL, label: "Ctrl" },
+        { code: Phaser.Keyboard.F, label: "F" }
+      ],
+      holdMs: 100,
+      holdUntil: (state) => state.tutorial.sequence.rocketTargetDestroyed(),
+      maxHoldMs: 4000,
+      onComplete: (state, tutorial) => tutorial.completed.add("rocket-demolition"),
+      when: (state) =>
+        PrinceJS.currentLevel === level &&
+        state.level.number === level &&
+        state.tutorial.completed.has(`exit-rockets-select-${level}`) &&
+        state.kid.activeWeapon === "rocketLauncher" &&
+        state.rocketLauncher.canFire() &&
+        !!state.tutorial.sequence.findExitRocketTarget()
+    }
+  ]),
   {
     id: "rocket-demolition",
     category: "Make your own doorway",
@@ -284,5 +324,27 @@ PrinceJS.TutorialLessons = [
       state.kid.action === "stand" &&
       state.rocketLauncher.canFire() &&
       !!state.tutorial.sequence.findRocketTarget()
+  },
+  {
+    id: "jetpack-equip",
+    category: "The art of flight",
+    title: "Take to the air",
+    description: "You found a jetpack. Fly between platforms and explore the palace from above.",
+    instruction: "Press J to equip the jetpack. Use the arrow keys to fly.",
+    hint: "Release the arrows to hover. Press J again to remove the jetpack.",
+    keys: [{ code: Phaser.Keyboard.J, label: "J" }],
+    when: (state) =>
+      PrinceJS.currentLevel === 12 &&
+      state.level.number === 12 &&
+      state.kid.hasJetpack &&
+      state.jetpack.pickup &&
+      state.jetpack.pickup.collected &&
+      !state.jetpack.active &&
+      !state.kid.specialAction &&
+      !state.kid.inFallDown &&
+      !state.kid.inJumpUp &&
+      !state.kid.pickupPotion &&
+      !state.kid.pickupSword &&
+      (["stand", "startrun", "running", "runstop"].includes(state.kid.action) || /^step\d+$/.test(state.kid.action))
   }
 ];

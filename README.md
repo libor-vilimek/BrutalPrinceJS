@@ -91,4 +91,6 @@ Torches start in level 1; collect the molotov and minigun there, the whip and ro
 
 The game also has persistent blood and casings, tougher crowds, healing and maximum-health potions, a wider camera, contextual tutorials, and optional touch controls. The intro adds a bloody **Brutal** above the original title.
 
+Exit-door tutorials in levels 2 and 3 teach selecting the rocket launcher with `4` and blasting the doors with `Ctrl` / `F`. Collecting the jetpack in level 12 explains `J` to equip or remove it and the arrow keys to fly.
+
 See [the project rules](ruleset.md) and [tutorial documentation](docs/tutorials.md) for details.

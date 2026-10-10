@@ -62,7 +62,7 @@ function snapshot(s) {
   ]);
 }
 
-async function ready() {
+async function ready(level = 1) {
   let started = false;
   await until(() => {
     game = frame.contentWindow.Phaser && frame.contentWindow.Phaser.GAMES[0];
@@ -78,16 +78,16 @@ async function ready() {
       started = true;
       game.state.start("Game");
     }
-    return state().tutorial && state().tutorial.active;
+    return state().tutorial && (level === 1 ? state().tutorial.active : state().level.number === level);
   }, "opening lesson");
 }
 
-async function replay() {
+async function replay(level = 1) {
   await new Promise((resolve) => {
     frame.addEventListener("load", resolve, { once: true });
-    frame.src = "../index.html?level=1";
+    frame.src = "../index.html?level=" + level;
   });
-  await ready();
+  await ready(level);
 }
 
 async function run() {
@@ -241,6 +241,10 @@ document.getElementById("inspect").addEventListener("click", () => {
           face: s.kid.charFace,
           action: s.kid.action,
           health: s.kid.health,
+          weapon: s.kid.activeWeapon,
+          specialAction: s.kid.specialAction && s.kid.specialAction.type,
+          rocketStage: s.rocketLauncher && s.rocketLauncher.actionStage,
+          canFireRocket: s.rocketLauncher && s.rocketLauncher.canFire(),
           molotov: s.kid.hasMolotov
         },
         board: s.level.getTileAt(6, 2, 1).element,
@@ -426,6 +430,7 @@ async function runCampaign(preview = false) {
   }
 }
 document.getElementById("campaign").addEventListener("click", () => runCampaign());
+document.getElementById("equipment").addEventListener("click", () => runEquipmentLessons());
 document.getElementById("cards").addEventListener("click", () => runCampaign(true));
 document.getElementById("kick-preview").addEventListener("click", async () => {
   if (busy) {
@@ -594,4 +599,125 @@ async function rocketDemolition() {
     !s.tutorial.active && s.tutorial.completed.has("rocket-demolition"),
     "The demolition lesson completes once per campaign"
   );
+}
+
+async function exitDoorLesson(level) {
+  const s = state();
+  const kid = s.kid;
+  const door = s.level.exitDoors[0];
+  check(door && !door.destroyedByRocket, `Level ${level} starts with intact exit doors`);
+  // This checkpoint represents the cleared approach; terrain and door logic stay native.
+  for (const enemy of s.enemies) {
+    enemy.setInactive();
+  }
+  s.selectWeapon("minigun");
+  const startX = ((door.roomX * 32 + 160) * 140) / 320;
+  placePrince(door.room, startX, door.roomY, -1);
+  await wait(200);
+  check(!s.tutorial.active, `Level ${level} exit lesson waits until the Prince is nearby`);
+  key("keydown", 37);
+  await until(() => s.tutorial.active && s.tutorial.active.id === `exit-rockets-select-${level}`, "exit selection");
+  key("keyup", 37);
+  check(s.kid.activeWeapon === "minigun", `Level ${level} approach prompts with another weapon selected`);
+  const frozen = snapshot(s);
+  tap(17);
+  await wait(120);
+  check(game.paused && snapshot(s) === frozen, "The exit lesson pauses the world and rejects the wrong key");
+  frame.contentDocument.querySelector(".tutorial-key").click();
+  await until(() => s.tutorial.active && s.tutorial.active.id === `exit-rockets-fire-${level}`, "exit firing");
+  const shots = s.rocketLauncher.effects.shots;
+  tap(level === 2 ? 17 : 70);
+  await until(() => door.destroyedByRocket, "real rocket destroys the exit", 5000);
+  check(s.rocketLauncher.effects.shots > shots && door.open, `Level ${level} rocket shatters the real exit`);
+  await until(() => !s.tutorial.assist && !s.kid.specialAction, "exit shot release and stow");
+  check(!s.weaponCtrlKey.isDown && !s.weaponFireKey.isDown, "The exit lesson releases its firing input");
+  check(
+    s.level.entranceDoors.every((entry) => !entry.destroyedByRocket),
+    "Arrival doors stay intact"
+  );
+  placePrince(door.room, (door.roomX - 1) * 14 + 7, door.roomY, -1);
+  key("keydown", 38);
+  await until(() => s.kid.action === "climbstairs", "native stairs through shattered exit");
+  key("keyup", 38);
+  await until(() => s.pressButtonToNext, "level completion after climbing stairs");
+  tap(13);
+  if (level === 3) {
+    await continueCutscene();
+  }
+  await until(() => state().kid !== kid && state().tutorial && state().level.number === level + 1, "next level");
+  await until(() => state().kid.charFace === 1 && state().kid.action === "stand", "arrival turn");
+  check(state().kid.hasRocketLauncher, "The launcher carries through the real exit transition");
+}
+
+async function runEquipmentLessons() {
+  if (busy) {
+    return;
+  }
+  busy = true;
+  results.textContent = "";
+  try {
+    await replay();
+    tap(17);
+    await until(() => !state().tutorial.assist && !state().kid.specialAction, "opening spin");
+    state().nextLevel(1, true, true);
+    await continueCutscene();
+    await until(() => state().tutorial && state().level.number === 2, "level 2");
+    await until(() => state().kid.charFace === -1 && state().kid.action === "stand", "level-2 arrival turn");
+    let s = state();
+    // Model already learned combat lessons, so these checks exercise independent exit reminders.
+    for (const id of ["whip-pull", "upper-ledge-kick", "rockets-select", "rockets-fire", "rocket-demolition"]) {
+      s.tutorial.completed.add(id);
+    }
+    const pickup = s.rocketLauncher.pickup;
+    const pickupX = ((pickup.worldX - s.level.rooms[pickup.room].x * 320) * 140) / 320;
+    placePrince(pickup.room, pickupX, 1, -1);
+    await until(() => s.kid.hasRocketLauncher, "real launcher pickup");
+    await exitDoorLesson(2);
+    await exitDoorLesson(3);
+
+    // Skip travel to the original level-12 start using the normal level URL.
+    await replay(12);
+    await until(
+      () =>
+        state().tutorial && state().level.number === 12 && state().kid.charFace === 1 && state().kid.action === "stand",
+      "level 12"
+    );
+    s = state();
+    check(!s.kid.hasJetpack && !s.tutorial.active, "The jetpack lesson does not appear before pickup");
+    const pack = s.jetpack.pickup;
+    const direction = Math.sign(pack.worldX - s.kid.baseX - (s.kid.charX * 320) / 140);
+    key("keydown", direction < 0 ? 37 : 39);
+    await until(() => s.tutorial.active && s.tutorial.active.id === "jetpack-equip", "jetpack pickup lesson");
+    key("keyup", direction < 0 ? 37 : 39);
+    check(
+      s.kid.hasJetpack && pack.collected && !s.jetpack.active,
+      "Collecting the pack opens its lesson without equipping it"
+    );
+    const weapon = s.kid.activeWeapon;
+    tap(38);
+    check(s.tutorial.active.id === "jetpack-equip", "Only J confirms the jetpack lesson");
+    frame.contentDocument.querySelector(".tutorial-key").click();
+    await until(() => s.jetpack.active && s.jetpack.phase === "flying" && !s.tutorial.assist, "real jetpack equip");
+    const groundY = s.kid.charY;
+    key("keydown", 38);
+    await until(() => s.kid.charY < groundY - 12, "arrow-controlled takeoff");
+    key("keyup", 38);
+    key("keydown", 40);
+    await until(() => s.jetpack.grounded, "jetpack landing");
+    key("keyup", 40);
+    tap(74);
+    check(!s.jetpack.active && s.kid.activeWeapon === weapon, "J removes the jetpack without changing weapons");
+    check(s.tutorial.completed.has("jetpack-equip") && !s.tutorial.active, "The jetpack lesson completes once");
+    check(game.sound.mute && game.sound.volume === 0, "All equipment lessons keep audio muted");
+    game.paused = true;
+    results.textContent += "All exit and jetpack tutorial checks passed.\n";
+  } catch (error) {
+    results.textContent += "FAIL: " + error.message + "\n";
+  } finally {
+    if (game && game.sound) {
+      game.sound.mute = true;
+      game.sound.volume = 0;
+    }
+    busy = false;
+  }
 }

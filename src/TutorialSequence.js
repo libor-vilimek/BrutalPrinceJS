@@ -12,7 +12,24 @@ PrinceJS.TutorialSequence = function (state, tutorial) {
 };
 
 PrinceJS.TutorialSequence.prototype = {
-  findRocketTarget: function () {
+  findExitRocketTarget: function () {
+    const kid = this.state.kid;
+    if (
+      !kid.hasRocketLauncher ||
+      kid.specialAction ||
+      kid.inFallDown ||
+      kid.inJumpUp ||
+      kid.pickupPotion ||
+      kid.pickupSword ||
+      (!["stand", "startrun", "running", "runstop"].includes(kid.action) && !/^step\d+$/.test(kid.action))
+    ) {
+      return null;
+    }
+    const target = this.findRocketTarget(4 * PrinceJS.BLOCK_WIDTH);
+    return target && target.element === PrinceJS.Level.TILE_EXIT_RIGHT ? target : null;
+  },
+
+  findRocketTarget: function (maxDistance = PrinceJS.ROOM_WIDTH) {
     const s = this.state;
     const launcher = s.rocketLauncher;
     const muzzle = launcher.effects.getMuzzle();
@@ -21,7 +38,7 @@ PrinceJS.TutorialSequence.prototype = {
     // Follow the native rocket's two-pixel collision sweep from body to muzzle
     // and through room links, including barriers underneath the long barrel.
     // Limit the demonstration to the current room and its visible neighbors.
-    const range = Math.min(launcher.spec.range, PrinceJS.ROOM_WIDTH);
+    const range = Math.min(launcher.spec.range, maxDistance);
     for (let distance = 0; distance <= range; distance += 2) {
       let room = s.level.rooms[point.room];
       if (!room) {

@@ -375,6 +375,49 @@ test("demolition includes the body-to-muzzle sweep instead of overlooking a gate
   assert.equal(sequence.rocketTargetDestroyed(), true);
 });
 
+test("exit prompts require a nearby intact exit with a clear shot while approaching on foot", () => {
+  const f = fixture();
+  Object.assign(f.kid, { hasRocketLauncher: true, action: "running" });
+  const door = f.setTile(1, 3, 1, f.PrinceJS.Level.TILE_EXIT_RIGHT);
+  const sequence = demolitionSequence(f);
+  assert.equal(sequence.findExitRocketTarget(), door);
+  for (const flag of ["specialAction", "inFallDown", "inJumpUp", "pickupPotion", "pickupSword"]) {
+    f.kid[flag] = true;
+    assert.equal(sequence.findExitRocketTarget(), null);
+    f.kid[flag] = false;
+  }
+  f.kid.hasRocketLauncher = false;
+  assert.equal(sequence.findExitRocketTarget(), null);
+  f.kid.hasRocketLauncher = true;
+  f.kid.action = "climbstairs";
+  assert.equal(sequence.findExitRocketTarget(), null);
+  f.kid.action = "stand";
+  door.doorRole = "entrance";
+  assert.equal(sequence.findExitRocketTarget(), null);
+  door.doorRole = "exit";
+  const guard = f.enemy(65);
+  assert.equal(sequence.findExitRocketTarget(), null);
+  guard.alive = false;
+  assert.equal(sequence.findExitRocketTarget(), door);
+  f.launcher.advanceBullet(f.rocket(), 200);
+  assert.equal(sequence.findExitRocketTarget(), null, "shattered exits need no reminder");
+});
+
+test("exit prompts ignore walls and gates and wait until the doorway is within four tiles", () => {
+  const f = fixture();
+  Object.assign(f.kid, { hasRocketLauncher: true, action: "stand" });
+  const sequence = demolitionSequence(f);
+  for (const element of [f.PrinceJS.Level.TILE_WALL, f.PrinceJS.Level.TILE_GATE]) {
+    f.setTile(1, 3, 1, element);
+    assert.equal(sequence.findExitRocketTarget(), null);
+  }
+  f.setTile(1, 3, 1, f.PrinceJS.Level.TILE_FLOOR);
+  const door = f.setTile(1, 8, 1, f.PrinceJS.Level.TILE_EXIT_RIGHT);
+  assert.equal(sequence.findExitRocketTarget(), null);
+  f.kid.charX = (130 * 140) / 320;
+  assert.equal(sequence.findExitRocketTarget(), door);
+});
+
 test("a rocket replaces a stone wall with permanent rubble that the Prince can walk through", () => {
   const f = fixture();
   const wall = f.setTile(1, 3, 1, f.PrinceJS.Level.TILE_WALL);

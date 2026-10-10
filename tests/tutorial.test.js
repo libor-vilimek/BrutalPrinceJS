@@ -41,6 +41,7 @@ function fixture() {
         THREE: 51,
         FOUR: 52,
         C: 67,
+        J: 74,
         X: 88
       }
     }
@@ -624,6 +625,99 @@ test("demolition holds the real firing key until the barrier breaks, with a boun
     assert.equal(f.keys.get(70).isDown, false);
     assert.equal(f.tutorial.assist, null);
   }
+});
+
+test("exit lessons select and fire independently in levels 2 and 3, even after earlier rocket lessons", () => {
+  const f = fixture();
+  let target = {};
+  let broken = false;
+  f.state.rocketLauncher = { canSelect: () => true, canFire: () => true };
+  f.tutorial.sequence.findExitRocketTarget = () => target;
+  f.tutorial.sequence.rocketTargetDestroyed = () => broken;
+  for (const id of ["rockets-select", "rockets-fire", "rocket-demolition"]) {
+    f.tutorial.completed.add(id);
+  }
+  for (const level of [2, 3]) {
+    f.prince.currentLevel = f.state.level.number = level;
+    f.state.kid.activeWeapon = "minigun";
+    const select = f.prince.TutorialLessons.find((item) => item.id === `exit-rockets-select-${level}`);
+    const fire = f.prince.TutorialLessons.find((item) => item.id === `exit-rockets-fire-${level}`);
+    assert.equal(select.when(f.state), true, "approaching with another weapon still teaches the launcher");
+    assert.equal(fire.when(f.state), false);
+    assert.equal(f.tutorial.show(select), true, "the second exit is independent of the first");
+    f.tutorial.accept(17, false);
+    assert.equal(f.tutorial.active, select, "only 4 confirms weapon selection");
+    f.tutorial.accept(52, false);
+    assert.equal(f.keys.get(52).isDown, true);
+    f.state.kid.activeWeapon = "rocketLauncher";
+    f.tutorial.worldUpdated();
+    f.tutorial.update(0.05);
+    assert.equal(fire.when(f.state), true);
+    target = null;
+    assert.equal(fire.when(f.state), false, "recheck the shot after selection");
+    target = {};
+    broken = false;
+    f.tutorial.show(fire);
+    const code = level === 2 ? 17 : 70;
+    f.tutorial.accept(code, false);
+    f.tutorial.worldUpdated();
+    f.tutorial.update(0.05);
+    assert.equal(f.keys.get(code).isDown, true, "keep firing until the real door breaks");
+    broken = true;
+    f.tutorial.update(0.05);
+    assert.equal(f.tutorial.assist, null);
+    assert.equal(f.keys.get(code).isDown, false);
+    assert.equal(f.tutorial.show(select), false, "do not repeat a completed exit lesson on retry");
+    assert.equal(f.tutorial.show(fire), false);
+  }
+});
+
+test("the jetpack lesson waits for the level-12 pickup and a usable state, then sends one J press", () => {
+  const f = fixture();
+  const lesson = f.prince.TutorialLessons.find((item) => item.id === "jetpack-equip");
+  f.prince.currentLevel = f.state.level.number = 12;
+  f.state.kid.hasJetpack = false;
+  f.state.jetpack = { pickup: { collected: false }, active: false };
+  assert.equal(lesson.when(f.state), false);
+  f.state.kid.hasJetpack = true;
+  assert.equal(lesson.when(f.state), false);
+  f.state.jetpack.pickup.collected = true;
+  for (const action of ["stand", "running", "step1"]) {
+    f.state.kid.action = action;
+    assert.equal(lesson.when(f.state), true);
+  }
+  for (const action of ["freefall", "climbup", "drinkpotion", "climbstairs"]) {
+    f.state.kid.action = action;
+    assert.equal(lesson.when(f.state), false);
+  }
+  f.state.kid.action = "stand";
+  for (const flag of ["specialAction", "inFallDown", "inJumpUp", "pickupPotion", "pickupSword"]) {
+    f.state.kid[flag] = true;
+    assert.equal(lesson.when(f.state), false);
+    f.state.kid[flag] = false;
+  }
+  f.state.jetpack.active = true;
+  assert.equal(lesson.when(f.state), false, "do not teach equip by removing an already active pack");
+  f.state.jetpack.active = false;
+  f.prince.currentLevel = f.state.level.number = 13;
+  assert.equal(lesson.when(f.state), false, "automatic later ownership is not a pickup lesson");
+  f.prince.currentLevel = f.state.level.number = 12;
+  f.tutorial.show(lesson);
+  f.tutorial.accept(38, false);
+  assert.equal(f.tutorial.active, lesson);
+  f.tutorial.accept(74, false);
+  assert.equal(f.game.paused, false);
+  f.tutorial.worldUpdated();
+  f.tutorial.update(0.05);
+  assert.deepEqual(
+    f.events.filter((event) => Array.isArray(event)),
+    [
+      ["down", 74],
+      ["up", 74]
+    ]
+  );
+  assert.equal(f.state.kid.activeWeapon, "twinTorches");
+  assert.equal(f.tutorial.show(lesson), false);
 });
 
 test("the upper kick completes before the repeated minigun selection and firing lessons", () => {
