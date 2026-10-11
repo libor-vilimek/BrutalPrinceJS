@@ -23,6 +23,7 @@ The requested requirements are:
   game must not produce continuing-play reports.
 - Allow statistics transmission to be disabled in the existing menu in the upper-right corner.
 - Send statistics through an API that writes to MongoDB.
+- Use the official MongoDB Node.js driver and direct MongoDB queries; do not introduce an ODM or an advanced database framework.
 - Provide a normal Node.js server using the Koa framework, with API URLs under `/api/...` alongside the existing game.
   Only this server communicates with MongoDB; clients never connect to the database.
 - All statistics requests run asynchronously in the background. Failed requests have no effect on the game and show
@@ -202,6 +203,11 @@ delivery of a queued real event.
 
 #### Server-only MongoDB configuration
 
+Use the official `mongodb` Node.js driver directly for connections, collection operations, bulk writes, indexes, and
+aggregation queries. Keep documents and queries explicit, with validation in the API. Do not introduce Mongoose,
+Prisma, an ODM/ORM, or another database abstraction framework. This is a user-selected constraint on MongoDB access;
+Koa remains the HTTP framework.
+
 The supplied connection URI template is:
 
 ```text
@@ -315,7 +321,8 @@ activity lifecycle handling. Client opt-out and best-effort delivery mean statis
 
 1. Finalize deployment, setting default, retention, schema, and deterministic guard/spawn identity. Add the accepted
    telemetry rules to `ruleset.md` and update settings/help documentation when implementation is authorized.
-2. Implement the Node.js/Koa server under `/api/...`, using server-only MongoDB configuration, validation, batch
+2. Implement the Node.js/Koa server under `/api/...`, using the official `mongodb` driver and direct queries,
+   server-only MongoDB configuration, validation, batch
    acknowledgements, persistence, idempotency, limits, and configured indexes.
 3. Add the isolated recorder and setting, then instrument health/death transitions with explicit causal context.
 4. Add activity windows and the additional event catalogue. Start with death/damage/start/activity/opt-out coverage;
