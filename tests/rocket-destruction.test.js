@@ -217,6 +217,39 @@ function turretFixture() {
   return f;
 }
 
+test("telemetry counts successful barrier destruction once and keeps the exit usable", () => {
+  const f = realDoorFixture(3);
+  const changes = [];
+  f.game.statistics = { record: (type, payload) => changes.push(payload.change), tile: () => ({ kind: "tile" }) };
+  const entrance = f.level.entranceDoors[0];
+  const exit = f.level.exitDoors[0];
+  assert.equal(f.level.destroyBarrier(entrance), false);
+  assert.equal(f.level.destroyBarrier(exit.leftTile), true);
+  assert.equal(f.level.destroyBarrier(exit), false);
+  const barriers = fixture();
+  barriers.game.statistics = f.game.statistics;
+  const wall = barriers.setTile(1, 3, 1, barriers.PrinceJS.Level.TILE_WALL);
+  const gate = barriers.setTile(1, 4, 1, barriers.PrinceJS.Level.TILE_GATE);
+  assert.equal(barriers.level.destroyBarrier(wall), true);
+  assert.equal(barriers.level.destroyBarrier(gate), true);
+  assert.equal(barriers.level.destroyBarrier(wall), false);
+  assert.deepEqual(changes, ["exit_door_destroyed", "wall_destroyed", "door_destroyed"]);
+  assert.equal(exit.open, true);
+  assert.equal(f.level.exitDoorOpen, true);
+});
+
+test("telemetry observes only successful level-6 laser interceptions", () => {
+  const f = turretFixture();
+  const changes = [];
+  f.game.statistics = { record: (type, payload) => changes.push(payload.change) };
+  const rocket = { ...f.rocket(f.turret.x + 60, -1), y: f.level.rooms[1].y * 189 + 95 };
+  assert.equal(f.turret.intercept({ ...rocket, room: -1 }), false);
+  assert.equal(f.turret.intercept(rocket), true);
+  f.PrinceJS.currentLevel = 5;
+  assert.equal(f.turret.intercept(rocket), true);
+  assert.deepEqual(changes, ["rocket_intercepted"]);
+});
+
 test("the level 6 shadow gate intercepts repeated rockets from both sides before they hit", () => {
   for (const direction of [-1, 1]) {
     const f = turretFixture();

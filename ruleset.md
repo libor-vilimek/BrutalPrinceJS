@@ -261,6 +261,8 @@ Implementační rozhodnutí pro menu: bez zobrazeného dotykového panelu trvá 
 
 - **STATS-09:** Při otevření hry vzniká náhodné `clientId`, které se používá pro souhrny napříč levely a restarty v této stránce. Nejde o trvalé ID zařízení; nové otevření/reload či opětovné zapnutí sběru vytvoří nové ID. Implementační rozhodnutí: jeden MongoDB dokument seskupuje klienta, mapu/revizi, level a UTC den, aby zůstaly denní grafy bez ukládání historie každého zabití a zásahu. Nové herní dávky i generátor ukázek používají `/api/v2/gameplay-statistics`.
 
+- **STATS-10:** Dashboard zobrazuje počet klientů, kteří rozstřelili výstup do dalšího levelu, vypili velký nápoj zvyšující maximum životů, zabili Jaffara, skutečně zapnuli jetpack nebo jim laser v levelu 6 sestřelil raketu. Zobrazuje i celkové počty těchto událostí a rozstřelených dveří a stěn. Implementační rozhodnutí: unikátní klient se počítá podle `clientId` v celé vybrané periodě a filtru, napříč dny, revizemi a levely; reload či nové otevření vytvoří nového klienta, nejde o přesné počty lidí. Dveře zahrnují mříže a výstupní dveře (obě poloviny výstupu jednou), stěny jednotlivé zničené dlaždice. Pouhý sběr jetpacku, jeho vypnutí, opakovaný zásah již zničené překážky ani animace mrtvého Jaffara počty nezvýší. Zůstává úsporný kumulativní sběr bez nových ID nepřátel či historie jednotlivých událostí.
+
 ## Nahrazená rozhodnutí
 
 Tento přehled brání návratu ke starším požadavkům. Nejde o aktivní alternativy.

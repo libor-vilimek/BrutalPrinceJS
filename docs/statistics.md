@@ -84,6 +84,25 @@ Active-play observations occur every 20 seconds only after real movement or a me
 wall input, an unattended simulation, pause, tutorials, menus, hidden tabs and blur do not manufacture active play.
 Room/active-time deltas are summed once; terminal events contribute remaining deltas only.
 
+## Gameplay milestones
+
+The dashboard shows unique clients and total occurrences for blasted level exits, large max-health potions consumed,
+Jaffar defeated, jetpack activations, rockets intercepted by the level-6 laser, destroyed doors and destroyed wall tiles.
+Doors include gates and exit doors; an exit's two halves count as one door. Wall totals count destroyed tiles, not entire
+connected walls. Tapestries and other barriers are excluded. Potions count when the health upgrade takes effect;
+ordinary healing potions are excluded. Jetpack pickup and deactivation do not count as use.
+
+These are sparse cumulative counters (`exitDoorsDestroyed`, `doorsDestroyed`, `wallsDestroyed`, `healthUpgrades`,
+`jaffarDeaths`, `jetpackUses`, `laserRocketsIntercepted`) in existing v2 summaries. Retries retain the same `$max`
+semantics, and no enemy identity is added. The read API returns `milestones: [{_id, clients, occurrences}]`, using keys
+`exitDoors`, `healthPotions`, `jaffar`, `jetpack`, `laserRockets`, `doors`, `walls`. A client contributes at most once
+to each milestone within the selected period/level/source, even across days and map revisions. Reloads create fresh
+client IDs, so clients approximate game sessions rather than physical people. Raw v1 data uses its existing session ID.
+
+Older compact records support health upgrades and jetpack use, but omitted Jaffar identity and barrier types cannot
+be reconstructed. Historical zero counts do not prove nobody performed an action. Sample generation covers all seven
+milestones; preview and seeding remain restricted to test storage.
+
 **Send gameplay statistics** in the upper-right settings menu defaults to enabled and is saved on the device. Disabling
 stops collection/sending, clears summaries, queues and retry/activity state, and aborts requests where possible.
 Already accepted data cannot be recalled. Mid-level re-enabling creates a fresh client ID and partial observation;

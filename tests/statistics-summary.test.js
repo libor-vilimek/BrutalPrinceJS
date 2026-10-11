@@ -173,3 +173,33 @@ test("UTC days, levels and map revisions have independent counters", () => {
     assert.equal(level.counters.enemyDeaths, 1);
   }
 });
+
+test("milestones retain only cumulative counts, distinguishing exits, gates, walls and level-6 lasers", () => {
+  const accumulator = new StatisticsSummary();
+  const add = (type, payload, levelNumber = 6) => accumulator.add(event(type, payload, { levelNumber }));
+  const key = add("environment_changed", { change: "exit_door_destroyed" });
+  add("environment_changed", { change: "door_destroyed" });
+  add("environment_changed", { change: "wall_destroyed" });
+  add("environment_changed", { change: "barrier_destroyed" });
+  add("environment_changed", { change: "rocket_intercepted" });
+  add("jetpack_changed", { enabled: true });
+  add("jetpack_changed", { enabled: false });
+  add("max_health_changed", { amount: 1 });
+  add("enemy_died", { mechanism: "explosion", weapon: "rocket_launcher", enemyType: "jaffar" });
+  const level = accumulator.snapshot(key);
+  assert.equal(validateSummary(level), null);
+  assert.equal(level.counters.exitDoorsDestroyed, 1);
+  assert.equal(level.counters.doorsDestroyed, 2);
+  assert.equal(level.counters.wallsDestroyed, 1);
+  assert.equal(level.counters.jaffarDeaths, 1);
+  assert.equal(level.counters.healthUpgrades, 1);
+  assert.equal(level.counters.jetpackUses, 1);
+  assert.equal(level.counters.laserRocketsIntercepted, 1);
+  const other = accumulator.snapshot(add("environment_changed", { change: "rocket_intercepted" }, 5));
+  assert.equal(other.counters.laserRocketsIntercepted, undefined);
+  assert.equal(validateSummary({ ...level, levelNumber: 5 }), "inconsistent_totals");
+  assert.equal(
+    validateSummary({ ...level, counters: { ...level.counters, doorsDestroyed: 0 } }),
+    "inconsistent_totals"
+  );
+});

@@ -157,6 +157,70 @@ test(
       const freshId = randomUUID();
       await Promise.all(Array.from({ length: 4 }, () => compact(freshId, [newer])));
       assert.equal(await collection.countDocuments({ clientId: freshId }), 1);
+
+      // A client appearing on multiple days/revisions is one client, while occurrences are summed.
+      const milestoneClient = randomUUID();
+      const secondClient = randomUUID();
+      const milestoneSummary = (day, revision) => {
+        const accumulator = new StatisticsSummary();
+        const base = {
+          ...events[0],
+          mapId: "campaign:6",
+          mapRevision: revision,
+          levelNumber: 6,
+          occurredAt: `${day}T12:00:00.000Z`
+        };
+        let key;
+        for (const change of ["exit_door_destroyed", "door_destroyed", "wall_destroyed", "rocket_intercepted"]) {
+          key = accumulator.add({ ...base, eventType: "environment_changed", payload: { change } });
+        }
+        accumulator.add({ ...base, eventType: "max_health_changed", payload: { amount: 1 } });
+        accumulator.add({ ...base, eventType: "jetpack_changed", payload: { enabled: true } });
+        accumulator.add({ ...base, eventType: "jetpack_changed", payload: { enabled: false } });
+        accumulator.add({
+          ...base,
+          eventType: "enemy_died",
+          payload: { enemyType: "jaffar", mechanism: "explosion", weapon: "rocket_launcher" }
+        });
+        return accumulator.snapshot(key);
+      };
+      const today = new Date().toISOString().slice(0, 10);
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const milestones = [milestoneSummary(today, "milestone-a"), milestoneSummary(yesterday, "milestone-b")];
+      await compact(milestoneClient, milestones);
+      await compact(milestoneClient, milestones); // Replaying counts cannot add occurrences or clients.
+      await compact(secondClient, [milestones[0]]);
+      const milestoneReport = await store.report({ days: 30, level: 6 });
+      for (const row of milestoneReport.milestones) {
+        assert.equal(row.clients, 2, row._id);
+        assert.equal(row.occurrences, row._id === "doors" ? 6 : 3, row._id);
+      }
+      assert.equal(milestoneReport.milestones.length, 7);
+      await collection.updateOne({ clientId: secondClient }, { $set: { sampleData: true } });
+      assert(
+        (await store.report({ days: 30, level: 6, source: "gameplay" })).milestones.every((row) => row.clients === 1)
+      );
+      assert(
+        (await store.report({ days: 30, level: 6, source: "samples" })).milestones.every(
+          (row) => row.clients === 1 && row.occurrences === (row._id === "doors" ? 2 : 1)
+        )
+      );
+      assert.equal((await store.report({ days: 30, level: 99 })).milestones.length, 0);
+      const oldJetpack = structuredClone(milestones[0]);
+      delete oldJetpack.counters.jetpackUses;
+      await compact(randomUUID(), [oldJetpack]);
+      await post([
+        {
+          ...events[0],
+          eventId: randomUUID(),
+          levelNumber: 6,
+          eventType: "jetpack_changed",
+          payload: { enabled: true }
+        }
+      ]);
+      const jets = (await store.report({ days: 30, level: 6 })).milestones.find((row) => row._id === "jetpack");
+      assert.equal(jets.clients, 4);
+      assert.equal(jets.occurrences, 5);
     } catch (error) {
       if (error instanceof assert.AssertionError) {
         throw error;

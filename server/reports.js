@@ -1,5 +1,6 @@
 "use strict";
 const { reportRows } = require("./report-rows");
+const { milestonePipeline } = require("./milestones");
 
 async function readStatistics(collection, { days = 30, level, source = "all" } = {}) {
   const since = new Date(new Date().toISOString().slice(0, 10));
@@ -39,6 +40,7 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
     hpLost: sum(["prince_damaged"], "$payload.hpLost"),
     activeMs: sum(["level_activity", "level_ended"], "$payload.activeMs")
   };
+  const observationCount = { $cond: [{ $eq: ["$eventType", "milestone"] }, 0, { $ifNull: ["$count", 1] }] };
   const [result] = await collection
     .aggregate([
       {
@@ -54,11 +56,12 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
       { $match: match },
       {
         $facet: {
+          milestones: milestonePipeline(),
           dataSources: [
             {
               $group: {
                 _id: { $cond: [{ $eq: ["$sampleData", true] }, "samples", "gameplay"] },
-                events: { $sum: { $ifNull: ["$count", 1] } }
+                events: { $sum: observationCount }
               }
             }
           ],
@@ -79,7 +82,7 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
               }
             }
           ],
-          totals: [{ $group: { _id: null, events: { $sum: { $ifNull: ["$count", 1] } }, ...totals } }],
+          totals: [{ $group: { _id: null, events: { $sum: observationCount }, ...totals } }],
           days: [
             {
               $group: {

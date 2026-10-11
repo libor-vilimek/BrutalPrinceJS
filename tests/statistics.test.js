@@ -6,6 +6,21 @@ const { fixture } = require("./statistics-fixture");
 const { validateEvent } = require("../server/events");
 const { StatisticsSummary } = require("../src/StatisticsSummary");
 
+test("Jaffar death is counted once and opt-out prevents collecting milestones", async () => {
+  const f = fixture();
+  f.enemy.baseCharName = "jaffar";
+  f.enemy.die = f.PrinceJS.Fighter.prototype.die;
+  f.enemy.die(undefined, { mechanism: "explosion", actor: f.kid, weapon: "rocket_launcher" });
+  f.stats.healthChanged(f.enemy, 3, { mechanism: "explosion" });
+  await f.stats.flush();
+  assert.equal(f.requests[0].body.levels[0].counters.jaffarDeaths, 1);
+  f.stats.setEnabled(false);
+  f.stats.record("jetpack_changed", { enabled: true });
+  await f.stats.flush();
+  assert.equal(f.requests.length, 1);
+  assert.equal(f.stats.summaries.levels.size, 0);
+});
+
 test("every event uses the three-second trailing batch delay, preserving events arriving during a request", async () => {
   let release;
   const f = fixture({

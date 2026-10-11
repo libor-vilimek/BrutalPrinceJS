@@ -14,7 +14,13 @@ const COUNTERS = [
   "activeMs",
   "activityCount",
   "healedHP",
-  "healthUpgrades"
+  "healthUpgrades",
+  "exitDoorsDestroyed",
+  "doorsDestroyed",
+  "wallsDestroyed",
+  "jaffarDeaths",
+  "jetpackUses",
+  "laserRocketsIntercepted"
 ];
 const GROUPS = {
   kills: { dimensions: ["cause", "weapon"], values: ["count"] },
@@ -135,6 +141,8 @@ function validateSummary(level) {
     }
   }
   if (
+    (level.counters.exitDoorsDestroyed || 0) > (level.counters.doorsDestroyed || 0) ||
+    (level.levelNumber !== 6 && (level.counters.laserRocketsIntercepted || 0) > 0) ||
     (level.counters.enemyDeaths || 0) !== level.kills.reduce((sum, row) => sum + (row.count || 0), 0) ||
     (level.counters.princeDeaths || 0) !== level.deaths.reduce((sum, row) => sum + (row.count || 0), 0) ||
     (level.counters.hpLost || 0) !== level.damage.reduce((sum, row) => sum + (row.hpLost || 0), 0)

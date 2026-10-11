@@ -1,4 +1,5 @@
 "use strict";
+const { MILESTONES } = require("./milestones");
 
 // Expand groups, never individual occurrences: 10,000 kills remain one aggregation row.
 function reportRows() {
@@ -12,6 +13,7 @@ function reportRows() {
         mapRevision: 1,
         levelNumber: 1,
         sampleData: 1,
+        clientId: { $ifNull: ["$clientId", "$sessionId"] },
         receivedAt: {
           $cond: [{ $eq: ["$schemaVersion", 2] }, { $dateFromString: { dateString: "$day" } }, "$receivedAt"]
         },
@@ -52,6 +54,41 @@ function reportRows() {
                   location: "$$g.v.location",
                   payload: { mechanism: "$$g.v.cause", source: "$$g.v.source", weapon: "$$g.v.weapon" }
                 }),
+                Object.entries(MILESTONES).map(([metric, counter]) => ({
+                  eventType: "milestone",
+                  count:
+                    metric === "jetpack"
+                      ? {
+                          $ifNull: [
+                            `$counters.${counter}`,
+                            {
+                              $reduce: {
+                                input: { $objectToArray: { $ifNull: ["$extras", {}] } },
+                                initialValue: 0,
+                                in: {
+                                  $add: [
+                                    "$$value",
+                                    {
+                                      $cond: [
+                                        {
+                                          $and: [
+                                            { $eq: ["$$this.v.type", "jetpack_changed"] },
+                                            { $eq: ["$$this.v.value", "true"] }
+                                          ]
+                                        },
+                                        "$$this.v.count",
+                                        0
+                                      ]
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      : { $ifNull: [`$counters.${counter}`, 0] },
+                  payload: { metric }
+                })),
                 rows("weapons", {
                   eventType: "weapon_used",
                   count: 1,
@@ -73,6 +110,7 @@ function reportRows() {
             mapRevision: "$mapRevision",
             levelNumber: "$levelNumber",
             sampleData: "$sampleData",
+            clientId: "$clientId",
             receivedAt: "$receivedAt"
           },
           "$reportingRows"

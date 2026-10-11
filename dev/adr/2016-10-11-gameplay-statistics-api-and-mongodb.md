@@ -104,6 +104,13 @@ their own collection. The default test collection and normal gameplay storage re
 
 ## Consequences and validation
 
+Gameplay milestones use sparse cumulative counters in the existing summary: blasted exit doors, all destroyed doors
+(gates plus exits), wall tiles, max-health potions, Jaffar deaths, jetpack activations and level-6 laser interceptions.
+The dashboard reports both total occurrences and distinct clients, deduplicating clients across days/revisions/levels
+within the selected filters. A fresh page still receives a fresh client ID; these are not exact unique-person counts.
+Health-upgrade and jetpack observations from older compact documents remain usable; omitted enemy/barrier details
+cannot be backfilled. Only successful gameplay outcomes count; no gameplay rules or transport semantics change.
+
 Repeated kills and hits change numeric counters instead of adding documents. Retries need no per-event deduplication
 history. We deliberately give up exact enemy histories, individual attempt reconstruction, causal event links and
 precise per-hit chronology. Guard/trap comparisons, death locations, weapon counts and daily totals remain available.

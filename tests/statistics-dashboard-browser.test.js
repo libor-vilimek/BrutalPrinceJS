@@ -24,6 +24,14 @@ test(
     await page.goto(base + "/statistics");
     await page.waitForFunction(() => document.getElementById("status").textContent.includes("updated"));
     assert.equal(await page.locator(".metric").count(), 5);
+    assert.equal(await page.locator("#milestones .weapon").count(), 7);
+    for (const milestone of data.milestones || []) {
+      const card = page.locator(`[data-milestone="${milestone._id}"]`);
+      assert.equal(await card.locator("strong").textContent(), new Intl.NumberFormat("en").format(milestone.clients));
+      assert(
+        (await card.locator("p").textContent()).startsWith(new Intl.NumberFormat("en").format(milestone.occurrences))
+      );
+    }
     assert.equal(await page.locator("#sample").isVisible(), true);
     assert.equal(await page.locator("#storage").textContent(), "testbrutalprince.test_dashboard_events");
     assert.equal(
@@ -33,6 +41,18 @@ test(
     assert((await page.locator("#guards .rank").count()) > 0);
     assert((await page.locator("#traps .rank").count()) > 0);
     assert(await page.locator("#trend svg").isVisible());
+    const milestones = ["exitDoors", "healthPotions", "jaffar", "jetpack", "laserRockets", "doors", "walls"].map(
+      (_id, index) => ({ _id, clients: index + 2, occurrences: index + 12 })
+    );
+    await page.route("**/api/v1/statistics?**", (route) => route.fulfill({ json: { ...data, milestones } }));
+    await page.locator("#refresh").click();
+    await page.waitForFunction(() => document.querySelector('[data-milestone="exitDoors"] strong').textContent === "2");
+    for (const row of milestones) {
+      const card = page.locator(`[data-milestone="${row._id}"]`);
+      assert.equal(await card.locator("strong").textContent(), String(row.clients));
+      assert((await card.locator("p").textContent()).startsWith(String(row.occurrences)));
+    }
+    await page.unroute("**/api/v1/statistics?**");
     await page.locator("#days").selectOption("7");
     await page.waitForFunction(() => document.getElementById("status").textContent.includes("updated"));
     await page.locator("#level").selectOption("3");
@@ -93,7 +113,8 @@ test(
           traps: [],
           weapons: [],
           latestDeaths: [],
-          dataSources: []
+          dataSources: [],
+          milestones: []
         }
       })
     );

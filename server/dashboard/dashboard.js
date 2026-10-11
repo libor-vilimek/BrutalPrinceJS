@@ -216,6 +216,29 @@ function render(data) {
     weapons.append(item);
   }
   const select = byId("level");
+  const milestones = byId("milestones");
+  milestones.replaceChildren();
+  const milestoneRows = new Map((data.milestones || []).map((row) => [row._id, row]));
+  for (const [key, label, unit] of [
+    ["exitDoors", "Blasted the level exit", "exit doors destroyed"],
+    ["healthPotions", "Drank a max-health potion", "potions consumed"],
+    ["jaffar", "Defeated Jaffar", "Jaffar defeats"],
+    ["jetpack", "Used the jetpack", "activations"],
+    ["laserRockets", "Rocket intercepted · Level 6", "rockets intercepted"],
+    ["doors", "Destroyed doors", "doors destroyed"],
+    ["walls", "Destroyed walls", "wall tiles destroyed"]
+  ]) {
+    const row = milestoneRows.get(key) || {};
+    const card = element("div", undefined, "weapon");
+    card.dataset.milestone = key;
+    card.append(
+      element("h3", label),
+      element("strong", number(row.clients)),
+      element("span", " clients", "subtle"),
+      element("p", `${number(row.occurrences)} ${unit}`)
+    );
+    milestones.append(card);
+  }
   const selected = select.value;
   if (!selected) {
     select.replaceChildren(element("option", "All levels"));

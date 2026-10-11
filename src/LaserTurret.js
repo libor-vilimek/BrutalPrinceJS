@@ -2,6 +2,7 @@
 
 // The shadow's gate in the original level 6 has its own point defence.
 PrinceJS.LaserTurret = function (delegate, gate) {
+  this.game = delegate.game;
   this.level = delegate.level;
   this.gate = gate;
   this.room = gate.room;
@@ -38,6 +39,9 @@ PrinceJS.LaserTurret.prototype = {
     this.shots.push({ x: rocket.x, y: rocket.y, age: 0 });
     this.draw();
     // Disintegrate the rocket without its damaging blast or a gate collision.
+    if (this.level.number === 6 && PrinceJS.currentLevel === 6) {
+      this.game?.statistics?.record("environment_changed", { change: "rocket_intercepted" });
+    }
     return true;
   },
 

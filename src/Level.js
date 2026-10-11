@@ -112,7 +112,7 @@ PrinceJS.Level.prototype = {
       }
       this.exitDoorOpen = true;
       this.game?.statistics?.record("environment_changed", {
-        change: "barrier_destroyed",
+        change: "exit_door_destroyed",
         tile: this.game?.statistics.tile(tile)
       });
       return true;
@@ -121,7 +121,12 @@ PrinceJS.Level.prototype = {
       return false;
     }
     this.game?.statistics?.record("environment_changed", {
-      change: "barrier_destroyed",
+      change:
+        tile.element === PrinceJS.Level.TILE_GATE
+          ? "door_destroyed"
+          : tile.element === PrinceJS.Level.TILE_WALL
+            ? "wall_destroyed"
+            : "barrier_destroyed",
       tile: this.game?.statistics.tile(tile)
     });
 

@@ -105,6 +105,9 @@ StatisticsSummary.prototype = {
         break;
       case "enemy_died":
         increment("enemyDeaths");
+        if (p.enemyType === "jaffar") {
+          increment("jaffarDeaths");
+        }
         group("kills", { cause: p.mechanism, weapon: p.weapon || "unknown" }, { count: 1 });
         break;
       case "prince_damaged":
@@ -139,6 +142,25 @@ StatisticsSummary.prototype = {
         break;
       case "max_health_changed":
         increment("healthUpgrades", p.amount || 0);
+        break;
+      case "environment_changed":
+        if (p.change === "exit_door_destroyed") {
+          increment("exitDoorsDestroyed");
+          increment("doorsDestroyed");
+        } else if (p.change === "door_destroyed") {
+          increment("doorsDestroyed");
+        } else if (p.change === "wall_destroyed") {
+          increment("wallsDestroyed");
+        } else if (p.change === "rocket_intercepted" && event.levelNumber === 6) {
+          increment("laserRocketsIntercepted");
+        }
+        group("extras", { type: event.eventType, value: p.change }, { count: 1 });
+        break;
+      case "jetpack_changed":
+        if (p.enabled === true) {
+          increment("jetpackUses");
+        }
+        group("extras", { type: event.eventType, value: String(p.enabled) }, { count: 1 });
         break;
       default:
         group(

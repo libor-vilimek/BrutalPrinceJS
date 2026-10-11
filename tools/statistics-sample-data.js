@@ -10,7 +10,7 @@ function sampleEvents(attempts = 180) {
   const random = (max) => Math.floor(Math.random() * max);
   const weapons = ["twin_torches", "molotov", "minigun", "rocket_launcher", "whip"];
   for (let attempt = 0; attempt < attempts; attempt++) {
-    const levelNumber = 1 + random(8);
+    const levelNumber = 1 + (attempt % 13);
     const attemptId = randomUUID();
     const partialAttempt = attempt % 15 === 0;
     const when = new Date(Date.now() - random(14 * 86400) * 1000);
@@ -50,7 +50,7 @@ function sampleEvents(attempts = 180) {
       const payload = {
         guardId: guard,
         victimInstanceId: `guard:${guard}`,
-        enemyType: "guard",
+        enemyType: levelNumber === 13 && guard === 1 ? "jaffar" : "guard",
         spawnLocation,
         healthBefore: 3,
         healthAfter: 0,
@@ -71,6 +71,19 @@ function sampleEvents(attempts = 180) {
       push("enemy_died", { ...payload, damageEventId: damageId });
     }
     push("weapon_used", { weapon, shots: kills + random(10), hits: kills });
+    push("environment_changed", { change: "wall_destroyed" });
+    push("environment_changed", { change: "door_destroyed" });
+    if (attempt % 2 === 0) {
+      push("environment_changed", { change: "exit_door_destroyed" });
+      push("max_health_changed", { amount: 1, health: 11, maxHealth: 11 });
+    }
+    if (levelNumber >= 12) {
+      push("jetpack_changed", { enabled: true });
+      push("jetpack_changed", { enabled: false });
+    }
+    if (levelNumber === 6) {
+      push("environment_changed", { change: "rocket_intercepted" });
+    }
     const guardId = 1 + random(4);
     const source = { kind: "guard", guardId, enemyType: "guard", ...spawnLocation, spawnLocation };
     const lost = 1 + random(4);
