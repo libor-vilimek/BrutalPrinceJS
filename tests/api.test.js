@@ -127,7 +127,10 @@ test("statistics dashboard is opt-in and local, with bounded filters and sanitiz
   assert((await page.text()).includes("Every death tells a story."));
   const response = await fetch(url + "/api/v1/statistics?days=7&level=3");
   assert.deepEqual(await response.json(), { totals: { events: 42 }, sampleData: true });
-  assert.deepEqual(options, { days: 7, level: 3 });
+  assert.deepEqual(options, { days: 7, level: 3, source: "all" });
+  await fetch(url + "/api/v1/statistics?source=gameplay");
+  assert.equal(options.source, "gameplay");
+  assert.equal((await fetch(url + "/api/v1/statistics?source=unknown")).status, 400);
   assert.equal((await fetch(url + "/api/v1/statistics?days=999")).status, 400);
   assert.equal((await fetch(url + "/api/v1/statistics?level=abc")).status, 400);
   assert.equal(

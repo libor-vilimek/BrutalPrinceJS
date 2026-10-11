@@ -93,15 +93,17 @@ function createApp({
     if (ctx.path === "/api/v1/statistics") {
       const days = Number(ctx.query.days || 30);
       const level = ctx.query.level === undefined ? undefined : Number(ctx.query.level);
+      const source = ctx.query.source || "all";
       if (
         ![7, 30, 90].includes(days) ||
+        !["all", "gameplay", "samples"].includes(source) ||
         (level !== undefined && (!Number.isSafeInteger(level) || level < 1 || level > 100000))
       ) {
         ctx.status = 400;
         ctx.body = { error: "invalid_filters" };
         return;
       }
-      ctx.body = { ...(await store.report({ days, level })), sampleData };
+      ctx.body = { ...(await store.report({ days, level, source })), sampleData };
     } else {
       const file = files[ctx.path];
       ctx.type = path.extname(file);

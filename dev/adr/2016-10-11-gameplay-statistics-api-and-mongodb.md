@@ -306,7 +306,9 @@ Deployment access logs are separate from gameplay documents and configured by th
 
 The local server exposes `/statistics` and `GET /api/v1/statistics` for read-only MongoDB aggregations. The page shows
 Prince/enemy deaths, attempts and completions, active play, daily trends, level performance, death causes, dangerous
-guards and traps, and weapon usage. Filter by 7/30/90 days and level. Keep map revisions separate in rankings; damage
+guards and traps, and weapon usage. Filter by 7/30/90 days, level and actual gameplay versus generated samples. Display
+the database and collection, source counts and recent Prince deaths. Refresh every 15 seconds while visible and on
+return to the tab, so acknowledged background batches appear without a manual reload. Keep map revisions separate in rankings; damage
 queries sum only damage events, death queries count only death events. Completion totals exclude partial observations.
 
 The first dashboard is local-only: socket and host checks restrict it to loopback, and Heroku disables the routes.
@@ -315,7 +317,7 @@ Remote authenticated dashboard access is outside this change. No client connecti
 `statistics:seed`, `statistics:wipe`, `statistics:reset` and `statistics:preview` operate only on the fixed
 `testbrutalprince.test_dashboard_events` collection. Seed sends randomized valid events through the real HTTP API,
 then backdates receipt timestamps explicitly for synthetic chart history. Wipe removes just that collection; reset
-wipes and seeds it. Preview binds to loopback, labels its data as samples and leaves the normal database untouched.
+wipes and seeds it. Preview binds to loopback, labels its test storage, separates samples from actual gameplay and leaves the normal database untouched.
 Independent integration tests use fresh `test_gameplay_events_<random-id>` collections and clean up only their own data.
 
 ## Alternatives considered

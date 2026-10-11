@@ -25,6 +25,7 @@ test(
     await page.waitForFunction(() => document.getElementById("status").textContent.includes("updated"));
     assert.equal(await page.locator(".metric").count(), 5);
     assert.equal(await page.locator("#sample").isVisible(), true);
+    assert.equal(await page.locator("#storage").textContent(), "testbrutalprince.test_dashboard_events");
     assert.equal(
       await page.locator(".metric-value").first().textContent(),
       new Intl.NumberFormat("en").format(data.totals.princeDeaths)
@@ -32,9 +33,6 @@ test(
     assert((await page.locator("#guards .rank").count()) > 0);
     assert((await page.locator("#traps .rank").count()) > 0);
     assert(await page.locator("#trend svg").isVisible());
-    if (process.env.DASHBOARD_SCREENSHOT) {
-      await page.screenshot({ path: process.env.DASHBOARD_SCREENSHOT, fullPage: true });
-    }
     await page.locator("#days").selectOption("7");
     await page.waitForFunction(() => document.getElementById("status").textContent.includes("updated"));
     await page.locator("#level").selectOption("3");
@@ -49,6 +47,28 @@ test(
       await page.locator(".metric-value").first().textContent(),
       new Intl.NumberFormat("en").format(expected.totals.princeDeaths)
     );
+    await page.locator("#source").selectOption("gameplay");
+    const gameplay = await (await fetch(base + "/api/v1/statistics?days=7&level=3&source=gameplay")).json();
+    await page.waitForFunction(
+      () =>
+        document.getElementById("status").textContent.includes("updated") &&
+        !document.getElementById("data-counts").textContent.includes("sample")
+    );
+    assert.equal(
+      await page.locator(".metric-value").first().textContent(),
+      new Intl.NumberFormat("en").format(gameplay.totals.princeDeaths)
+    );
+    await page.locator("#level").selectOption("");
+    const allGameplay = await (await fetch(base + "/api/v1/statistics?days=7&source=gameplay")).json();
+    await page.waitForFunction(
+      (expected) =>
+        document.getElementById("status").textContent.includes("updated") &&
+        document.querySelector(".metric-value").textContent === expected,
+      new Intl.NumberFormat("en").format(allGameplay.totals.princeDeaths)
+    );
+    if (process.env.DASHBOARD_SCREENSHOT) {
+      await page.screenshot({ path: process.env.DASHBOARD_SCREENSHOT });
+    }
     await page.setViewportSize({ width: 390, height: 844 });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     // A filtered period with no observations must still render an explicit empty state.
@@ -71,12 +91,25 @@ test(
           causes: [],
           guards: [],
           traps: [],
-          weapons: []
+          weapons: [],
+          latestDeaths: [],
+          dataSources: []
         }
       })
     );
     await page.locator("#refresh").click();
     await page.waitForFunction(() => document.querySelector("#trend .empty"));
+    // A background batch arriving after the dashboard loaded must become visible without a manual refresh.
+    await page.clock.install();
+    await page.unroute("**/api/v1/statistics?**");
+    await page.route("**/api/v1/statistics?**", (route) =>
+      route.fulfill({ json: { ...data, totals: { ...data.totals, princeDeaths: data.totals.princeDeaths + 1 } } })
+    );
+    await page.clock.fastForward(15000);
+    await page.waitForFunction(
+      (expected) => document.querySelector(".metric-value").textContent === expected,
+      new Intl.NumberFormat("en").format(data.totals.princeDeaths + 1)
+    );
     assert.deepEqual(errors, []);
   }
 );

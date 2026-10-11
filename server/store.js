@@ -53,7 +53,10 @@ function createEventStore({ uri, database, retentionDays = 90, collectionName = 
       return persistBatch(await collection(), events, retentionDays, droppedEventCount);
     },
     async report(options) {
-      return readStatistics(await collection(), options);
+      return {
+        ...(await readStatistics(await collection(), options)),
+        storage: { database, collection: collectionName }
+      };
     },
     async close() {
       if (client) {

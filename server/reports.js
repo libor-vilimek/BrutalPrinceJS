@@ -1,7 +1,13 @@
 "use strict";
 
-async function readStatistics(collection, { days = 30, level } = {}) {
+async function readStatistics(collection, { days = 30, level, source = "all" } = {}) {
   const match = { receivedAt: { $gte: new Date(Date.now() - days * 86400000) } };
+  if (source === "samples") {
+    match.sampleData = true;
+  }
+  if (source === "gameplay") {
+    match.sampleData = { $ne: true };
+  }
   if (level !== undefined) {
     match.levelNumber = level;
   }
@@ -35,6 +41,25 @@ async function readStatistics(collection, { days = 30, level } = {}) {
       { $match: match },
       {
         $facet: {
+          dataSources: [
+            { $group: { _id: { $cond: [{ $eq: ["$sampleData", true] }, "samples", "gameplay"] }, events: { $sum: 1 } } }
+          ],
+          latestDeaths: [
+            { $match: { eventType: "prince_died" } },
+            { $sort: { receivedAt: -1, sequence: -1 } },
+            { $limit: 5 },
+            {
+              $project: {
+                _id: 0,
+                levelNumber: 1,
+                receivedAt: 1,
+                location: 1,
+                sampleData: 1,
+                "payload.mechanism": 1,
+                "payload.source": 1
+              }
+            }
+          ],
           totals: [{ $group: { _id: null, events: { $sum: 1 }, ...totals } }],
           days: [
             {

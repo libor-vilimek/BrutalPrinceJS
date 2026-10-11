@@ -70,6 +70,9 @@ and untrusted, not an authoritative competitive leaderboard.
 ## Local statistics page
 
 On the normal local server, open `http://localhost:8080/statistics` to inspect the configured gameplay collection.
+The page displays the exact database and collection it reads. **Play game** opens the game on that same server, whose
+event API writes to that collection. The dashboard refreshes every 15 seconds while visible and immediately when you
+return to the tab; the refresh button also works. Allow for the game's three-second batch delay before expecting a death.
 The dashboard shows key counts, daily death trends, level completion, actual guard damage, dangerous traps and weapon
 performance. Period and level filters run MongoDB aggregations; guard/trap rankings keep map revisions separate.
 Completion compares full starts and completions observed during the selected period, not a tracked cohort; attempts
@@ -82,7 +85,11 @@ npm run statistics:reset
 npm run statistics:preview
 ```
 
-Open `http://127.0.0.1:8081/statistics`. Preview data is visibly labeled **SAMPLE DATA**. Set `STATISTICS_PREVIEW_PORT`
+Open `http://127.0.0.1:8081/statistics`. Preview storage is visibly labeled **TEST DATABASE**. The **Data** filter separates
+**Gameplay only** (events sent by actual play) from **Samples only** (generated data), or shows both together. Source
+counts and the most recent Prince deaths make it possible to confirm a local death without searching through samples.
+Normal gameplay uses `brutalprince.brutalprince`; preview gameplay uses `testbrutalprince.test_dashboard_events`.
+Set `STATISTICS_PREVIEW_PORT`
 to choose another port. The preview serves the game too, so local play can send additional events into the same test
 collection. Stop the server with Ctrl+C. These commands load credentials from ignored `.env` without printing them.
 

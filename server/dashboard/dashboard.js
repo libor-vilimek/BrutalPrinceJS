@@ -89,6 +89,32 @@ function ranks(id, rows, details, primary) {
 }
 function render(data) {
   byId("sample").hidden = !data.sampleData;
+  byId("storage").textContent = data.storage ? `${data.storage.database}.${data.storage.collection}` : "";
+  byId("data-counts").textContent = (data.dataSources || [])
+    .map((row) => `${number(row.events)} ${row._id === "samples" ? "sample" : "gameplay"} observations`)
+    .join(" · ");
+  const deathsTable = byId("latest-deaths");
+  deathsTable.replaceChildren();
+  for (const death of data.latestDeaths || []) {
+    const row = element("tr");
+    for (const value of [
+      new Date(death.receivedAt).toLocaleString(),
+      `Level ${death.levelNumber}`,
+      title(death.payload.mechanism),
+      death.location.roomId,
+      death.sampleData ? "Sample" : "Gameplay"
+    ]) {
+      row.append(element("td", value));
+    }
+    deathsTable.append(row);
+  }
+  if (!deathsTable.children.length) {
+    const row = element("tr");
+    const cell = element("td", "No Prince deaths in this selection.");
+    cell.colSpan = 5;
+    row.append(cell);
+    deathsTable.append(row);
+  }
   const t = data.totals;
   const metrics = byId("metrics");
   metrics.replaceChildren();
@@ -205,7 +231,7 @@ async function refresh() {
   const current = ++request;
   byId("status").textContent = "Loading statistics…";
   try {
-    const query = new window.URLSearchParams({ days: byId("days").value });
+    const query = new window.URLSearchParams({ days: byId("days").value, source: byId("source").value });
     if (byId("level").value) {
       query.set("level", byId("level").value);
     }
@@ -229,4 +255,20 @@ async function refresh() {
 byId("refresh").addEventListener("click", refresh);
 byId("days").addEventListener("change", refresh);
 byId("level").addEventListener("change", refresh);
+byId("source").addEventListener("change", refresh);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    refresh();
+  }
+});
+window.addEventListener("focus", () => {
+  if (!document.hidden) {
+    refresh();
+  }
+});
+window.setInterval(() => {
+  if (!document.hidden) {
+    refresh();
+  }
+}, 15000);
 refresh();

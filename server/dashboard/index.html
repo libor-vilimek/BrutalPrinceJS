@@ -31,14 +31,46 @@
             >Level<select id="level">
               <option value="">All levels</option>
             </select></label
+          ><label
+            >Data<select id="source">
+              <option value="all">All observations</option>
+              <option value="gameplay">Gameplay only</option>
+              <option value="samples">Samples only</option>
+            </select></label
           ><button id="refresh" aria-label="Refresh statistics">↻</button>
         </div>
       </div>
       <div class="status">
         <span class="dot"></span><span id="status" role="status">Loading statistics…</span
-        ><span id="sample" hidden>SAMPLE DATA</span>
+        ><span id="sample" hidden>TEST DATABASE</span>
       </div>
+      <p class="source-info">
+        <span id="storage"></span><span id="data-counts"></span><span>Refreshes every 15s while visible</span>
+      </p>
       <section id="metrics" class="metrics" aria-label="Key statistics"></section>
+      <section class="panel level-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">LATEST OBSERVATIONS</p>
+            <h2>Recent Prince deaths</h2>
+          </div>
+          <span class="subtle">Confirmed in MongoDB</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Stored at</th>
+                <th>Level</th>
+                <th>Cause</th>
+                <th>Room</th>
+                <th>Data</th>
+              </tr>
+            </thead>
+            <tbody id="latest-deaths"></tbody>
+          </table>
+        </div>
+      </section>
       <div class="grid two">
         <section class="panel trend">
           <div class="panel-heading">

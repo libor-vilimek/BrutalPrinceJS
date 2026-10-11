@@ -257,6 +257,8 @@ Implementační rozhodnutí pro menu: bez zobrazeného dotykového panelu trvá 
 - **STATS-06:** Implementační rozhodnutí: sběr je výchozí zapnutý, surové události se uchovávají 90 dní. Uživatelem určené běžné úložiště je databáze `brutalprince`, kolekce `brutalprince`; databázi lze změnit proměnnou `MONGODB_DATABASE`. Statistiky obsahují také místnosti, zbraně, vybavení, léčení, tutoriály a změny prostředí. Realistické databázové testy jsou výslovně spouštěné a používají uživatelem určenou databázi `testbrutalprince` (volitelně `MONGODB_TEST_DATABASE`), vlastní čerstvou kolekci s prefixem `test_` a uklízejí jen tuto kolekci. Nejde o změnu pravidel soubojů, animací, inventáře, zvuku či postupu mezi levely.
 - **STATS-07:** Přehledná stránka statistik zobrazuje důležité souhrny, příčiny smrtí, levely, nebezpečné strážce a pasti, zbraně a aktivní hraní. Lokální náhled lze na požádání spustit na localhostu. Skripty umí vymazat testovací kolekci a vytvořit náhodná ukázková data, která projdou skutečným API a lze je prohlížet. Implementační rozhodnutí: dashboard je výchozí dostupný jen na loopbacku a vypnutý na Heroku; ukázkové skripty mají pevné úložiště `testbrutalprince.test_dashboard_events`, reset maže jen tuto kolekci a náhled označuje ukázková data.
 
+- **STATS-08:** Implementační rozhodnutí pro ověření lokálního sběru: dashboard ukazuje konkrétní databázi a kolekci, odděluje skutečné hraní od vygenerovaných ukázek filtrem a zobrazuje poslední smrti prince potvrzené v databázi. Viditelná stránka se obnovuje každých 15 sekund i po návratu na kartu; ruční obnovení zůstává dostupné. Hra i dashboard na stejném serveru používají stejnou kolekci.
+
 ## Nahrazená rozhodnutí
 
 Tento přehled brání návratu ke starším požadavkům. Nejde o aktivní alternativy.

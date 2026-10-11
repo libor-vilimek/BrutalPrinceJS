@@ -91,6 +91,20 @@ test(
       assert.equal(report.totals.starts, 1);
       assert.equal(report.weapons.find((row) => row._id === "molotov").kills, 1);
       assert.equal((await store.report({ days: 7, level: 99 })).totals.events, 0);
+      f.kid.die = f.PrinceJS.Fighter.prototype.die;
+      f.kid.die(undefined, { mechanism: "sword", actor: f.enemy, weapon: "sword" });
+      await post(JSON.parse(JSON.stringify(f.events())));
+      const actual = await store.report({ days: 30, source: "gameplay" });
+      assert.equal(actual.totals.princeDeaths, 1);
+      assert.equal(actual.latestDeaths[0].payload.mechanism, "sword");
+      assert.deepEqual(actual.storage, { database, collection: collectionName });
+      const sample = { ...activity, eventId: randomUUID() };
+      await post([sample]);
+      await collection.updateOne({ eventId: sample.eventId }, { $set: { sampleData: true } });
+      const samples = await store.report({ days: 30, source: "samples" });
+      assert.equal(samples.totals.events, 1);
+      assert.equal(samples.totals.princeDeaths, 0);
+      assert.equal((await store.report({ days: 30, source: "gameplay" })).totals.events, actual.totals.events);
     } catch (error) {
       if (error instanceof assert.AssertionError) {
         throw error;
