@@ -18,7 +18,7 @@ for (const file of readdirSync(sourceRoot)
   hash.update(file).update(readFileSync(path.join(sourceRoot, file)));
 }
 const gameVersion = process.env.SOURCE_VERSION || hash.digest("hex");
-const app = createApp({ store, publicOrigin: process.env.PUBLIC_ORIGIN, gameVersion, dashboard: !process.env.DYNO });
+const app = createApp({ store, publicOrigin: process.env.PUBLIC_ORIGIN, gameVersion });
 // Heroku terminates TLS and supplies one trusted forwarding hop.
 if (process.env.DYNO) {
   app.proxy = true;

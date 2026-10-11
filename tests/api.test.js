@@ -3,6 +3,8 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const http = require("node:http");
+const path = require("node:path");
+const { spawn } = require("node:child_process");
 const { createApp } = require("../server/app");
 const { fixture } = require("./statistics-fixture");
 const { validateEvent } = require("../server/events");
@@ -146,13 +148,12 @@ test("validation rejects injected fields, invalid health deltas, source coordina
   );
 });
 
-test("statistics dashboard is opt-in and local, with bounded filters and sanitized failures", async (t) => {
-  const disabled = await server(t);
+test("statistics dashboard is public by default, with bounded filters and an explicit disable option", async (t) => {
+  const disabled = await server(t, { dashboard: false });
   assert.equal((await fetch(disabled + "/statistics")).status, 404);
   assert.equal((await fetch(disabled + "/api/v1/statistics")).status, 404);
   let options;
   const url = await server(t, {
-    dashboard: true,
     sampleData: true,
     store: {
       report: async (value) => {
@@ -175,15 +176,60 @@ test("statistics dashboard is opt-in and local, with bounded filters and sanitiz
   assert.equal((await fetch(url + "/api/v1/statistics?level=abc")).status, 400);
   assert.equal(
     (await fetch(url + "/api/v1/statistics", { headers: { Origin: "https://foreign.example" } })).status,
-    403
+    200
   );
-  const foreignHostStatus = await new Promise((resolve, reject) => {
-    http
-      .get(url + "/statistics", { headers: { Host: "foreign.example" } }, (response) => {
-        response.resume();
-        resolve(response.statusCode);
-      })
-      .on("error", reject);
-  });
-  assert.equal(foreignHostStatus, 404);
+  // Public hostnames and navigation from another site must work without credentials.
+  for (const route of [
+    "/statistics",
+    "/statistics/",
+    "/statistics/dashboard.js",
+    "/statistics/style.css",
+    "/api/v1/statistics"
+  ]) {
+    const publicHostStatus = await new Promise((resolve, reject) => {
+      http
+        .get(url + route, { headers: { Host: "brutalprince.com", "Sec-Fetch-Site": "cross-site" } }, (response) => {
+          response.resume();
+          resolve(response.statusCode);
+        })
+        .on("error", reject);
+    });
+    assert.equal(publicHostStatus, 200, route);
+  }
 });
+
+test(
+  "Heroku server exposes the dashboard at the public hostname without authentication",
+  { timeout: 10000 },
+  async (t) => {
+    const child = spawn(process.execPath, [path.resolve(__dirname, "../server/index.js")], {
+      windowsHide: true,
+      env: {
+        ...process.env,
+        PORT: "0",
+        DYNO: "web.1",
+        PUBLIC_ORIGIN: "https://brutalprince.com",
+        mongoconnectionurl: "",
+        MONGODB_URI: ""
+      }
+    });
+    t.after(() => child.kill());
+    const port = await new Promise((resolve, reject) => {
+      let output = "";
+      child.stdout.on("data", (data) => {
+        output += data.toString();
+        const ready = output.match(/http:\/\/localhost:(\d+)/);
+        if (ready) {
+          resolve(Number(ready[1]));
+        }
+      });
+      child.once("error", reject);
+      child.once("exit", (code) => reject(new Error(`Server exited before listening: ${code}`)));
+    });
+    const response = await fetch(`http://127.0.0.1:${port}/statistics`, {
+      headers: { Host: "brutalprince.com", "X-Forwarded-Proto": "https", "Sec-Fetch-Site": "cross-site" }
+    });
+    assert.equal(response.status, 200);
+    assert((await response.text()).includes("Every death tells a story."));
+  }
+);

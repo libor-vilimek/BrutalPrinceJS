@@ -92,7 +92,9 @@ filters periods, levels and gameplay versus samples. It shows the database/colle
 while visible and on return. Date filters include complete UTC play days. Completion compares observed starts and
 completions in the period, not a cohort of individually tracked attempts.
 
-Dashboard routes are loopback-only and disabled on Heroku. The preview serves both game and statistics on localhost;
+Dashboard routes and the read-only reporting API are public without authentication, including on Heroku. This replaces
+the earlier local-only decision at the user's request. Public hostnames and incoming links from other websites work;
+gameplay write requests retain origin checks and validation. The preview serves both game and statistics on localhost;
 they share `testbrutalprince.test_dashboard_events`. The `seed` script sends random compact summaries through the real
 API, `wipe` drops only this fixed collection, `reset` wipes/seeds it, and `preview` opens existing data without deleting
 or generating anything. All generated data is explicitly marked as samples.

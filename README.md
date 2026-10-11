@@ -103,8 +103,8 @@ the production collection. These network tests are opt-in and do not run during 
 To view statistics locally, open `/statistics` on the local Koa server. For a sample preview, run
 `npm run statistics:reset` and then `npm run statistics:preview`, and open `http://127.0.0.1:8081/statistics`.
 Reset fills only `testbrutalprince.test_dashboard_events` with random observations through the API. Use
-`statistics:seed` to add samples or `statistics:wipe` to empty that collection. The dashboard stays local and is disabled
-on Heroku. See [preview details](docs/statistics.md#local-statistics-page).
+`statistics:seed` to add samples or `statistics:wipe` to empty that collection. The dashboard and reporting API are public,
+including on Heroku: open `/statistics` on the deployed game. See [preview details](docs/statistics.md#statistics-page-and-local-preview).
 
 ## Controls
 

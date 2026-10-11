@@ -36,7 +36,7 @@ function createApp({
   rateLimit = 120,
   now = Date.now,
   gameVersion = "development",
-  dashboard = false,
+  dashboard = true,
   sampleData = false
 } = {}) {
   const app = new Koa();
@@ -66,18 +66,8 @@ function createApp({
       await next();
       return;
     }
-    // Access is checked against the actual socket, never an untrusted forwarding header.
-    const local = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(ctx.req.socket.remoteAddress);
-    const localHost = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(ctx.host);
-    if (!dashboard || !local || !localHost) {
+    if (!dashboard) {
       ctx.status = 404;
-      return;
-    }
-    if (
-      (ctx.get("Origin") && ctx.get("Origin") !== `${ctx.protocol}://${ctx.host}`) ||
-      ctx.get("Sec-Fetch-Site") === "cross-site"
-    ) {
-      ctx.status = 403;
       return;
     }
     ctx.set("Cache-Control", "no-store");

@@ -93,9 +93,10 @@ Summaries expire 90 days after the end of their UTC play day; MongoDB TTL cleanu
 retain expiry 90 days after receipt. No names, emails, keystroke logs, screenshots, full URLs, permanent player IDs, IPs
 or user-agent strings are stored. Host access logs are separate. These observations are incomplete and untrusted.
 
-## Local statistics page
+## Statistics page and local preview
 
-Open `http://localhost:8080/statistics` on the normal local server to inspect **`brutalprince.brutalprince`**.
+The statistics page and read-only reporting API are public without a login, including on Heroku. Open `/statistics`
+on the deployed game, or `http://localhost:8080/statistics` locally, to inspect **`brutalprince.brutalprince`**.
 The page displays its exact database and collection. **Play game** uses that server's same collection. It shows deaths,
 causes, daily trends, level completion, actual guard damage, traps, weapons and active play, plus recent Prince death
 groups and their repeat counts. Period filters include complete UTC play days; guard rankings separate revisions and
@@ -120,8 +121,9 @@ Set `STATISTICS_PREVIEW_PORT` for another port. These commands load ignored `.en
 - `statistics:preview` views existing data without deleting or generating any.
 
 Destructive commands cannot be redirected through production configuration. The default `testbrutalprince` collection
-and integration-test collections remain independent. Dashboard routes require loopback sockets/hosts, reject foreign
-origins and are disabled on Heroku. Hosted authenticated access would be a separate feature.
+and integration-test collections remain independent. The preview process still binds to loopback, while the normal
+server serves the public dashboard on its configured port. Read-only routes accept public hostnames and navigation
+from other websites. Gameplay write requests keep their existing origin checks and validation.
 
 ## Exploratory queries
 
