@@ -1,374 +1,114 @@
-# ADR 2016-10-11: Gameplay statistics through an API backed by MongoDB
+# ADR 2016-10-11: Compact gameplay statistics through Koa and MongoDB
 
-- Status: Accepted and implemented
-- Date: 2016-10-11
-- Scope: Gameplay recording, Koa API, MongoDB persistence, local statistics dashboard and isolated database tests.
+- Status: Accepted and implemented; cumulative summaries supersede the original raw-event design.
+- Date: 2016-10-11 (date-based filename retained as requested).
+- Scope: Gameplay statistics, API, MongoDB storage, local dashboard and isolated database tests.
 
 ## Context
 
-We want to count enemy deaths and Prince deaths and retain enough detail to explore gameplay later. Totals alone cannot
-tell us which guard is dangerous, where players struggle, or whether a death was caused by a weapon, trap, or fall.
-At the time of this decision, the browser ran the game without a statistics backend. Existing actor signals reported health loss and death,
-but do not carry sufficient causal context for these questions. Guards already receive a numeric `id` in `src/Game.js`.
-The map provides room IDs and tile coordinates; the camera can show several rooms at once.
-
-The requested requirements are:
-
-- Record each enemy death, including level and how the enemy was killed.
-- Record how much health each identified guard removes from the Prince and the guard's room/screen.
-- Identify environmental damage and deaths by level and position, including falling floor tiles and spikes.
-- Record each Prince death, its level, and its cause.
-- Record when a level starts, including a new attempt after a restart.
-- Every 20 seconds, report continuing play only if meaningful gameplay happened since the previous update. An unattended
-  game must not produce continuing-play reports.
-- Allow statistics transmission to be disabled in the existing menu in the upper-right corner.
-- Send statistics through an API that writes to MongoDB.
-- Use the official MongoDB Node.js driver and direct MongoDB queries; do not introduce an ODM or an advanced database framework.
-- Provide a normal Node.js server using the Koa framework, with API URLs under `/api/...` alongside the existing game.
-  Only this server communicates with MongoDB; clients never connect to the database.
-- All statistics requests run asynchronously in the background. Failed requests have no effect on the game and show
-  no player-facing error. Send events in batches, normally three seconds after the last recorded event.
-- Use Heroku's existing `mongoconnectionurl` configuration variable. Normal storage is database `brutalprince`,
-  collection `brutalprince`; real database tests use the dedicated `testbrutalprince` database.
-- Provide a statistics page for local viewing, plus scripts to wipe an isolated test collection and populate it with
-  randomized sample gameplay that exercises the API and dashboard.
-
-The engineering choices below implement the requested feature, including additional statistics. Defaults, limits and
-retention are implementation decisions; they do not alter existing gameplay rules in the root `ruleset.md`.
+We need enemy and Prince death counts, dangerous guards and traps, level starts, and active play. Storing a full
+identity, timestamp, position and envelope for every enemy hit or kill costs too much. The updated requirement is to
+group enemy kills into counts per client and level. Prince damage and deaths retain useful attribution, but repeats
+should also share counters. Exact event histories and individual enemy victims are no longer required.
 
 ## Decision
 
-Use versioned gameplay events as the source of truth. The browser records compact events and sends batches over HTTPS
-to a Koa statistics API under the game's `/api/...` URLs. Only the API connects to MongoDB. Derive counters and exploratory reports from accepted events,
-rather than sending independent browser totals that could drift from the underlying records.
+Create a random `clientId` when the game's page opens. Keep it across level changes, restarts and new games within
+that page; create a new one on reload. It is not a permanent device/player ID. Opting back into tracking creates a
+fresh client ID and starts a partial observation without replaying the disabled interval.
 
-```text
-Gameplay transitions -> telemetry recorder -> bounded queue -> HTTPS /api/... (Koa) -> MongoDB events
-                                                                            |
-                                                               later queries / aggregates
-```
+Accumulate counters in the browser and send cumulative snapshots to `POST /api/v2/gameplay-statistics`. Store one
+MongoDB document per `(clientId, mapId, mapRevision, levelNumber, UTC day)`, updating it in place. Including the day
+preserves daily charts and retention without timestamps on every kill. Map revisions keep guard IDs comparable.
 
-Gameplay must never wait for the API or database. An unavailable backend must not affect health, combat, input,
-inventory, animation, rendering, tutorials, sound, or level progression. There are no database credentials or privileged
-API secrets in the browser. Death counters are analytical counts derived from stored events and displayed in the local
-statistics dashboard. Visible counters inside the game remain outside the implementation scope.
+| Measurement    | Grouping                                            | Stored counters                                                                   |
+| -------------- | --------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Enemy deaths   | Level, cause and weapon                             | Number killed; no enemy ID, spawn position or killer identity                     |
+| Prince damage  | Cause and source guard/screen or original trap tile | Number of hits and total actual HP lost                                           |
+| Prince deaths  | Cause, source, Prince death tile and weapon         | Number of deaths and latest timestamp in this group                               |
+| Attempts       | Client, level and day                               | Full starts, partial observations, ends and full completions                      |
+| Active play    | Client, level/day and room                          | Active milliseconds, activity counts, room time and visits                        |
+| Weapons        | Weapon                                              | Uses and hits                                                                     |
+| Other gameplay | Type and item/lesson/change                         | Pickup, tutorial, equipment and environment counters; healing and health upgrades |
 
-### Identity and location
+Guard damage retains numeric guard ID, current screen and immutable spawn tile; moving within one screen does not
+create another group. Trap damage retains original room, tile column/row and tile type, including loose floor origins.
+Falls use the supporting tile or departure position when known. Prince death groups also retain the landing/death tile.
+Damage and death counters are separate: a fatal hit contributes actual HP once and a death once. Indirect enemy kills
+keep their known initiating weapon (such as whip or kick) alongside the final cause. Corpse animations and repeated
+callbacks must not count again. Enemy damage/encounter events are not transmitted or stored in the compact model.
 
-| Field                                 | Meaning                                                                                                         |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `schemaVersion`                       | Version of the event contract, initially `1`.                                                                   |
-| `gameVersion`                         | Build/revision identifier, not just the package version.                                                        |
-| `mapId`, `mapRevision`, `levelNumber` | Map identity, revision of map and spawn definitions, and played level. Separate custom maps from campaign maps. |
-| `sessionId`                           | Random page-session ID. New on reload; no persistent player identity is required.                               |
-| `campaignId`                          | Random ID for a new game or resumed campaign within that session.                                               |
-| `attemptId`                           | Random ID for each level entry or restart, including repeated attempts at the same level.                       |
-| `eventId`, `sequence`                 | Random event ID and increasing sequence within the session. Preserve both on retries.                           |
-| `occurredAt`, `receivedAt`            | Client UTC timestamp and independently assigned server UTC timestamp.                                           |
-| `attemptElapsedMs`                    | Monotonic elapsed gameplay time excluding pauses; separate from the campaign countdown.                         |
-| `roomId`, `tileColumn`, `tileRow`     | The original room/screen ID and zero-based local tile coordinates, columns `0..9`, rows `0..2`.                 |
+## Delivery and idempotency
 
-The stable guard key is `(mapId, mapRevision, levelNumber, guardId)`. Reuse the existing numeric guard ID only where spawn
-ordering is deterministic within that revision. Preserve the spawn room/tile as immutable metadata and record the
-current source room/tile on each event: a pursuing guard can hurt the Prince somewhere other than its spawn room.
-If dynamic spawning is introduced, reserve deterministic spawn slots and distinguish each instance within an attempt.
-Never identify a guard by its current position alone or compare bare numeric IDs across map revisions.
+All requests run asynchronously in the background. Gameplay never waits for the API or MongoDB, and failures show no
+player-facing error or change to health, input, inventory, animation, graphics layers, sound or level progression.
+The normal batch delay is three seconds after the last relevant event, with a maximum wait of 20 seconds during
+continuous activity. Only dirty level/day summaries are sent, with at most 100 summaries and 256 KiB per request.
+One request is in flight; timeouts and bounded exponential backoff handle outages. Page-exit delivery is best effort.
 
-Environmental sources use `(mapId, mapRevision, levelNumber, roomId, tileColumn, tileRow, tileType)` instead of a special
-tile ID. A falling loose floor keeps its original tile key after leaving its room; also record its impact position.
-For a fall, record the departure position and landing/death position, and the supporting tile when known.
-Do not invent a tile cause when it is unavailable.
+Use atomic MongoDB `$max` updates on cumulative counters, addressed by a deterministic document ID and deterministic
+group keys. A duplicated snapshot, older delayed snapshot or simultaneous retry cannot increase a count twice or
+reduce it. A newer snapshot includes earlier counts, recovering from uncertain acknowledgements. Never use `$inc`
+with replayable batches. Acknowledge each summary only after persistence; reject invalid summaries independently.
 
-Event location describes the victim or player at the time of the event. `source` separately describes the damaging actor,
-tile, or other cause. A screen means a map room, never a viewport pixel coordinate or screenshot; camera movement must
-not change attribution.
+Group lists are bounded at 128 entries each. Reserve an `other` bucket for unusually varied custom maps while retaining
+total deaths and HP. The bounded local notification queue has no durable offline storage. Unsaved data can be lost on
+reload/close or opt-out; this remains observational telemetry. Snapshot size grows with distinct groups, not kills.
+The server validates identities, dimensions, numeric bounds, totals, timestamps and request size, and applies rate and
+origin limits. Client data is untrusted and cannot establish an authoritative competitive leaderboard.
 
-### Core events
+## Activity and preference
 
-| Event            | When recorded                                                                                | Important payload                                                                                                                                        |
-| ---------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `level_started`  | A playable level is initialized once per attempt, rather than on loading or camera changes.  | Entry reason (`new_game`, `progression`, `restart`, `resume`, `debug_skip`), spawn location, starting/current maximum health, inventory, tutorial state. |
-| `level_activity` | At most once per 20-second reporting window, subject to the activity rules below.            | Window ID and duration, meaningful activity count, active-play milliseconds, room-time deltas, current room/health, cumulative attempt active time.      |
-| `prince_damaged` | Health actually decreases.                                                                   | Health before/after, actual HP lost, damage mechanism, source, player location, selected weapon and current action.                                      |
-| `prince_died`    | The Prince transitions from alive to dead.                                                   | Final cause/source, location, health before death, linked damage event when present, relevant causal chain, attempt active time.                         |
-| `enemy_damaged`  | A living enemy actually loses health.                                                        | Guard key/type, source, location, health before/after and HP lost.                                                                                       |
-| `enemy_died`     | An enemy transitions from combat-alive to combat-dead.                                       | Guard key/type, spawn and death locations, final mechanism, source/weapon, causal chain, health before death.                                            |
-| `level_ended`    | An attempt completes, the player restarts, starts a new game, dies, or explicitly leaves it. | Outcome (`completed`, `prince_died`, `restarted`, `new_game`, `skipped`, `left`), destination level if any, active time, final location/health.          |
+Record every playable level start, including restarts. Every 20 seconds, accumulate an activity report only if meaningful
+player movement or an action occurred since the previous report. Simulation, unattended enemies, menus, tutorials,
+pause, hidden tabs and unfocused pages must not manufacture activity. Active-time deltas are summed once; level exit
+adds only the remaining unreported time. A partial observation never fabricates a full start/completion.
 
-Record a Prince death separately from attempt outcome. A dead Prince waiting for the continue prompt must not generate
-another death or keep the attempt active. A restart after that death creates a new attempt without ending the old one
-twice. Failed level loading and intro/finale animations are not playable level starts. Emit departure/closure events
-only when actually observed; a browser termination may prevent delivery. An attempt with no terminal event is
-`unknown/incomplete`, not automatically a death, completed level, or proven abandonment.
+The existing upper-right menu contains `Send gameplay statistics`, default enabled. Its saved preference applies
+immediately: disabling clears unsent summaries, notification queues and retry/activity state, and aborts pending requests
+where possible. Already accepted data cannot be recalled. Enabling starts fresh counters and a fresh client ID.
 
-### Damage, death, and causal attribution
+## Server, storage and compatibility
 
-Record actual health loss (`healthBefore - healthAfter`), not nominal weapon damage, blood effects, hit attempts, or
-death animation frames. Clamp overkill to remaining health. A fatal health change can produce a damage event and a death
-event linked to it; sum health loss from damage events only, and count deaths from death events only.
+The normal Node.js/Koa server serves the game and `/api/...` routes. Only the server connects to MongoDB, using the
+official `mongodb` driver and direct queries: no ODM, ORM or advanced database framework. Heroku supplies
+`mongoconnectionurl`; `MONGODB_URI` is the fallback. Credentials stay in server configuration or ignored local `.env`.
+Normal storage is `brutalprince.brutalprince`, with `MONGODB_DATABASE` optionally overriding the database.
 
-Use explicit source context at the point where gameplay commits damage or death. Existing `onDamageLife` and `onDead`
-signals alone are insufficient: death callbacks may be delayed, and source actors/tiles may have moved by then.
-Snapshot the context immediately and keep existing signals and animation behavior intact. Cover alternate instant-death
-paths as well as ordinary damage; missing attribution becomes `unknown`, rather than a guessed nearby opponent.
+Summaries use schema version 2, hashed group keys, a unique document ID, and an expiry timestamp 90 days after the end
+of their UTC play day. The TTL index removes expired documents asynchronously. Existing version-1 raw documents and
+`/api/v1/gameplay-events` remain readable/compatible for already open clients. Reports normalize both formats into
+weighted groups; they never expand a count into individual events. No automatic deletion or lossy migration of old
+records is required. Older raw documents keep their existing expiry policy.
 
-Keep these concepts separate:
+No names, email, raw keystrokes, screenshots, full URLs, persistent cross-page player IDs, IP addresses or user-agent
+strings are stored. Host access logs are separate. Local test credentials must never enter tracked examples or logs.
 
-- `mechanism`: immediate effect, such as `sword`, `bullet`, `explosion`, `fire`, `fall`, `spikes`, `chopper`,
-  `falling_floor`, `poison`, `shared_shadow_damage`, or `scripted_health_loss`.
-- `source`: `guard`, `prince`, `tile`, `environment`, `script`, or `unknown`, with the applicable actor or tile key.
-- `weapon`: originating weapon when relevant, such as `twin_torches`, `molotov`, `minigun`, `rocket_launcher`,
-  `whip`, `kick`, or `sword`.
-- `causalChain`: known initiating action/source and intermediate effects, with event/action references. For example,
-  `Prince -> whip pull -> fall -> spikes` has spikes as the final mechanism and the whip as the initiating action.
-  Attribution follows tracked consequences, not a blanket rule assigning every later death to the last attacker.
+## Dashboard and test data
 
-Important compatibility cases from `ruleset.md`:
+`/statistics` and `GET /api/v1/statistics` show counts, daily trends, level performance, death causes, dangerous guards
+and traps, weapons and active play. The dashboard reads both storage formats, displays repeated death counts, and
+filters periods, levels and gameplay versus samples. It shows the database/collection and refreshes every 15 seconds
+while visible and on return. Date filters include complete UTC play days. Completion compares observed starts and
+completions in the period, not a cohort of individually tracked attempts.
 
-- Fire kills an enemy immediately for combat purposes (`ENEMY-06`, `MOLO-08`, `TORCH-06`). Record one enemy death at
-  ignition. Its later collapse, fall, impalement, corpse fragments, or explosion effects cannot count as another kill.
-  Optional corpse-outcome events can describe these effects separately.
-- A kick, domino collision, or cosmetic blood does not itself remove health (`KICK-01`, `KICK-06`). It may initiate a
-  tracked chain ending in an actual environmental death; protected short falls must not become damage events.
-- A whip can cause direct damage or pull an enemy into a damaging/fatal fall (`WHIP-02` through `WHIP-05`). Preserve both
-  the immediate mechanism and the known initiating action, without duplicating damage during recovery.
-- Shadow damage/death is shared (`ENEMY-08`). Record the actual health change of each affected actor, link the reflected
-  effect to its origin, and count at most one Prince death. Merging with the shadow is not an enemy kill.
-- Skeletons or other special actors must follow their existing alive/dead rules. A knockdown, reset, or scripted removal
-  is not a death unless gameplay declares one. Tag enemy type so ordinary guard reports can exclude special actors.
-- Scripted reductions such as `stealLife()` are distinct from guard damage; healing and maximum-health changes must
-  not look like negative damage. Ten starting HP and growth beyond ten remain intact (`HEALTH-01`).
+Dashboard routes are loopback-only and disabled on Heroku. The preview serves both game and statistics on localhost;
+they share `testbrutalprince.test_dashboard_events`. The `seed` script sends random compact summaries through the real
+API, `wipe` drops only this fixed collection, `reset` wipes/seeds it, and `preview` opens existing data without deleting
+or generating anything. All generated data is explicitly marked as samples.
 
-### Additional statistics for later exploration
+Real MongoDB tests create fresh `test_gameplay_events_<random-id>` collections in `testbrutalprince` and clean up only
+their own collection. The default test collection and normal gameplay storage remain untouched.
 
-Keep useful discrete events and compact activity deltas rather than recording every frame or raw input:
+## Consequences and validation
 
-| Event / measurement                                              | Questions supported                                                                                                                                                                  |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `room_entered` and active room-time deltas                       | Which routes are used, where players spend active time, and where damage/death hotspots are.                                                                                         |
-| `guard_encountered`                                              | How often a guard is actually encountered, providing a denominator for damage and kill rates. Use actual visible/reachable threat conditions, respecting the passive tutorial guard. |
-| `weapon_used` and aggregated shot/hit counts                     | Weapon popularity, hits per shot, damage and kills by weapon, and failed attacks. A burst accumulates counts; it does not generate one request per bullet.                           |
-| `item_collected`, `health_recovered`, `max_health_changed`       | Pickup use, potion effectiveness, healing capped by maximum health, and health progression.                                                                                          |
-| `tutorial_started`, `tutorial_completed`, `tutorial_interrupted` | Where lessons are reached or interrupted, without counting tutorial reading time as active gameplay.                                                                                 |
-| `environment_changed`                                            | Exit destruction, other barrier destruction, and loose-floor activation/destruction, identified by original tile position.                                                           |
-| `jetpack_changed`, `shadow_merged`, `campaign_completed`         | Equipment use and important progression milestones.                                                                                                                                  |
+Repeated kills and hits change numeric counters instead of adding documents. Retries need no per-event deduplication
+history. We deliberately give up exact enemy histories, individual attempt reconstruction, causal event links and
+precise per-hit chronology. Guard/trap comparisons, death locations, weapon counts and daily totals remain available.
 
-Define an encounter as the first meaningful exposure to a given guard instance in an attempt. Repeated room visits do not
-increase this denominator. Track optional engagement duration separately. Autonomous cosmetic animation, particle motion,
-music, camera settling, and campaign countdown changes are not activity or extra events.
+Verify large-volume reduction; guard/tile grouping; repeated deaths; day/revision separation; identity and opt-out;
+newer, older, duplicate and concurrent snapshots; mixed legacy/compact reports; sample seeding; silent failures and
+idle activity. Reuse existing combat/animation/inventory/progression checks, and keep browser verification muted.
 
-These additions enable enemy/Prince death counts by level, room and cause; guard rankings by total HP removed, Prince
-kills, and damage per encountered attempt; trap rankings and heatmaps; weapon efficiency; retries before completion;
-active completion-time distributions; and tutorial/item funnels. Report sample sizes, revisions, partial observations,
-and missing data alongside rates. Counts describe observed opted-in gameplay, not all players or guaranteed unique people.
-
-### Twenty-second activity reporting
-
-Use a 20-second monotonic wall-clock reporting cadence while a playable attempt exists. A reporting window becomes
-dirty only after meaningful gameplay: actual Prince movement, a room change, a performed gameplay action, or a committed
-gameplay event during active play. Held movement/fire counts while it produces actual actions. Raw key repeats, moving
-the mouse, opening settings, pressing against a wall without movement, or simply advancing simulation time do not count.
-
-Continuing-play reports require a visible, focused, unpaused game with a living Prince and meaningful activity in the
-window. Track recent actual player activity; autonomous enemy patrols/attacks and unattended world simulation alone
-cannot extend active presence indefinitely. Consequences of a recently performed action may dirty the window, but
-cosmetic corpse motion cannot. Cap the recent-player-activity grace period at 20 seconds as an engineering choice.
-Count active milliseconds only while these conditions hold, capped by each window's elapsed duration.
-
-At each tick:
-
-1. If the window is eligible and dirty, enqueue one `level_activity` event containing the accumulated deltas.
-2. Otherwise, enqueue no continuing-play report. Discard stale presence windows on pause, loss of focus, or hidden tabs;
-   resuming does not send catch-up heartbeats for time spent away.
-3. Begin a fresh window. Retain already recorded discrete gameplay events independently of the presence window.
-
-The initial `level_started` is recorded immediately, then sent using the batch policy below; it does not by itself make the following window dirty. A discrete event that
-was already sent still counts as activity for its current window; clearing a network queue must not clear the activity
-marker. Conversely, network retries never create activity. Small actions between ticks count even if the Prince is
-standing still at the tick. Terminal events carry any remaining active-time deltas, so short attempts are represented
-without waiting 20 seconds or double-counting time.
-
-Suspend background transmission on hidden/unfocused pages; already captured discrete events may be flushed on return.
-Death and other discrete observations remain different from assertions of continuing play. Test explicitly that an
-untouched game, including automatic guard movement and effects, produces no periodic presence reports.
-
-### API and MongoDB storage
-
-Use a normal Node.js HTTP server implemented with **Koa**. Expose the API under `/api/...` on the same public origin as
-the game, alongside the existing page and assets. The browser uses relative API URLs; deployment can serve the game
-through the Koa server or route `/api/...` to it through a reverse proxy. Preserve the current game URLs and asset paths.
-Reserve `/api/...` for API handlers; an unknown API route must return an API error rather than falling through to a game
-page. Koa is a user-selected framework, not an open implementation choice.
-
-Endpoint: `POST /api/v1/gameplay-events`, with `{ "schemaVersion": 1, "events": [...], "droppedEventCount": 0 }`. Each event contains
-the identity envelope above plus an event-specific payload. All events, including level starts, deaths, terminal events,
-and activity reports, use the asynchronous batch transport below. Suppressing an idle heartbeat does not prevent
-delivery of a queued real event.
-
-#### Server-only MongoDB configuration
-
-Use the official `mongodb` Node.js driver directly for connections, collection operations, bulk writes, indexes, and
-aggregation queries. Keep documents and queries explicit, with validation in the API. Do not introduce Mongoose,
-Prisma, an ODM/ORM, or another database abstraction framework. This is a user-selected constraint on MongoDB access;
-Koa remains the HTTP framework.
-
-The supplied connection URI template is:
-
-```text
-mongodb+srv://liborvilimek_db_user:{mongo_password}@brutalprince.yartwde.mongodb.net/?appName=brutalprince
-```
-
-Configure the resolved URI as the server's `mongoconnectionurl` environment variable using a deployment secret;
-`MONGODB_URI` is a fallback. Replace
-`{mongo_password}` with the actual password, correctly encoded as a URI credential; this literal placeholder is not a
-working password. Never commit the resolved URI, include it in frontend code/assets or responses, or log it on errors.
-The URI does not select an application database. Select `brutalprince` explicitly (override using `MONGODB_DATABASE`),
-and write to its `brutalprince` collection. Reuse a server-side MongoDB client/connection pool rather than connecting for
-every browser event. Local credentials belong only in ignored `.env`; `.env.example` contains placeholders.
-
-#### Asynchronous background batching and failure behavior
-
-Record an event locally when its gameplay transition occurs, enqueue it, and return immediately to the game. Never await
-a network request from a gameplay update, input handler, animation, or level transition. Use asynchronous browser HTTP
-requests and asynchronous MongoDB operations in Koa; the API may await persistence before acknowledging the batch,
-while the browser continues playing independently.
-
-The normal send rule is a **three-second trailing debounce**: the first queued event starts a timer, and each newly
-recorded event resets it. After three seconds without a new event, send the pending events in one batch request, within
-the configured batch bounds. This rule applies to deaths and level starts too; priority affects queue retention, not
-an immediate per-event request. Events recorded during an in-flight request go into the next batch. Split an oversized
-backlog into bounded requests, retaining one in-flight request at a time.
-
-A pure trailing debounce could postpone transmission forever during continuous play. As an additional engineering
-decision, cap the wait at 20 seconds from the oldest queued event and flush a full batch when its size limit is reached.
-These caps keep the queue bounded; the normal quiet-period rule remains three seconds. A 20-second `level_activity`
-event is an activity observation, not a separate transport timer or a forced per-event request. It enters the same queue
-and is normally sent three seconds later; the cadence describes observation time rather than exact network arrival time.
-
-Network errors, timeouts, API rejection, and MongoDB failure are contained within the telemetry subsystem. No alert,
-modal, gameplay interruption, health change, or progression change follows a statistics failure. Catch asynchronous
-errors, bound request duration, and use the retry/overflow policy below; failure may ultimately lose statistics.
-Retries preserve event IDs and use their own backoff schedule, without generating gameplay activity or restarting the
-event debounce. Development diagnostics may describe failures without exposing credentials or showing errors to players.
-Background means independent of gameplay execution; the existing hidden/unfocused-page suspension and opt-out rules
-still apply. Page-exit flushing may attempt an earlier best-effort batch, but must never delay leaving or navigating.
-
-The API validates event types, versions, field types, coordinate/health bounds, string lengths, timestamps, and batch
-size before writing. Apply request limits and rate limits; restrict browser origins if the API is hosted separately.
-Origin checks are not proof that a client is genuine. Client statistics remain untrusted and unsuitable for authoritative
-competitive leaderboards. The API assigns `receivedAt`; sequence and monotonic attempt time help reconstruct order despite
-late arrivals or clock skew. Koa serves the existing game paths alongside the API; `Procfile` starts the server on
-Heroku's `PORT`. The database is configured server-side and failures return sanitized responses.
-
-Store one accepted event per MongoDB document in `brutalprince.brutalprince`, preserving the original versioned payload:
-
-- Unique index on `eventId` for retry deduplication.
-- A conditional unique semantic key for death events, `(attemptId, eventType, victimInstanceId)`, to prevent different
-  callbacks from recording the same death with different event IDs. Apply a similar once-per-attempt key to start/end.
-- Query indexes on `(mapId, mapRevision, levelNumber, eventType, receivedAt)`, `(attemptId, sequence)`, and source guard
-  or tile keys for damage/death queries. Final index selection follows the actual query patterns and data volume.
-
-The response acknowledges each event as stored, already stored, or rejected. Acknowledge success only after persistence;
-retrying after an uncertain response must be safe. A duplicate with incompatible content is a conflict, not a second
-record. Mixed batches must report per-event results so invalid events cannot block valid ones indefinitely. Derive
-initial counts through aggregation; later materialized summaries must remain rebuildable and deduplicated.
-
-Use a bounded in-memory client queue, one in-flight batch, exponential backoff with jitter for transient failures, and
-server retry guidance for rate limits. Retry the same event IDs; discard/report permanently invalid events locally.
-Initial bounds are 100 events per request, 256 KiB per request, and 1,000 queued events per tab. Coalesce high-volume
-measurements, prioritize deaths/start/end when the queue fills, and include an
-explicit dropped-event count with the next accepted batch. Never let a backlog grow indefinitely. Page-exit flushing is
-best effort only. Events lost on reload, closed tabs, offline overflow, or disabled tracking are an acknowledged limitation.
-
-### Player setting and data boundaries
-
-Add a clearly labeled `Send gameplay statistics` toggle to the existing upper-right settings menu, with a short
-explanation of death, damage, level, and activity collection. Reuse `GameSettings` persistence and its in-memory fallback
-when localStorage is unavailable. The default is enabled, interpreting the requested switch as an opt-out;
-this is an implementation decision, not an explicitly requested default.
-
-Disabling takes effect immediately: stop recording and sending, cancel timers/retries, clear all queued events and
-activity deltas, and abort in-flight requests where possible. A request already accepted by the server cannot be recalled.
-Reloads and new campaigns preserve the saved choice. No opt-out event is transmitted after disabling.
-
-Re-enabling starts a fresh telemetry segment with new identifiers and no replay of the disabled interval. If a level is
-already in progress, record `level_observation_started` with `reason: tracking_enabled`, current state, and a partial-attempt
-flag; do not fabricate a `level_started` or claim the missing time, damage, or deaths were observed. Link subsequent
-events to that observed attempt and exclude it from full-attempt funnels by default.
-
-Do not collect names, email addresses, keystroke logs, screenshots, full URLs/resume links, or persistent cross-session
-player IDs. Store only gameplay context and coarse input mode (`keyboard`, `touch`, `mixed`) if useful. Do not persist IP
-addresses or user-agent strings in gameplay documents; infrastructure logs require a separately configured policy.
-Keep raw events for 90 days using an expiry timestamp/TTL index. Long-term aggregate storage is deferred.
-Deployment access logs are separate from gameplay documents and configured by the host owner.
-
-### Local dashboard and sample data
-
-The local server exposes `/statistics` and `GET /api/v1/statistics` for read-only MongoDB aggregations. The page shows
-Prince/enemy deaths, attempts and completions, active play, daily trends, level performance, death causes, dangerous
-guards and traps, and weapon usage. Filter by 7/30/90 days, level and actual gameplay versus generated samples. Display
-the database and collection, source counts and recent Prince deaths. Refresh every 15 seconds while visible and on
-return to the tab, so acknowledged background batches appear without a manual reload. Keep map revisions separate in rankings; damage
-queries sum only damage events, death queries count only death events. Completion totals exclude partial observations.
-
-The first dashboard is local-only: socket and host checks restrict it to loopback, and Heroku disables the routes.
-Remote authenticated dashboard access is outside this change. No client connection strings are needed to view it.
-
-`statistics:seed`, `statistics:wipe`, `statistics:reset` and `statistics:preview` operate only on the fixed
-`testbrutalprince.test_dashboard_events` collection. Seed sends randomized valid events through the real HTTP API,
-then backdates receipt timestamps explicitly for synthetic chart history. Wipe removes just that collection; reset
-wipes and seeds it. Preview binds to loopback, labels its test storage, separates samples from actual gameplay and leaves the normal database untouched.
-Independent integration tests use fresh `test_gameplay_events_<random-id>` collections and clean up only their own data.
-
-## Alternatives considered
-
-- **Browser connects directly to MongoDB:** rejected; it exposes database access to untrusted clients and bypasses the
-  server's validation and limits.
-- **Send only cumulative death counters:** rejected; insufficient for attribution, exploratory statistics, and reliable
-  retry handling. Summaries can be derived from events.
-- **Send every frame or unconditional heartbeats:** rejected; unnecessary volume and false evidence of active play.
-- **Infer cause from animation names or the nearest enemy:** rejected; ambiguous for fire, falls, delayed callbacks,
-  explosions, reflected shadow damage, and moving floor tiles.
-- **Guaranteed delivery through durable offline storage:** deferred; persistent queues add lifecycle and opt-out
-  complexity. The first version explicitly accepts bounded, measurable event loss.
-
-## Consequences
-
-This design supports both the requested counters and later investigations without forcing database migrations for each
-new report. Explicit causal context and stable map-scoped identities make guard/trap comparisons meaningful. It also
-requires a hosted API, database operations, instrumentation across multiple health/death paths, and careful queue and
-activity lifecycle handling. Client opt-out and best-effort delivery mean statistics are observational and incomplete.
-
-## Implementation and validation
-
-1. Keep telemetry rules and defaults in `ruleset.md`, with setup, test commands and exploratory queries in
-   [statistics documentation](../../docs/statistics.md).
-2. Implement the Node.js/Koa server under `/api/...`, using the official `mongodb` driver and direct queries,
-   server-only MongoDB configuration, validation, batch
-   acknowledgements, persistence, idempotency, limits, and configured indexes.
-3. Add the isolated recorder and setting, then instrument health/death transitions with explicit causal context.
-4. Add activity windows and the additional event catalogue. Start with death/damage/start/activity/opt-out coverage;
-   keep reporting queries separate from gameplay code.
-5. Verify at least these scenarios:
-   - Each weapon, fire ignition plus later corpse effects, direct and indirect falls, spikes, choppers, and loose floors.
-   - Actual guard HP loss, fatal overkill, blocked attacks, kick immunity, healing, scripted health loss, shadow reflection
-     and merge, and skeleton special behavior.
-   - One death per actor instance, prompt Prince-death capture before animation callbacks, restart/progression/resume,
-     custom maps, and attribution after crossing rooms or moving the camera.
-   - Active continuous play reports about every 20 seconds; short actions still mark a window. Standing idle, wall input,
-     unattended enemies/effects, menus, tutorials, pause, blur, and hidden tabs produce no false ongoing-play reports.
-   - Network errors, MongoDB failure, uncertain acknowledgements, duplicate and mixed-invalid batches, rate limiting,
-     out-of-order arrivals, queue overflow, and a short attempt ending before the first activity tick.
-   - Three-second trailing debounce for every event type, timer reset on new events, continuous-play maximum wait,
-     batch splitting, events arriving during a request, bounded retries/timeouts, and silent failure without unhandled
-     promise rejections or gameplay delays.
-   - Same-origin `/api/...` routing alongside the existing game/assets, server-only MongoDB access, and no resolved
-     database credentials in client artifacts, responses, or logs.
-   - Opt-out with queued/in-flight data, reload persistence, unavailable storage, and mid-attempt opt-in with partial
-     coverage and no historical replay.
-   - Existing controls, inventory, animations, graphics layers, campaign time, and level transitions remain compliant
-     with `ruleset.md`. Browser verification keeps sound muted, per `WORK-04`.
-
-Implementation includes the API, isolated recorder, menu preference, local dashboard, sample-data scripts, deterministic
-recorder/API checks, optional muted browser checks and real MongoDB integration checks. It does not deploy a hosted
-dashboard or change gameplay rules.
+Setup, API examples, queries and commands are in [statistics documentation](../../docs/statistics.md). Gameplay and
+telemetry requirements are recorded in the root [ruleset](../../ruleset.md).

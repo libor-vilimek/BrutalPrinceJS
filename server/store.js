@@ -3,6 +3,7 @@
 const { MongoClient } = require("mongodb");
 const { validateEvent, fingerprint, semanticKey } = require("./events");
 const { readStatistics } = require("./reports");
+const { persistSummaries } = require("./summaries");
 
 function createEventStore({ uri, database, retentionDays = 90, collectionName = "brutalprince" }) {
   let client;
@@ -38,7 +39,8 @@ function createEventStore({ uri, database, retentionDays = 90, collectionName = 
               eventType: 1
             }
           },
-          { key: { expiresAt: 1 }, expireAfterSeconds: 0 }
+          { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
+          { key: { schemaVersion: 1, day: 1, levelNumber: 1 } }
         ]);
         return events;
       })().catch((error) => {
@@ -49,6 +51,9 @@ function createEventStore({ uri, database, retentionDays = 90, collectionName = 
     return ready;
   }
   return {
+    async writeSummaries(clientId, levels) {
+      return persistSummaries(await collection(), clientId, levels, retentionDays);
+    },
     async write(events, droppedEventCount = 0) {
       return persistBatch(await collection(), events, retentionDays, droppedEventCount);
     },

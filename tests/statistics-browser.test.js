@@ -4,7 +4,8 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const { test } = require("node:test");
 const { createApp } = require("../server/app");
-const { validateEvent } = require("../server/events");
+const { validateSummary } = require("../server/summaries");
+const { StatisticsSummary } = require("../src/StatisticsSummary");
 
 test(
   "browser: real game, silent batches, menu opt-out, damage attribution, restarts and mobile layout",
@@ -19,16 +20,16 @@ test(
     let unavailable = false;
     const listener = createApp({
       store: {
-        async write(batch) {
+        async writeSummaries(clientId, batch) {
           if (unavailable) {
             throw new Error("test outage");
           }
           batches.push(batch);
-          for (const event of batch) {
-            assert.equal(validateEvent(event), null, `${event.eventType} violates the API contract`);
-            events.push(event);
+          for (const level of batch) {
+            assert.equal(validateSummary(level), null, "Summary violates the API contract");
+            events.push({ ...level, clientId });
           }
-          return batch.map((event) => ({ eventId: event.eventId, status: "stored" }));
+          return batch.map((level) => ({ key: StatisticsSummary.key(level), status: "stored" }));
         }
       }
     }).listen(0, "127.0.0.1");
@@ -76,7 +77,7 @@ test(
       };
     });
     assert(
-      events.some((event) => event.eventType === "level_started"),
+      events.some((level) => level.counters.starts === 1),
       JSON.stringify({ diagnostic, errors })
     );
     const gameInfo = await page.evaluate(() => {
@@ -98,9 +99,10 @@ test(
       game.statistics.record("room_entered", { fromRoom: state.kid.room });
     });
     await page.waitForTimeout(3300);
-    const damage = events.find((event) => event.eventType === "prince_damaged");
-    assert(damage && damage.payload.source.guardId >= 1 && damage.payload.hpLost === 1);
-    assert(batches.some((batch) => batch.length >= 2));
+    const damage = events.flatMap((level) => level.damage).find((row) => row.source.kind === "guard");
+    assert(damage && damage.source.guardId >= 1 && damage.hpLost === 1);
+    assert(batches.length >= 2);
+    assert(batches.every((batch) => batch.length === 1));
     await page.keyboard.press("Escape");
     await page.locator("#statistics-enabled").uncheck();
     assert.equal(await page.evaluate(() => Phaser.GAMES[0].statistics.enabled), false);
@@ -113,7 +115,8 @@ test(
     await page.locator("#statistics-enabled").check();
     await page.locator(".menu-resume").click();
     await page.waitForTimeout(3300);
-    assert(events.some((event) => event.eventType === "level_observation_started" && event.partialAttempt));
+    const partial = events.find((level) => level.counters.observations === 1);
+    assert(partial && !partial.counters.starts && partial.clientId !== events[0].clientId);
     unavailable = true;
     await page.evaluate(() => Phaser.GAMES[0].statistics.record("room_entered", { fromRoom: 1 }));
     await page.waitForTimeout(3300);

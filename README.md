@@ -77,7 +77,7 @@ Blood stains, fallen body parts and brass remain throughout the level, even afte
 ## Play
 
 Use Node.js 24, run `npm install` and `npm start`, then open the local address printed by the server (usually `http://localhost:8080`).
-The Koa server serves both the game and `/api/v1/gameplay-events`. The game remains playable when the statistics database is unavailable.
+The Koa server serves both the game and `/api/v2/gameplay-statistics`. The game remains playable when the statistics database is unavailable.
 
 To enable local MongoDB storage, copy `.env.example` to `.env`, replace the password placeholder in that local file,
 and run `npm run start:local`. `.env` is ignored by Git and never served to browsers. On Heroku, set the existing
@@ -89,7 +89,9 @@ defaults to `brutalprince` with collection `brutalprince`; override the database
 
 Open the top-right settings menu (or press `Esc`) and turn off **Send gameplay statistics** to stop collection and
 transmission immediately. The preference is saved on this device. Statistics include deaths and their causes, guard/trap
-damage, level attempts and active play, plus weapon, room, pickup and tutorial events. Requests run in the background
+damage, level attempts and active play, plus weapon, room, pickup and tutorial counts. Each page gets a random `clientId`;
+MongoDB keeps one cumulative summary per client, map revision, level and UTC day. Enemy kills are counts by cause/weapon,
+and repeated Prince damage/deaths share source/location counters. Retries cannot double-count. Requests run in the background
 in batches, normally three seconds after the last event. Failures show no error in the game. See
 [statistics setup and queries](docs/statistics.md) and the [ADR](dev/adr/2016-10-11-gameplay-statistics-api-and-mongodb.md).
 

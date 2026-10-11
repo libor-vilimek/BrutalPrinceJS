@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const { fixture } = require("./statistics-fixture");
 const { validateEvent } = require("../server/events");
+const { StatisticsSummary } = require("../src/StatisticsSummary");
 
 test("every event uses the three-second trailing batch delay, preserving events arriving during a request", async () => {
   let release;
@@ -15,7 +16,10 @@ test("every event uses the three-second trailing batch delay, preserving events 
       return {
         ok: true,
         json: async () => ({
-          results: JSON.parse(options.body).events.map((event) => ({ eventId: event.eventId, status: "stored" }))
+          results: JSON.parse(options.body).levels.map((level) => ({
+            key: StatisticsSummary.key(level),
+            status: "stored"
+          }))
         })
       };
     }
@@ -28,7 +32,8 @@ test("every event uses the three-second trailing batch delay, preserving events 
   f.advance(1);
   const flush = f.stats.flush();
   assert.equal(f.requests.length, 1);
-  assert.equal(f.requests[0].body.events.length, 2);
+  assert.equal(f.requests[0].body.levels.length, 1);
+  assert.equal(f.requests[0].body.levels[0].rooms[0].visits, 1);
   f.stats.record("room_entered", { fromRoom: 2 });
   release();
   await flush;
@@ -44,7 +49,8 @@ test("continuous events flush within twenty seconds, with one request in flight"
     await f.runTimers();
   }
   assert.equal(f.requests.length, 1);
-  assert.equal(f.requests[0].body.events.length, 21);
+  assert.equal(f.requests[0].body.levels.length, 1);
+  assert.equal(f.requests[0].body.levels[0].rooms[0].visits, 20);
 });
 
 test("network failures silently retry the same IDs and do not affect game health", async () => {
@@ -57,7 +63,10 @@ test("network failures silently retry the same IDs and do not affect game health
       return {
         ok: true,
         json: async () => ({
-          results: JSON.parse(options.body).events.map((event) => ({ eventId: event.eventId, status: "duplicate" }))
+          results: JSON.parse(options.body).levels.map((level) => ({
+            key: StatisticsSummary.key(level),
+            status: "stored"
+          }))
         })
       };
     }
@@ -69,7 +78,8 @@ test("network failures silently retry the same IDs and do not affect game health
   assert(f.stats.retryAt > 0);
   f.advance(10000);
   await f.runTimers();
-  assert.equal(f.requests[1].body.events[0].eventId, id);
+  assert.deepEqual(f.requests[1].body.levels, f.requests[0].body.levels);
+  assert.equal(f.requests[1].body.clientId, f.stats.clientId);
   assert.equal(f.stats.queue.length, 0);
 });
 

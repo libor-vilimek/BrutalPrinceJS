@@ -33,7 +33,12 @@ function fixture({ fetch, enabled = true } = {}) {
       }
       return {
         ok: true,
-        json: async () => ({ results: body.events.map((event) => ({ eventId: event.eventId, status: "stored" })) })
+        json: async () => ({
+          results: body.levels.map((level) => ({
+            key: [level.mapId, level.mapRevision, level.levelNumber, level.day].join("|"),
+            status: "stored"
+          }))
+        })
       };
     }
   };
@@ -80,7 +85,7 @@ function fixture({ fetch, enabled = true } = {}) {
     Uint8Array,
     Phaser: { Sprite: function () {} }
   });
-  for (const file of ["Statistics", "Actor", "Fighter", "Kid"]) {
+  for (const file of ["StatisticsSummary", "Statistics", "Actor", "Fighter", "Kid"]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "../src", `${file}.js`), "utf8"), context);
   }
   const stats = (game.statistics = new PrinceJS.Statistics(game));

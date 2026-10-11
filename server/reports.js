@@ -1,7 +1,10 @@
 "use strict";
+const { reportRows } = require("./report-rows");
 
 async function readStatistics(collection, { days = 30, level, source = "all" } = {}) {
-  const match = { receivedAt: { $gte: new Date(Date.now() - days * 86400000) } };
+  const since = new Date(new Date().toISOString().slice(0, 10));
+  since.setUTCDate(since.getUTCDate() - days + 1);
+  const match = { receivedAt: { $gte: since } };
   if (source === "samples") {
     match.sampleData = true;
   }
@@ -11,7 +14,7 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
   if (level !== undefined) {
     match.levelNumber = level;
   }
-  const count = (type) => ({ $sum: { $cond: [{ $eq: ["$eventType", type] }, 1, 0] } });
+  const count = (type) => ({ $sum: { $cond: [{ $eq: ["$eventType", type] }, { $ifNull: ["$count", 1] }, 0] } });
   const sum = (types, field) => ({ $sum: { $cond: [{ $in: ["$eventType", types] }, { $ifNull: [field, 0] }, 0] } });
   const totals = {
     starts: count("level_started"),
@@ -28,7 +31,7 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
               { $eq: ["$partialAttempt", false] }
             ]
           },
-          1,
+          { $ifNull: ["$count", 1] },
           0
         ]
       }
@@ -38,11 +41,26 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
   };
   const [result] = await collection
     .aggregate([
+      {
+        $match: {
+          ...Object.fromEntries(Object.entries(match).filter(([key]) => key !== "receivedAt")),
+          $or: [
+            { schemaVersion: 2, day: { $gte: since.toISOString().slice(0, 10) } },
+            { schemaVersion: { $ne: 2 }, receivedAt: { $gte: since } }
+          ]
+        }
+      },
+      ...reportRows(),
       { $match: match },
       {
         $facet: {
           dataSources: [
-            { $group: { _id: { $cond: [{ $eq: ["$sampleData", true] }, "samples", "gameplay"] }, events: { $sum: 1 } } }
+            {
+              $group: {
+                _id: { $cond: [{ $eq: ["$sampleData", true] }, "samples", "gameplay"] },
+                events: { $sum: { $ifNull: ["$count", 1] } }
+              }
+            }
           ],
           latestDeaths: [
             { $match: { eventType: "prince_died" } },
@@ -55,12 +73,13 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
                 receivedAt: 1,
                 location: 1,
                 sampleData: 1,
+                count: { $ifNull: ["$count", 1] },
                 "payload.mechanism": 1,
                 "payload.source": 1
               }
             }
           ],
-          totals: [{ $group: { _id: null, events: { $sum: 1 }, ...totals } }],
+          totals: [{ $group: { _id: null, events: { $sum: { $ifNull: ["$count", 1] } }, ...totals } }],
           days: [
             {
               $group: {
@@ -77,7 +96,12 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
           ],
           causes: [
             { $match: { eventType: { $in: ["prince_died", "enemy_died"] } } },
-            { $group: { _id: { type: "$eventType", cause: "$payload.mechanism" }, deaths: { $sum: 1 } } },
+            {
+              $group: {
+                _id: { type: "$eventType", cause: "$payload.mechanism" },
+                deaths: { $sum: { $ifNull: ["$count", 1] } }
+              }
+            },
             { $sort: { deaths: -1 } }
           ],
           guards: [
@@ -89,6 +113,7 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
                   map: "$mapId",
                   revision: "$mapRevision",
                   guard: "$payload.source.guardId",
+                  room: "$payload.source.roomId",
                   spawn: "$payload.source.spawnLocation"
                 },
                 hpLost: sum(["prince_damaged"], "$payload.hpLost"),

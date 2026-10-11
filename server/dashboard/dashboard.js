@@ -102,6 +102,7 @@ function render(data) {
       `Level ${death.levelNumber}`,
       title(death.payload.mechanism),
       death.location.roomId,
+      number(death.count || 1),
       death.sampleData ? "Sample" : "Gameplay"
     ]) {
       row.append(element("td", value));
@@ -111,7 +112,7 @@ function render(data) {
   if (!deathsTable.children.length) {
     const row = element("tr");
     const cell = element("td", "No Prince deaths in this selection.");
-    cell.colSpan = 5;
+    cell.colSpan = 6;
     row.append(cell);
     deathsTable.append(row);
   }
@@ -186,7 +187,7 @@ function render(data) {
     data.guards,
     (r) => [
       `Guard #${r._id.guard} · Level ${r._id.level}`,
-      `Spawn room ${r._id.spawn?.roomId ?? "unknown"} · ${r._id.map} / ${r._id.revision.slice(0, 8)}`
+      `Room ${r._id.room ?? r._id.spawn?.roomId ?? "unknown"} · spawn ${r._id.spawn?.roomId ?? "unknown"} · ${r._id.map} / ${r._id.revision.slice(0, 8)}`
     ],
     "hpLost"
   );

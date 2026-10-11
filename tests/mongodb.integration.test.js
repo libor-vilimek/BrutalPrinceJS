@@ -3,10 +3,11 @@
 const assert = require("node:assert/strict");
 const { randomUUID } = require("node:crypto");
 const { test } = require("node:test");
-const { MongoClient } = require("mongodb");
+const { MongoClient, BSON } = require("mongodb");
 const { createEventStore } = require("../server/store");
 const { createApp } = require("../server/app");
 const { fixture } = require("./statistics-fixture");
+const { StatisticsSummary } = require("../src/StatisticsSummary");
 
 test(
   "real MongoDB: HTTP batch persistence, indexes, retries, conflicts, mixed validity, concurrent deduplication and expiry",
@@ -105,6 +106,57 @@ test(
       assert.equal(samples.totals.events, 1);
       assert.equal(samples.totals.princeDeaths, 0);
       assert.equal((await store.report({ days: 30, source: "gameplay" })).totals.events, actual.totals.events);
+
+      async function compact(clientId, levels) {
+        const response = await fetch(`http://127.0.0.1:${listener.address().port}/api/v2/gameplay-statistics`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ schemaVersion: 2, clientId, levels })
+        });
+        assert.equal(response.status, 200);
+        return (await response.json()).results;
+      }
+      const clientId = randomUUID();
+      const accumulated = new StatisticsSummary();
+      const key = accumulated.add(events[0]);
+      const older = accumulated.snapshot(key);
+      for (let kill = 0; kill < 1000; kill++) {
+        accumulated.add(death);
+      }
+      for (let fatal = 0; fatal < 3; fatal++) {
+        for (const row of JSON.parse(JSON.stringify(f.events())).filter((row) =>
+          ["prince_damaged", "prince_died"].includes(row.eventType)
+        )) {
+          accumulated.add(row);
+        }
+      }
+      const newer = accumulated.snapshot(key);
+      const invalid = { ...newer, counters: { ...newer.counters, enemyDeaths: 1001 } };
+      const compactMixed = await compact(clientId, [invalid, newer]);
+      assert.equal(compactMixed[0].status, "rejected");
+      assert.equal(compactMixed[1].status, "stored");
+      await Promise.all(Array.from({ length: 4 }, () => compact(clientId, [newer])));
+      await compact(clientId, [older]); // Late retry must never decrease an already stored counter.
+      assert.equal(await collection.countDocuments({ clientId }), 1);
+      const document = await collection.findOne({ clientId });
+      assert.equal(document.counters.enemyDeaths, 1000);
+      assert.equal(document.counters.princeDeaths, 3);
+      assert.equal(Object.values(document.kills).length, 1);
+      assert.equal(Object.values(document.deaths)[0].count, 3);
+      assert.equal(Object.values(document.damage)[0].hits, 3);
+      assert(!JSON.stringify(document).includes("victimInstanceId"));
+      assert(BSON.calculateObjectSize(document) < BSON.calculateObjectSize(original) * 1000 * 0.01);
+      assert(document.expiresAt instanceof Date);
+      const combined = await store.report({ days: 30, source: "gameplay" });
+      assert.equal(combined.totals.enemyDeaths, 1001);
+      assert.equal(combined.totals.princeDeaths, 4);
+      assert.equal(combined.totals.hpLost, actual.totals.hpLost * 4);
+      assert.equal(combined.guards[0].kills, 4);
+      assert.equal(combined.latestDeaths.find((row) => row.count === 3).payload.mechanism, "sword");
+      assert.equal(combined.weapons.find((row) => row._id === "molotov").kills, 1001);
+      const freshId = randomUUID();
+      await Promise.all(Array.from({ length: 4 }, () => compact(freshId, [newer])));
+      assert.equal(await collection.countDocuments({ clientId: freshId }), 1);
     } catch (error) {
       if (error instanceof assert.AssertionError) {
         throw error;

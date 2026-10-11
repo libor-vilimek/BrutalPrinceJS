@@ -6,6 +6,46 @@ const http = require("node:http");
 const { createApp } = require("../server/app");
 const { fixture } = require("./statistics-fixture");
 const { validateEvent } = require("../server/events");
+const { validateSummary } = require("../server/summaries");
+const { StatisticsSummary } = require("../src/StatisticsSummary");
+
+test("compact API validates the client/envelope and acknowledges summaries only after storage", async (t) => {
+  const f = fixture();
+  const levels = [...f.stats.summaries.levels.keys()].map((key) => f.stats.summaries.snapshot(key));
+  let called = 0;
+  const url = await server(t, {
+    store: {
+      async writeSummaries(clientId, rows) {
+        assert.equal(clientId, f.stats.clientId);
+        called++;
+        return rows.map((level) => ({
+          key: StatisticsSummary.key(level),
+          status: validateSummary(level) ? "rejected" : "stored"
+        }));
+      }
+    }
+  });
+  const body = { schemaVersion: 2, clientId: f.stats.clientId, levels };
+  const post = (value) =>
+    fetch(url + "/api/v2/gameplay-statistics", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(value)
+    });
+  for (const value of [
+    { ...body, clientId: "device-name" },
+    { ...body, email: "private@example.com" },
+    { ...body, droppedEventCount: -1 },
+    { ...body, levels: [] }
+  ]) {
+    assert.equal((await post(value)).status, 400);
+  }
+  assert.equal(called, 0);
+  const response = await post(body);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).results[0].status, "stored");
+  assert.equal(called, 1);
+});
 
 async function server(t, options = {}) {
   const app = createApp({

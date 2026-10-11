@@ -4,6 +4,7 @@ const path = require("node:path");
 const Koa = require("koa");
 const serve = require("koa-static");
 const { readFile } = require("node:fs/promises");
+const { UUID } = require("./summaries");
 
 const MAX_BYTES = 256 * 1024;
 
@@ -122,7 +123,8 @@ function createApp({
       return;
     }
     ctx.set("Cache-Control", "no-store");
-    if (ctx.path !== "/api/v1/gameplay-events") {
+    const compact = ctx.path === "/api/v2/gameplay-statistics";
+    if (!compact && ctx.path !== "/api/v1/gameplay-events") {
       ctx.status = 404;
       ctx.body = { error: "unknown_api_route" };
       return;
@@ -178,6 +180,26 @@ function createApp({
       return;
     }
     const batch = await readJson(ctx.req);
+    if (compact) {
+      if (
+        !batch ||
+        batch.schemaVersion !== 2 ||
+        typeof batch.clientId !== "string" ||
+        !UUID.test(batch.clientId) ||
+        !Array.isArray(batch.levels) ||
+        batch.levels.length < 1 ||
+        batch.levels.length > 100 ||
+        Object.keys(batch).some((key) => !["schemaVersion", "clientId", "levels", "droppedEventCount"].includes(key)) ||
+        (batch.droppedEventCount !== undefined &&
+          (!Number.isSafeInteger(batch.droppedEventCount) || batch.droppedEventCount < 0))
+      ) {
+        ctx.status = 400;
+        ctx.body = { error: "invalid_summary_batch" };
+        return;
+      }
+      ctx.body = { results: await store.writeSummaries(batch.clientId, batch.levels) };
+      return;
+    }
     if (
       !batch ||
       batch.schemaVersion !== 1 ||

@@ -4,6 +4,7 @@ const { MongoClient } = require("mongodb");
 const { createApp } = require("../server/app");
 const { createEventStore } = require("../server/store");
 const { sampleEvents } = require("./statistics-sample-data");
+const { StatisticsSummary } = require("../src/StatisticsSummary");
 
 // Deliberately fixed: destructive preview commands cannot be redirected to production by environment variables.
 const database = "testbrutalprince";
@@ -34,32 +35,36 @@ async function main() {
       process.stdout.write(`Cleared ${database}.${collectionName}.\n`);
     }
     if (action === "seed" || action === "reset") {
-      // Exercise the same HTTP validation/persistence path used by gameplay, then backdate sample receipt times for charts.
+      // Exercise compact gameplay persistence. Synthetic play dates populate the daily chart.
       server = createApp({ store }).listen(0, "127.0.0.1");
       await new Promise((resolve, reject) => {
         server.once("listening", resolve);
         server.once("error", reject);
       });
       const events = sampleEvents();
-      for (let offset = 0; offset < events.length; offset += 100) {
-        const batch = events.slice(offset, offset + 100);
-        const response = await fetch(`http://127.0.0.1:${server.address().port}/api/v1/gameplay-events`, {
+      const clientId = events[0].sessionId;
+      const summaries = new StatisticsSummary();
+      for (const event of events) {
+        summaries.add(event);
+      }
+      const levels = [...summaries.levels.keys()].map((key) => summaries.snapshot(key));
+      for (let offset = 0; offset < levels.length; offset += 30) {
+        const batch = levels.slice(offset, offset + 30);
+        const response = await fetch(`http://127.0.0.1:${server.address().port}/api/v2/gameplay-statistics`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ schemaVersion: 1, events: batch }),
+          body: JSON.stringify({ schemaVersion: 2, clientId, levels: batch }),
           signal: AbortSignal.timeout(15000)
         });
         if (!response.ok || (await response.json()).results.some((result) => result.status !== "stored")) {
           throw new Error("Sample batch was not stored");
         }
         await collection.bulkWrite(
-          batch.map((event) => ({
+          batch.map((level) => ({
             updateOne: {
-              filter: { eventId: event.eventId },
+              filter: { _id: `summary:${clientId}:${StatisticsSummary.key(level)}` },
               update: {
                 $set: {
-                  receivedAt: new Date(event.occurredAt),
-                  expiresAt: new Date(Date.parse(event.occurredAt) + 90 * 86400000),
                   sampleData: true
                 }
               }
@@ -70,7 +75,7 @@ async function main() {
       await new Promise((resolve) => server.close(resolve));
       server = null;
       process.stdout.write(
-        `Stored ${events.length} sample observations via the API in ${database}.${collectionName}.\n`
+        `Stored ${levels.length} compact summaries from ${events.length} sample observations via the API in ${database}.${collectionName}.\n`
       );
     }
     if (action === "preview") {

@@ -9,6 +9,8 @@ PrinceJS.Statistics = function (game) {
   this.sequence = 0;
   this.dropped = 0;
   this.sessionId = this.id();
+  this.clientId = this.sessionId;
+  this.summaries = new PrinceJS.StatisticsSummary();
   this.campaignId = this.id();
   this.lastPlayerActivity = -Infinity;
   this.focused = document.hasFocus();
@@ -104,6 +106,8 @@ PrinceJS.Statistics.prototype = {
     this.inFlight = false;
     this.retryAt = this.failures = this.dropped = 0;
     this.sessionId = this.id();
+    this.clientId = this.sessionId;
+    this.summaries = new PrinceJS.StatisticsSummary();
     this.campaignId = this.id();
     this.sequence = 0;
     this.suspend();
@@ -357,6 +361,7 @@ PrinceJS.Statistics.prototype = {
       location: this.location(actor || this.state.kid),
       payload: JSON.parse(JSON.stringify(payload))
     };
+    const summaryKey = this.summaries.add(event);
     if (this.queue.length >= 1000) {
       const index = this.queue.findIndex((entry) => !/(_died|level_started|level_ended)$/.test(entry.event.eventType));
       if (index < 0) {
@@ -366,8 +371,10 @@ PrinceJS.Statistics.prototype = {
       this.queue.splice(index, 1);
       this.dropped++;
     }
-    this.queue.push({ event, queuedAt: now });
-    this.lastEventAt = now;
+    this.queue.push({ event, summaryKey, queuedAt: now });
+    if (summaryKey) {
+      this.lastEventAt = now;
+    }
     this.schedule();
     return event.eventId;
   },
@@ -463,15 +470,12 @@ PrinceJS.Statistics.prototype = {
 
   schedule: function () {
     window.clearTimeout(this.transportTimer);
-    if (!this.enabled || this.inFlight || !this.queue.length || !this.foreground()) {
+    const first = this.queue.find((entry) => entry.summaryKey);
+    if (!this.enabled || this.inFlight || !first || !this.foreground()) {
       return;
     }
     const now = this.now();
-    const due = Math.min(
-      this.lastEventAt + 3000,
-      this.queue[0].queuedAt + 20000,
-      this.queue.length >= 100 ? now : Infinity
-    );
+    const due = Math.min(this.lastEventAt + 3000, first.queuedAt + 20000);
     this.transportTimer = window.setTimeout(() => this.flush(), Math.max(0, Math.max(due, this.retryAt || 0) - now));
   },
 
@@ -480,17 +484,31 @@ PrinceJS.Statistics.prototype = {
       return;
     }
     this.flushWeapons();
-    const entries = [];
-    let bytes = 0;
-    for (const entry of this.queue.slice(0, 100)) {
-      const size = new window.TextEncoder().encode(JSON.stringify(entry.event)).length;
-      if (bytes + size > (exiting ? 60000 : 240000)) {
+    const keys = [];
+    const levels = [];
+    let bytes = 256;
+    for (const entry of this.queue) {
+      if (!entry.summaryKey || keys.includes(entry.summaryKey)) {
+        continue;
+      }
+      const level = this.summaries.snapshot(entry.summaryKey);
+      const size = new window.TextEncoder().encode(JSON.stringify(level)).length;
+      if (keys.length >= 100 || bytes + size > (exiting ? 60000 : 240000)) {
         break;
       }
-      entries.push(entry);
+      keys.push(entry.summaryKey);
+      levels.push(level);
       bytes += size;
     }
-    if (!entries.length) {
+    if (!this.queue.some((entry) => entry.summaryKey)) {
+      this.queue.length = 0;
+      return;
+    }
+    const entries = this.queue.filter((entry) => !entry.summaryKey || keys.includes(entry.summaryKey));
+    if (!levels.length) {
+      if (exiting) {
+        return;
+      }
       this.queue.shift();
       this.dropped++;
       this.schedule();
@@ -502,15 +520,16 @@ PrinceJS.Statistics.prototype = {
     const controller = (this.controller = new window.AbortController());
     const timeout = window.setTimeout(() => controller.abort(), 8000);
     try {
-      const response = await window.fetch("/api/v1/gameplay-events", {
+      const response = await window.fetch("/api/v2/gameplay-statistics", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "omit",
         signal: controller.signal,
         keepalive: exiting,
         body: JSON.stringify({
-          schemaVersion: 1,
-          events: entries.map((entry) => entry.event),
+          schemaVersion: 2,
+          clientId: this.clientId,
+          levels,
           droppedEventCount: dropped
         })
       });
@@ -530,10 +549,10 @@ PrinceJS.Statistics.prototype = {
         const body = await response.json();
         if (
           !Array.isArray(body.results) ||
-          body.results.length !== entries.length ||
+          body.results.length !== keys.length ||
           body.results.some(
             (result, index) =>
-              result.eventId !== entries[index].event.eventId ||
+              (result.key !== keys[index] && !(result.key === null && result.status === "rejected")) ||
               !["stored", "duplicate", "rejected"].includes(result.status)
           )
         ) {
