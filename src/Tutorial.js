@@ -49,6 +49,7 @@ PrinceJS.Tutorial.prototype = {
       return false;
     }
     this.active = lesson;
+    this.game?.statistics?.record("tutorial_started", { lessonId: lesson.id });
     this.lastShown.set(lesson.id, Date.now());
     this.pauseTime = new Date();
     this.startTime = PrinceJS.startTime;
@@ -124,6 +125,7 @@ PrinceJS.Tutorial.prototype = {
       return false;
     }
     this.completed.add(lesson.id);
+    this.game?.statistics?.record("tutorial_completed", { lessonId: lesson.id });
     this.resume();
     if (lesson.onAccept) {
       lesson.onAccept(this.delegate, this);
@@ -292,6 +294,9 @@ PrinceJS.Tutorial.prototype = {
   destroy: function () {
     if (this.destroyed) {
       return;
+    }
+    if (this.active) {
+      this.game?.statistics?.record("tutorial_interrupted", { lessonId: this.active.id });
     }
     this.cancelAssist();
     this.resume();

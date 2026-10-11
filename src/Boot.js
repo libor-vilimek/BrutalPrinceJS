@@ -82,6 +82,7 @@ PrinceJS.Boot.prototype = {
 
   create: function () {
     this.game.settings = new PrinceJS.GameSettings(this.game);
+    this.game.statistics = new PrinceJS.Statistics(this.game);
     this.game.touchControls = new PrinceJS.TouchControls(this.game);
     this.game.menu = new PrinceJS.GameMenu(this.game);
     this.game.canvas.tabIndex = 0;

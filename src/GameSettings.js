@@ -3,7 +3,7 @@
 // Browser preferences survive a new campaign; campaign inventory never lives here.
 PrinceJS.GameSettings = function (game) {
   this.game = game;
-  this.values = { sound: 1, music: 1, soundMuted: false, musicMuted: false, touch: this.isMobile() };
+  this.values = { sound: 1, music: 1, soundMuted: false, musicMuted: false, touch: this.isMobile(), statistics: true };
   try {
     const saved = JSON.parse(window.localStorage.getItem(PrinceJS.GameSettings.STORAGE_KEY));
     for (const key of Object.keys(this.values)) {
@@ -68,6 +68,9 @@ PrinceJS.GameSettings.prototype = {
       // The current session remains usable when saving is blocked.
     }
     this.applyAudio();
+    if (key === "statistics") {
+      this.game.statistics?.setEnabled(value);
+    }
   },
 
   volume: function (channel) {

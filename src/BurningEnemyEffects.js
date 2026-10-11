@@ -77,7 +77,8 @@ PrinceJS.BurningEnemyEffects.prototype = {
     };
     // die() owns the health signal; CMD_DIE owns the native death/vizier events.
     // The actor tick is suspended below, so its sequence cannot repeat CMD_DIE.
-    enemy.die();
+    enemy.die(undefined, { mechanism: "fire", actor: this.delegate.kid, weapon: impact.weapon || "fire" });
+    this.game?.statistics?.weaponUsed(impact.weapon || "fire", 1);
     if (typeof enemy.CMD_DIE === "function") {
       enemy.CMD_DIE({});
     } else if (typeof enemy.proceedOnDead === "function") {

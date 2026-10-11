@@ -255,6 +255,7 @@ PrinceJS.Molotov.prototype = {
     }
     if (!state.released && state.time >= PrinceJS.Molotov.RELEASE_TIME) {
       state.released = true;
+      this.game?.statistics?.weaponUsed("molotov");
       let point = this.effects.getThrowPoint(state);
       // Unlimited bottles after the pickup, with a bounded number of live projectiles.
       if (this.bottles.length < 12) {

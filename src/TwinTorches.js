@@ -223,7 +223,7 @@ PrinceJS.TwinTorches.prototype = {
     return this.actionStage === "spinning" && this.validAction();
   },
 
-  handleMeleeHit: function () {
+  handleMeleeHit: function (context) {
     if (!this.validAction()) {
       return false;
     }
@@ -236,7 +236,7 @@ PrinceJS.TwinTorches.prototype = {
       return false;
     }
     this.game.sound.play("StabbedByOpponent");
-    this.kid.damageLife();
+    this.kid.damageLife(false, context);
     this.effects.hitTime = 0.18;
     if (!this.kid.alive) {
       this.cancelAction();
@@ -346,6 +346,7 @@ PrinceJS.TwinTorches.prototype = {
       if (!torch.captured && this.elapsed >= captures[i]) {
         torch.captured = true;
         torch.tile.takeTorch();
+        this.game?.statistics?.record("item_collected", { item: "torch", tile: this.game.statistics.tile(torch.tile) });
         this.game.sound.play("Footsteps", 0.3);
       }
     }
@@ -393,6 +394,7 @@ PrinceJS.TwinTorches.prototype = {
         this.drawProgress = Math.min(1, this.elapsed / PrinceJS.TwinTorches.DRAW_DURATION);
         if (this.drawProgress >= 1) {
           this.actionStage = "spinning";
+          this.game?.statistics?.weaponUsed("twinTorches");
           this.spinTime = 0;
         }
       }

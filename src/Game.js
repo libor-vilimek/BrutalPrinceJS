@@ -42,6 +42,7 @@ PrinceJS.Game.prototype = {
       this.restartGame();
       return;
     }
+    this.game?.statistics?.prepareMap(json);
     this.level = new PrinceJS.LevelBuilder(this.game, this).buildFromJSON(json);
     this.specialEvents = json.prince.specialEvents !== false;
     this.playDanger = json.prince.danger !== false;
@@ -209,9 +210,11 @@ PrinceJS.Game.prototype = {
       this.game.touchControls.attach(this);
       this.game.menu.reveal();
     }
+    this.game?.statistics?.beginLevel(this, json);
   },
 
   update: function () {
+    this.game?.statistics?.sample();
     if (this.tutorial && this.tutorial.active) {
       return;
     }
@@ -322,6 +325,7 @@ PrinceJS.Game.prototype = {
   },
 
   shutdown: function () {
+    this.game?.statistics?.detach();
     if (this.game.touchControls) {
       this.game.touchControls.attach(null);
     }
@@ -685,6 +689,7 @@ PrinceJS.Game.prototype = {
             !this.level.shadowMerge
           ) {
             this.level.shadowMerge = true;
+            this.game?.statistics?.record("shadow_merged");
             this.level.leapOfFaith = true;
             this.ui.resetOpponentLive();
             this.kid.addLife();
@@ -868,12 +873,15 @@ PrinceJS.Game.prototype = {
   },
 
   restartGame() {
+    this.game?.statistics?.endLevel("new_game");
+    this.game?.statistics?.newCampaign();
     this.input.keyboard.onDownCallback = null;
     PrinceJS.Restart();
     this.state.start("Title");
   },
 
   restartLevel(skipped = true) {
+    this.game?.statistics?.endLevel("restarted");
     this.reset(true);
     PrinceJS.skipShowLevel = [13, 14].includes(PrinceJS.currentLevel) && !skipped;
   },
@@ -887,6 +895,10 @@ PrinceJS.Game.prototype = {
       return;
     }
 
+    this.game?.statistics?.endLevel(skipped ? "skipped" : "completed", PrinceJS.currentLevel + 1);
+    if (PrinceJS.currentLevel === 14 && !skipped) {
+      this.game?.statistics?.record("campaign_completed", {}, false);
+    }
     // Checkpoint only equipment brought into the next level. A retry restores
     // that starting inventory; pickups from an unfinished attempt stay reset.
     PrinceJS.levelInventory = {
@@ -923,6 +935,7 @@ PrinceJS.Game.prototype = {
 
     PrinceJS.danger = null;
     if (PrinceJS.currentLevel > 1) {
+      this.game?.statistics?.endLevel("skipped", PrinceJS.currentLevel - 1);
       PrinceJS.currentLevel--;
     }
 
@@ -946,6 +959,7 @@ PrinceJS.Game.prototype = {
   },
 
   timeUp() {
+    this.game?.statistics?.endLevel("left");
     PrinceJS.Utils.delayed(() => {
       PrinceJS.currentLevel = 16;
       this.state.start("Cutscene");
@@ -953,7 +967,7 @@ PrinceJS.Game.prototype = {
   },
 
   outOfRoom() {
-    this.kid.die();
+    this.kid.die(undefined, { mechanism: "fall", source: { kind: "environment" } });
     this.handleDead();
   },
 
@@ -967,6 +981,7 @@ PrinceJS.Game.prototype = {
   },
 
   reset: function (suppressCutscene) {
+    this.game?.statistics?.endLevel("restarted");
     this.game.sound.stopAll();
 
     this.continueTimer = -1;
@@ -983,6 +998,7 @@ PrinceJS.Game.prototype = {
   },
 
   onPause: function () {
+    this.game?.statistics?.suspend();
     if (this.game.menu && this.game.menu.isOpen) {
       return;
     }
@@ -997,6 +1013,8 @@ PrinceJS.Game.prototype = {
   },
 
   onResume: function () {
+    this.game?.statistics?.suspend();
+    this.game?.statistics?.schedule();
     if (this.game.menu && this.game.menu.isOpen) {
       return;
     }

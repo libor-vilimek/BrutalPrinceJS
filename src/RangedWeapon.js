@@ -212,6 +212,7 @@ PrinceJS.RangedWeapon.prototype = {
   },
 
   fire: function (muzzle) {
+    this.game?.statistics?.weaponUsed(this.spec.id);
     this.effects.shot(muzzle.x, muzzle.y, muzzle.direction);
     this.playShotSound();
     let bullet = {
@@ -350,7 +351,21 @@ PrinceJS.RangedWeapon.prototype = {
     // Preserve the original health signals, death animations, and special enemy rules.
     let wasAlive = enemy.alive;
     let previousHealth = enemy.health;
-    enemy.damageLife();
+    enemy.damageLife(false, {
+      mechanism:
+        this.spec.id === "rocketLauncher"
+          ? "explosion"
+          : this.spec.id === "whip"
+            ? "whip"
+            : this.spec.id === "molotov"
+              ? "fire"
+              : "bullet",
+      actor: this.kid,
+      weapon: this.spec.id
+    });
+    if (enemy.health < previousHealth) {
+      this.game?.statistics?.weaponUsed(this.spec.id, 1);
+    }
     if (this.spec && (enemy.health < previousHealth || (wasAlive && !enemy.alive))) {
       let bounds = enemy.getCharBounds();
       let hit = Object.assign(

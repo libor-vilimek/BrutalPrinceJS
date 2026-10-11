@@ -32,6 +32,7 @@ PrinceJS.GameMenu = function (game) {
           )
           .join("")}
         <label class="menu-touch-setting"><span>On-screen controls<small>Movement and actions at the bottom left</small></span><input id="touch-enabled" type="checkbox" role="switch"></label>
+        <label class="menu-touch-setting"><span>Send gameplay statistics<small>Share deaths, damage, levels and active play. Turn off to stop collection.</small></span><input id="statistics-enabled" type="checkbox" role="switch"></label>
         <button class="menu-controls-button" type="button">Controls <span aria-hidden="true">→</span></button>
         <p class="menu-note">Your preferences are saved on this device.</p>
       </div>
@@ -112,6 +113,9 @@ PrinceJS.GameMenu = function (game) {
     this.game.touchControls.refresh();
   });
   // Installed at boot, before tutorial listeners and Phaser gameplay callbacks.
+  this.root.querySelector("#statistics-enabled").addEventListener("change", (event) => {
+    this.game.settings.set("statistics", event.target.checked);
+  });
   window.addEventListener("keydown", (event) => this.onKeyDown(event), true);
   window.addEventListener(
     "keyup",
@@ -153,6 +157,7 @@ PrinceJS.GameMenu.prototype = {
       mute.setAttribute("aria-pressed", String(values[channel + "Muted"]));
     }
     this.root.querySelector("#touch-enabled").checked = values.touch;
+    this.root.querySelector("#statistics-enabled").checked = values.statistics;
   },
 
   open: function () {

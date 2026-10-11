@@ -1,14 +1,14 @@
 # ADR 2016-10-11: Gameplay statistics through an API backed by MongoDB
 
-- Status: Proposed
+- Status: Accepted and implemented
 - Date: 2016-10-11
-- Scope: Architecture and event contract only; no implementation in this change.
+- Scope: Gameplay recording, Koa API, MongoDB persistence, local statistics dashboard and isolated database tests.
 
 ## Context
 
 We want to count enemy deaths and Prince deaths and retain enough detail to explore gameplay later. Totals alone cannot
 tell us which guard is dangerous, where players struggle, or whether a death was caused by a weapon, trap, or fall.
-The browser currently runs the game without a statistics backend. Existing actor signals report health loss and death,
+At the time of this decision, the browser ran the game without a statistics backend. Existing actor signals reported health loss and death,
 but do not carry sufficient causal context for these questions. Guards already receive a numeric `id` in `src/Game.js`.
 The map provides room IDs and tile coordinates; the camera can show several rooms at once.
 
@@ -28,9 +28,13 @@ The requested requirements are:
   Only this server communicates with MongoDB; clients never connect to the database.
 - All statistics requests run asynchronously in the background. Failed requests have no effect on the game and show
   no player-facing error. Send events in batches, normally three seconds after the last recorded event.
+- Use Heroku's existing `mongoconnectionurl` configuration variable. Normal storage is database `brutalprince`,
+  collection `brutalprince`; real database tests use the dedicated `testbrutalprince` database.
+- Provide a statistics page for local viewing, plus scripts to wipe an isolated test collection and populate it with
+  randomized sample gameplay that exercises the API and dashboard.
 
-The choices below are proposed engineering decisions, including the additional statistics. They are not claims that
-these features already exist or changes to existing gameplay decisions in the root `ruleset.md`.
+The engineering choices below implement the requested feature, including additional statistics. Defaults, limits and
+retention are implementation decisions; they do not alter existing gameplay rules in the root `ruleset.md`.
 
 ## Decision
 
@@ -46,8 +50,8 @@ Gameplay transitions -> telemetry recorder -> bounded queue -> HTTPS /api/... (K
 
 Gameplay must never wait for the API or database. An unavailable backend must not affect health, combat, input,
 inventory, animation, rendering, tutorials, sound, or level progression. There are no database credentials or privileged
-API secrets in the browser. Building a dashboard or adding visible in-game counters is outside this ADR's implementation
-scope; the death counters are initially analytical counts derived from stored events.
+API secrets in the browser. Death counters are analytical counts derived from stored events and displayed in the local
+statistics dashboard. Visible counters inside the game remain outside the implementation scope.
 
 ### Identity and location
 
@@ -196,7 +200,7 @@ through the Koa server or route `/api/...` to it through a reverse proxy. Preser
 Reserve `/api/...` for API handlers; an unknown API route must return an API error rather than falling through to a game
 page. Koa is a user-selected framework, not an open implementation choice.
 
-Proposed endpoint: `POST /api/v1/gameplay-events`, with `{ "schemaVersion": 1, "events": [...] }`. Each event contains
+Endpoint: `POST /api/v1/gameplay-events`, with `{ "schemaVersion": 1, "events": [...], "droppedEventCount": 0 }`. Each event contains
 the identity envelope above plus an event-specific payload. All events, including level starts, deaths, terminal events,
 and activity reports, use the asynchronous batch transport below. Suppressing an idle heartbeat does not prevent
 delivery of a queued real event.
@@ -214,12 +218,13 @@ The supplied connection URI template is:
 mongodb+srv://liborvilimek_db_user:{mongo_password}@brutalprince.yartwde.mongodb.net/?appName=brutalprince
 ```
 
-Configure the resolved URI as the server's `MONGODB_URI` environment variable using a deployment secret. Replace
+Configure the resolved URI as the server's `mongoconnectionurl` environment variable using a deployment secret;
+`MONGODB_URI` is a fallback. Replace
 `{mongo_password}` with the actual password, correctly encoded as a URI credential; this literal placeholder is not a
 working password. Never commit the resolved URI, include it in frontend code/assets or responses, or log it on errors.
-The URI does not select an application database, so configure that explicitly through `MONGODB_DATABASE`; its name
-remains to be chosen. Reuse a server-side MongoDB client/connection pool rather than connecting for every browser event.
-No database connection or deployment is performed as part of this documentation change.
+The URI does not select an application database. Select `brutalprince` explicitly (override using `MONGODB_DATABASE`),
+and write to its `brutalprince` collection. Reuse a server-side MongoDB client/connection pool rather than connecting for
+every browser event. Local credentials belong only in ignored `.env`; `.env.example` contains placeholders.
 
 #### Asynchronous background batching and failure behavior
 
@@ -235,7 +240,7 @@ an immediate per-event request. Events recorded during an in-flight request go i
 backlog into bounded requests, retaining one in-flight request at a time.
 
 A pure trailing debounce could postpone transmission forever during continuous play. As an additional engineering
-proposal, cap the wait at 20 seconds from the oldest queued event and flush a full batch when its size limit is reached.
+decision, cap the wait at 20 seconds from the oldest queued event and flush a full batch when its size limit is reached.
 These caps keep the queue bounded; the normal quiet-period rule remains three seconds. A 20-second `level_activity`
 event is an activity observation, not a separate transport timer or a forced per-event request. It enters the same queue
 and is normally sent three seconds later; the cadence describes observation time rather than exact network arrival time.
@@ -252,11 +257,10 @@ The API validates event types, versions, field types, coordinate/health bounds, 
 size before writing. Apply request limits and rate limits; restrict browser origins if the API is hosted separately.
 Origin checks are not proof that a client is genuine. Client statistics remain untrusted and unsuitable for authoritative
 competitive leaderboards. The API assigns `receivedAt`; sequence and monotonic attempt time help reconstruct order despite
-late arrivals or clock skew. Hosting, reverse-proxy/static-serving arrangement, database name, and deployment secrets
-remain deployment choices to settle before implementation; Node.js, Koa, the `/api/...` prefix, and the MongoDB cluster
-above are now specified.
+late arrivals or clock skew. Koa serves the existing game paths alongside the API; `Procfile` starts the server on
+Heroku's `PORT`. The database is configured server-side and failures return sanitized responses.
 
-Store one accepted event per MongoDB document in `gameplay_events`, preserving the original versioned payload:
+Store one accepted event per MongoDB document in `brutalprince.brutalprince`, preserving the original versioned payload:
 
 - Unique index on `eventId` for retry deduplication.
 - A conditional unique semantic key for death events, `(attemptId, eventType, victimInstanceId)`, to prevent different
@@ -271,8 +275,8 @@ initial counts through aggregation; later materialized summaries must remain reb
 
 Use a bounded in-memory client queue, one in-flight batch, exponential backoff with jitter for transient failures, and
 server retry guidance for rate limits. Retry the same event IDs; discard/report permanently invalid events locally.
-Suggested initial bounds are 100 events per request, 256 KiB per request, and 1,000 queued events per tab, to be tuned
-before release. Coalesce high-volume measurements, prioritize deaths/start/end when the queue fills, and include an
+Initial bounds are 100 events per request, 256 KiB per request, and 1,000 queued events per tab. Coalesce high-volume
+measurements, prioritize deaths/start/end when the queue fills, and include an
 explicit dropped-event count with the next accepted batch. Never let a backlog grow indefinitely. Page-exit flushing is
 best effort only. Events lost on reload, closed tabs, offline overflow, or disabled tracking are an acknowledged limitation.
 
@@ -280,8 +284,8 @@ best effort only. Events lost on reload, closed tabs, offline overflow, or disab
 
 Add a clearly labeled `Send gameplay statistics` toggle to the existing upper-right settings menu, with a short
 explanation of death, damage, level, and activity collection. Reuse `GameSettings` persistence and its in-memory fallback
-when localStorage is unavailable. The proposed default is enabled, interpreting the requested switch as an opt-out;
-this is an engineering proposal, not an explicitly requested default.
+when localStorage is unavailable. The default is enabled, interpreting the requested switch as an opt-out;
+this is an implementation decision, not an explicitly requested default.
 
 Disabling takes effect immediately: stop recording and sending, cancel timers/retries, clear all queued events and
 activity deltas, and abort in-flight requests where possible. A request already accepted by the server cannot be recalled.
@@ -295,8 +299,24 @@ events to that observed attempt and exclude it from full-attempt funnels by defa
 Do not collect names, email addresses, keystroke logs, screenshots, full URLs/resume links, or persistent cross-session
 player IDs. Store only gameplay context and coarse input mode (`keyboard`, `touch`, `mixed`) if useful. Do not persist IP
 addresses or user-agent strings in gameplay documents; infrastructure logs require a separately configured policy.
-Propose 90 days of raw events using an expiry timestamp/TTL policy, retaining only anonymous aggregate totals longer.
-Confirm retention, deployment logging, and the enabled-by-default choice before releasing the implementation.
+Keep raw events for 90 days using an expiry timestamp/TTL index. Long-term aggregate storage is deferred.
+Deployment access logs are separate from gameplay documents and configured by the host owner.
+
+### Local dashboard and sample data
+
+The local server exposes `/statistics` and `GET /api/v1/statistics` for read-only MongoDB aggregations. The page shows
+Prince/enemy deaths, attempts and completions, active play, daily trends, level performance, death causes, dangerous
+guards and traps, and weapon usage. Filter by 7/30/90 days and level. Keep map revisions separate in rankings; damage
+queries sum only damage events, death queries count only death events. Completion totals exclude partial observations.
+
+The first dashboard is local-only: socket and host checks restrict it to loopback, and Heroku disables the routes.
+Remote authenticated dashboard access is outside this change. No client connection strings are needed to view it.
+
+`statistics:seed`, `statistics:wipe`, `statistics:reset` and `statistics:preview` operate only on the fixed
+`testbrutalprince.test_dashboard_events` collection. Seed sends randomized valid events through the real HTTP API,
+then backdates receipt timestamps explicitly for synthetic chart history. Wipe removes just that collection; reset
+wipes and seeds it. Preview binds to loopback, labels its data as samples and leaves the normal database untouched.
+Independent integration tests use fresh `test_gameplay_events_<random-id>` collections and clean up only their own data.
 
 ## Alternatives considered
 
@@ -317,10 +337,10 @@ new report. Explicit causal context and stable map-scoped identities make guard/
 requires a hosted API, database operations, instrumentation across multiple health/death paths, and careful queue and
 activity lifecycle handling. Client opt-out and best-effort delivery mean statistics are observational and incomplete.
 
-## Implementation and acceptance plan (future work)
+## Implementation and validation
 
-1. Finalize deployment, setting default, retention, schema, and deterministic guard/spawn identity. Add the accepted
-   telemetry rules to `ruleset.md` and update settings/help documentation when implementation is authorized.
+1. Keep telemetry rules and defaults in `ruleset.md`, with setup, test commands and exploratory queries in
+   [statistics documentation](../../docs/statistics.md).
 2. Implement the Node.js/Koa server under `/api/...`, using the official `mongodb` driver and direct queries,
    server-only MongoDB configuration, validation, batch
    acknowledgements, persistence, idempotency, limits, and configured indexes.
@@ -347,4 +367,6 @@ activity lifecycle handling. Client opt-out and best-effort delivery mean statis
    - Existing controls, inventory, animations, graphics layers, campaign time, and level transitions remain compliant
      with `ruleset.md`. Browser verification keeps sound muted, per `WORK-04`.
 
-This ADR creates no API, MongoDB deployment, instrumentation, menu toggle, or behavioral changes.
+Implementation includes the API, isolated recorder, menu preference, local dashboard, sample-data scripts, deterministic
+recorder/API checks, optional muted browser checks and real MongoDB integration checks. It does not deploy a hosted
+dashboard or change gameplay rules.

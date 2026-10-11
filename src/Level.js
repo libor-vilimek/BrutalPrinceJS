@@ -111,11 +111,19 @@ PrinceJS.Level.prototype = {
         return false;
       }
       this.exitDoorOpen = true;
+      this.game?.statistics?.record("environment_changed", {
+        change: "barrier_destroyed",
+        tile: this.game?.statistics.tile(tile)
+      });
       return true;
     }
     if (!tile.isBarrier()) {
       return false;
     }
+    this.game?.statistics?.record("environment_changed", {
+      change: "barrier_destroyed",
+      tile: this.game?.statistics.tile(tile)
+    });
 
     // Keep a solid walking surface inside breached stone walls and beneath gates.
     // Hanging tapestry tops have no floor, so they leave the existing gap intact.
@@ -276,6 +284,13 @@ PrinceJS.Level.prototype = {
   },
 
   floorStartFall: function (tile) {
+    if (this.game?.statistics) {
+      tile.statisticsOrigin ||= this.game?.statistics.tile(tile);
+      this.game?.statistics.record("environment_changed", {
+        change: "loose_floor_falling",
+        tile: tile.statisticsOrigin
+      });
+    }
     let space = new PrinceJS.Tile.Base(this.game, PrinceJS.Level.TILE_SPACE, 0, tile.type);
     if (tile.type === PrinceJS.Level.TYPE_PALACE) {
       space.back.frameName = tile.key + "_0_1";

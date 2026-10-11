@@ -96,6 +96,19 @@ test("mobile touch default and explicit saved overrides do not depend on viewpor
   assert.equal(fixture({ saved: '{"touch":true}' }).settings.values.touch, true);
 });
 
+test("statistics preference persists opt-out and notifies the recorder immediately, including blocked storage", () => {
+  const f = fixture();
+  assert.equal(f.settings.values.statistics, true);
+  const calls = [];
+  f.game.statistics = { setEnabled: (value) => calls.push(value) };
+  f.settings.set("statistics", false);
+  assert.deepEqual(calls, [false]);
+  assert.equal(fixture({ saved: JSON.stringify(f.settings.values) }).settings.values.statistics, false);
+  const denied = fixture({ blocked: true });
+  denied.settings.set("statistics", false);
+  assert.equal(denied.settings.values.statistics, false);
+});
+
 test("preferences clamp volumes, ignore malformed fields and survive storage denial", () => {
   const f = fixture({ saved: '{"sound":8,"music":-3,"touch":"yes","soundMuted":true}' });
   assert.equal(f.settings.values.sound, 1);

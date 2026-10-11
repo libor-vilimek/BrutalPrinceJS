@@ -143,6 +143,8 @@ PrinceJS.Jetpack.prototype = {
       y: kid.charY + kid.charFdy
     };
     this.active = kid.jetpackEquipped = true;
+    this.game?.statistics?.playerAction();
+    this.game?.statistics?.record("jetpack_changed", { enabled: true });
     this.phase = "equipping";
     this.elapsed = this.velocityX = this.velocityY = 0;
     this.health = kid.health;
@@ -412,7 +414,7 @@ PrinceJS.Jetpack.prototype = {
       tile.raise();
       if (justLanded) {
         this.stop(false);
-        this.kid.dieSpikes();
+        this.kid.dieSpikes(tile);
         this.game.sound.play("SpikedBySpikes");
       }
     }
@@ -440,6 +442,9 @@ PrinceJS.Jetpack.prototype = {
 
   stop: function (restorePhysics) {
     let kid = this.kid;
+    if (this.active) {
+      this.game?.statistics?.record("jetpack_changed", { enabled: false });
+    }
     let ownsAction = kid.specialAction && kid.specialAction.owner === this;
     this.active = kid.jetpackEquipped = false;
     this.phase = "off";

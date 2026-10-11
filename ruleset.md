@@ -30,6 +30,7 @@ Tento dokument zachycuje aktuální přání z celé této konverzace. Změny zd
 - [Závěrečná scéna](#závěrečná-scéna)
 - [Čas a zobrazení v prohlížeči](#čas-a-zobrazení-v-prohlížeči)
 - [Způsob práce](#způsob-práce)
+- [Statistiky hraní](#statistiky-hraní)
 - [Nahrazená rozhodnutí](#nahrazená-rozhodnutí)
 
 ## Ovládání a inventář
@@ -245,6 +246,16 @@ Implementační rozhodnutí pro menu: bez zobrazeného dotykového panelu trvá 
 - **WORK-02:** Paralelní změny je nutné následně propojit a ověřit jako celek, zejména sdílený inventář, animace, vstupy, vrstvy a přechody mezi levely.
 - **WORK-03:** Ruleset popisuje platná rozhodnutí, nikoli seznam slibů. Nedodělané nebo nejasné body označ; neprohlašuj je za vyřešené pouze proto, že jsou zapsané zde.
 - **WORK-04:** Testy a prohlídky hry probíhají s vypnutým zvukem. Výjimkou je cílené testování zvuku; po něm se zvuk zase vypne.
+
+## Statistiky hraní
+
+- **STATS-01:** Statistiky úmrtí prince i nepřátel a skutečně odebraných životů obsahují level, místnost a příčinu. Strážce rozlišuje číselné ID v rámci mapy a její revize; pasti a padající desky původní pozice dlaždice. Animace mrtvého těla nepřidávají další úmrtí ani poškození. Nepřímé smrti zachovají známou iniciační akci, například bič či kop.
+- **STATS-02:** Hra zaznamená každý začátek pokusu o level. Každých 20 sekund vytvoří zprávu o aktivitě pouze po skutečném pohybu nebo provedené herní akci. Nečinnost, pouhý běh simulace, menu, čtení tutoriálu, pauza a skrytá či nefokusovaná stránka nevytvářejí pravidelné zprávy o hraní.
+- **STATS-03:** API pod `/api/...` obsluhuje Node.js server s Koa vedle běžných URL hry. MongoDB používá jen server, přes oficiální `mongodb` driver a přímé dotazy; žádný ODM/ORM ani pokročilý databázový framework. Připojení je v serverové proměnné `mongoconnectionurl` (Heroku); klient nedostane databázové přihlašovací údaje.
+- **STATS-04:** Odesílání je asynchronní na pozadí, v dávkách obvykle tři sekundy po poslední události. Selhání nesmí zobrazit hráči chybu, zablokovat hru ani změnit její chování. Implementační rozhodnutí: při souvislé aktivitě se čeká nejvýše 20 sekund, jedna dávka má nejvýše 100 událostí, fronta 1000; opakování zachovává ID událostí a databáze odstraňuje duplicity.
+- **STATS-05:** V menu vpravo nahoře je přepínač `Send gameplay statistics`. Vypnutí ihned zastaví sběr i odesílání a vymaže neodeslanou frontu; volba se ukládá stejně jako ostatní nastavení. Zapnutí uprostřed levelu zaznamená jen částečné pozorování, nedoplňuje ztracenou historii.
+- **STATS-06:** Implementační rozhodnutí: sběr je výchozí zapnutý, surové události se uchovávají 90 dní. Uživatelem určené běžné úložiště je databáze `brutalprince`, kolekce `brutalprince`; databázi lze změnit proměnnou `MONGODB_DATABASE`. Statistiky obsahují také místnosti, zbraně, vybavení, léčení, tutoriály a změny prostředí. Realistické databázové testy jsou výslovně spouštěné a používají uživatelem určenou databázi `testbrutalprince` (volitelně `MONGODB_TEST_DATABASE`), vlastní čerstvou kolekci s prefixem `test_` a uklízejí jen tuto kolekci. Nejde o změnu pravidel soubojů, animací, inventáře, zvuku či postupu mezi levely.
+- **STATS-07:** Přehledná stránka statistik zobrazuje důležité souhrny, příčiny smrtí, levely, nebezpečné strážce a pasti, zbraně a aktivní hraní. Lokální náhled lze na požádání spustit na localhostu. Skripty umí vymazat testovací kolekci a vytvořit náhodná ukázková data, která projdou skutečným API a lze je prohlížet. Implementační rozhodnutí: dashboard je výchozí dostupný jen na loopbacku a vypnutý na Heroku; ukázkové skripty mají pevné úložiště `testbrutalprince.test_dashboard_events`, reset maže jen tuto kolekci a náhled označuje ukázková data.
 
 ## Nahrazená rozhodnutí
 

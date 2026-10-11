@@ -10,3 +10,6 @@
 # package managers
 bower_components/
 node_modules/
+.env
+.env.*
+!.env.example

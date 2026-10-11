@@ -240,6 +240,15 @@ PrinceJS.Kid.prototype.drinkPotion = function () {
   this.game.sound.play("DrinkPotionGlugGlug");
   this.action = "drinkpotion";
   let potionType = tile.modifier;
+  this.statisticsPotionTile = tile;
+  if (this.game?.statistics) {
+    tile.statisticsOrigin ||= this.game.statistics.tile(tile);
+  }
+  this.game?.statistics?.playerAction();
+  this.game?.statistics?.record("item_collected", {
+    item: `potion:${potionType}`,
+    tile: this.game?.statistics.tile(tile)
+  });
   this.level.removeObject(tile.roomX, tile.roomY, tile.room);
   if (tile.isSpecial) {
     return;
@@ -266,7 +275,7 @@ PrinceJS.Kid.prototype.drinkPotion = function () {
       case PrinceJS.Level.POTION_DAMAGE:
         PrinceJS.Utils.flashRedDamage(this.game);
         this.game.sound.play("StabbedByOpponent");
-        this.damageLife();
+        this.damageLife(false, { mechanism: "poison", tile: this.statisticsPotionTile });
         break;
     }
     this.allowCrawl = true;
@@ -519,17 +528,17 @@ PrinceJS.Kid.prototype.sheathe = function () {
   this.sword.visible = false;
 };
 
-PrinceJS.Kid.prototype.stabbed = function () {
+PrinceJS.Kid.prototype.stabbed = function (context) {
   let action = this.specialAction;
   if (
     action &&
     ["twinTorches", "kick"].includes(action.type) &&
     typeof action.owner.handleMeleeHit === "function" &&
-    action.owner.handleMeleeHit()
+    action.owner.handleMeleeHit(context)
   ) {
     return;
   }
-  PrinceJS.Fighter.prototype.stabbed.call(this);
+  PrinceJS.Fighter.prototype.stabbed.call(this, context);
 };
 
 PrinceJS.Kid.prototype.inFallDistance = function (tile) {
@@ -549,7 +558,7 @@ PrinceJS.Kid.prototype.inFallDistance = function (tile) {
 
 PrinceJS.Kid.prototype.checkLooseFloor = function (tile) {
   if (this.standsOnTile(tile) && this.inLooseFloorDistance(tile)) {
-    this.damageStruck();
+    this.damageStruck(tile);
   }
 };
 
@@ -943,7 +952,7 @@ PrinceJS.Kid.prototype.checkFloor = function () {
               ) {
                 this.game.sound.play("SpikedBySpikes"); // HardLandingSplat
                 this.alignToTile(tile);
-                this.dieSpikes();
+                this.dieSpikes(tile);
               }
             }
             tile.raise();
@@ -1314,7 +1323,7 @@ PrinceJS.Kid.prototype.land = function () {
   if (tile.element === PrinceJS.Level.TILE_SPIKES) {
     this.game.sound.play("SpikedBySpikes"); // HardLandingSplat
     this.alignToTile(tile);
-    this.dieSpikes();
+    this.dieSpikes(tile);
   } else if (this.alive) {
     switch (fallingBlocks) {
       case 0:
@@ -1329,11 +1338,21 @@ PrinceJS.Kid.prototype.land = function () {
       case 2:
         this.action = "medland";
         this.game.sound.play("MediumLandingOof");
-        this.damageLife(true);
+        this.damageLife(
+          true,
+          this.statisticsFallingFloor
+            ? { mechanism: "falling_floor", tile: this.statisticsFallingFloor }
+            : { mechanism: "fall" }
+        );
         break;
       default:
         this.game.sound.play("FreeFallLand");
-        this.die("falldead");
+        this.die(
+          "falldead",
+          this.statisticsFallingFloor
+            ? { mechanism: "falling_floor", tile: this.statisticsFallingFloor }
+            : { mechanism: "fall" }
+        );
     }
   }
   this.alignToFloor();
@@ -1341,6 +1360,7 @@ PrinceJS.Kid.prototype.land = function () {
   this.level.unMaskTile(this);
   PrinceJS.danger = false;
   this.level.recheckCurrentRoom();
+  this.statisticsFallingFloor = null;
 };
 
 PrinceJS.Kid.prototype.crawl = function () {
@@ -1443,6 +1463,7 @@ PrinceJS.Kid.prototype.step = function () {
 };
 
 PrinceJS.Kid.prototype.startFall = function () {
+  this.game?.statistics?.fallStarted(this);
   if (["turn", "turnrun", "turnengarde", "highjump", "hangdrop"].includes(this.action)) {
     this.checkFloorStepFall = true;
   }
@@ -1698,7 +1719,7 @@ PrinceJS.Kid.prototype.checkClimbable = function (tile) {
   return tile.isWalkable() && (this.faceR() || ![PrinceJS.Level.TILE_TAPESTRY].includes(tile.element));
 };
 
-PrinceJS.Kid.prototype.damageLife = function (crouch = false) {
+PrinceJS.Kid.prototype.damageLife = function (crouch = false, context) {
   if (!this.alive) {
     return;
   }
@@ -1708,10 +1729,12 @@ PrinceJS.Kid.prototype.damageLife = function (crouch = false) {
     this.splash.y = -5;
   }
   if (this.health > 1) {
+    const healthBefore = this.health;
     this.health -= 1;
     this.onDamageLife.dispatch(1);
+    this.game?.statistics?.healthChanged(this, healthBefore, context);
   } else {
-    this.die();
+    this.die(undefined, context);
   }
 };
 
@@ -1720,6 +1743,10 @@ PrinceJS.Kid.prototype.stealLife = function () {
     let damage = this.health - 1;
     this.health = 1;
     this.onDamageLife.dispatch(damage);
+    this.game?.statistics?.healthChanged(this, damage + 1, {
+      mechanism: "scripted_health_loss",
+      source: { kind: "script" }
+    });
   }
 };
 
@@ -1727,13 +1754,21 @@ PrinceJS.Kid.prototype.recoverLife = function () {
   if (this.health < this.maxHealth) {
     this.health++;
     this.onRecoverLive.dispatch();
+    this.game?.statistics?.record("health_recovered", { amount: 1, health: this.health, maxHealth: this.maxHealth });
   }
 };
 
 PrinceJS.Kid.prototype.addLife = function () {
+  const healthBefore = this.health;
   this.maxHealth++;
   this.health = this.maxHealth;
   this.onAddLive.dispatch();
+  this.game?.statistics?.record("max_health_changed", { amount: 1, health: this.health, maxHealth: this.maxHealth });
+  this.game?.statistics?.record("health_recovered", {
+    amount: this.health - healthBefore,
+    health: this.health,
+    maxHealth: this.maxHealth
+  });
 };
 
 PrinceJS.Kid.prototype.flipScreen = function () {
@@ -1756,13 +1791,14 @@ PrinceJS.Kid.prototype.floatFall = function () {
   this.inFloatTimeoutCancel = handle.cancel;
 };
 
-PrinceJS.Kid.prototype.damageStruck = function () {
+PrinceJS.Kid.prototype.damageStruck = function (tile) {
   if (!this.alive) {
     return;
   }
   if (this.action.includes("land")) {
     return;
   }
+  this.statisticsFallingFloor = tile;
   if (this.fallingBlocks < 2) {
     this.fallingBlocks = 2;
   }

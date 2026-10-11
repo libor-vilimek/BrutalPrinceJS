@@ -202,6 +202,7 @@ PrinceJS.Kick.prototype = {
     kid.setSpecialActionFrame(15);
     kid.updateBlockXY();
     this.actionStage = "kicking";
+    this.game?.statistics?.weaponUsed("kick");
     this.elapsed = this.pending = this.fastTime = 0;
     this.cooldown = PrinceJS.Kick.COOLDOWN;
     this.chain = new Set();
@@ -277,6 +278,7 @@ PrinceJS.Kick.prototype = {
       return;
     }
     chain.add(enemy);
+    this.game?.statistics?.initiated(enemy, "kick");
     // Stratified launch styles guarantee variety even in a tightly packed crowd;
     // jitter keeps the same guard from performing the same stunt every time.
     const styles = [
@@ -461,12 +463,12 @@ PrinceJS.Kick.prototype = {
             contact.tile.element === PrinceJS.Level.TILE_SPIKES
           ) {
             this.syncEnemy(enemy, { x: state.x, y: contact.y, room: state.room }, 35);
-            this.releaseEnemy(enemy);
             if (contact.tile.element === PrinceJS.Level.TILE_SPIKES) {
-              enemy.dieSpikes();
+              enemy.dieSpikes(contact.tile);
             } else {
               enemy.die("falldead");
             }
+            this.releaseEnemy(enemy);
             return;
           }
           if (state.bounceCount === 0) {
@@ -525,6 +527,7 @@ PrinceJS.Kick.prototype = {
         enemy.alpha = state.alpha;
       }
       delete enemy.kickState;
+      delete enemy.statisticsCause;
     }
     this.enemies.delete(enemy);
   },

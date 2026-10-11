@@ -76,7 +76,33 @@ Blood stains, fallen body parts and brass remain throughout the level, even afte
 
 ## Play
 
-Run `npm install` and `npm start`, then open the local address printed by the server (usually `http://localhost:8080`).
+Use Node.js 24, run `npm install` and `npm start`, then open the local address printed by the server (usually `http://localhost:8080`).
+The Koa server serves both the game and `/api/v1/gameplay-events`. The game remains playable when the statistics database is unavailable.
+
+To enable local MongoDB storage, copy `.env.example` to `.env`, replace the password placeholder in that local file,
+and run `npm run start:local`. `.env` is ignored by Git and never served to browsers. On Heroku, set the existing
+`mongoconnectionurl` config var; `PORT` is provided by Heroku and the `Procfile` starts the web server. The database
+defaults to `brutalprince` with collection `brutalprince`; override the database with `MONGODB_DATABASE` if needed.
+`MONGODB_URI` is also supported as a fallback.
+
+### Gameplay statistics
+
+Open the top-right settings menu (or press `Esc`) and turn off **Send gameplay statistics** to stop collection and
+transmission immediately. The preference is saved on this device. Statistics include deaths and their causes, guard/trap
+damage, level attempts and active play, plus weapon, room, pickup and tutorial events. Requests run in the background
+in batches, normally three seconds after the last event. Failures show no error in the game. See
+[statistics setup and queries](docs/statistics.md) and the [ADR](dev/adr/2016-10-11-gameplay-statistics-api-and-mongodb.md).
+
+Run `npm test` for automated checks. To test actual MongoDB persistence using your ignored local `.env`, run
+`npm run test:mongodb`. Tests use the dedicated `testbrutalprince` database (override with `MONGODB_TEST_DATABASE`).
+Each run creates and removes only its own `test_gameplay_events_…` collection; it never wipes
+the production collection. These network tests are opt-in and do not run during `npm test`.
+
+To view statistics locally, open `/statistics` on the local Koa server. For a sample preview, run
+`npm run statistics:reset` and then `npm run statistics:preview`, and open `http://127.0.0.1:8081/statistics`.
+Reset fills only `testbrutalprince.test_dashboard_events` with random observations through the API. Use
+`statistics:seed` to add samples or `statistics:wipe` to empty that collection. The dashboard stays local and is disabled
+on Heroku. See [preview details](docs/statistics.md#local-statistics-page).
 
 ## Controls
 

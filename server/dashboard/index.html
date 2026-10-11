@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Brutal Prince · Statistics</title>
+    <link rel="stylesheet" href="/statistics/style.css" />
+    <script src="/statistics/dashboard.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/statistics"
+        ><span class="mark">BP</span> BRUTAL PRINCE <span class="brand-sub">/ OBSERVATORY</span></a
+      ><a class="game-link" href="/">Play game ↗</a>
+    </header>
+    <main>
+      <div class="heading">
+        <div>
+          <p class="eyebrow">THE DUNGEON, IN NUMBERS</p>
+          <h1>Every death tells a story.</h1>
+          <p class="intro">Where the Prince falls. Who hits hardest. What gets him through.</p>
+        </div>
+        <div class="filters">
+          <label
+            >Period<select id="days">
+              <option value="7">Last 7 days</option>
+              <option value="30" selected>Last 30 days</option>
+              <option value="90">Last 90 days</option>
+            </select></label
+          ><label
+            >Level<select id="level">
+              <option value="">All levels</option>
+            </select></label
+          ><button id="refresh" aria-label="Refresh statistics">↻</button>
+        </div>
+      </div>
+      <div class="status">
+        <span class="dot"></span><span id="status" role="status">Loading statistics…</span
+        ><span id="sample" hidden>SAMPLE DATA</span>
+      </div>
+      <section id="metrics" class="metrics" aria-label="Key statistics"></section>
+      <div class="grid two">
+        <section class="panel trend">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">THE BIG PICTURE</p>
+              <h2>Death over time</h2>
+            </div>
+            <div class="legend"><span class="coral">Prince</span><span class="gold">Enemies</span></div>
+          </div>
+          <div id="trend"></div>
+          <p class="footnote">Daily totals · UTC · received by the server</p>
+        </section>
+        <section class="panel">
+          <p class="eyebrow">WHAT ENDS AN ATTEMPT</p>
+          <h2>Prince death causes</h2>
+          <div id="causes" class="bars"></div>
+        </section>
+      </div>
+      <section class="panel level-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">THE PATH THROUGH</p>
+            <h2>Level performance</h2>
+          </div>
+          <span class="subtle">Full attempts only for completion rate</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Level / revision</th>
+                <th>Starts</th>
+                <th>Completed</th>
+                <th>Completion</th>
+                <th>Prince deaths</th>
+                <th>Enemy deaths</th>
+                <th>Active play</th>
+              </tr>
+            </thead>
+            <tbody id="levels"></tbody>
+          </table>
+        </div>
+      </section>
+      <div class="grid two">
+        <section class="panel">
+          <p class="eyebrow">KNOW YOUR ENEMY</p>
+          <h2>The most dangerous guards</h2>
+          <p class="subtle">Ranked by actual Prince health removed</p>
+          <div id="guards" class="rankings"></div>
+        </section>
+        <section class="panel">
+          <p class="eyebrow">WATCH YOUR STEP</p>
+          <h2>The deadliest places</h2>
+          <p class="subtle">Traps and falls · ranked by kills</p>
+          <div id="traps" class="rankings"></div>
+        </section>
+      </div>
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">TOOLS OF THE TRADE</p>
+            <h2>Weapon performance</h2>
+          </div>
+          <span class="subtle">Hits may exceed shots for splash damage</span>
+        </div>
+        <div id="weapons" class="weapon-grid"></div>
+      </section>
+      <footer>
+        Observational, anonymous gameplay data. Opt-out, pauses, closed tabs and delivery failures leave gaps.<br />Map
+        revisions stay separate. No cross-session player tracking.
+      </footer>
+    </main>
+  </body>
+</html>

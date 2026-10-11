@@ -292,7 +292,7 @@ PrinceJS.Fighter.prototype.checkFight = function () {
           let minHurtDistance = this.opponent.swordDrawn ? 12 : 8;
           let maxHurtDistance = 29 + (this.opponent.baseCharName === "fatguard" ? 2 : 0);
           if ((distance >= minHurtDistance || distance <= 0) && distance <= maxHurtDistance) {
-            this.opponent.stabbed();
+            this.opponent.stabbed({ mechanism: "sword", actor: this, weapon: "sword" });
           }
         }
       } else {
@@ -532,7 +532,7 @@ PrinceJS.Fighter.prototype.block = function () {
   this.allowBlock = false;
 };
 
-PrinceJS.Fighter.prototype.stabbed = function () {
+PrinceJS.Fighter.prototype.stabbed = function (context) {
   if (!this.alive) {
     return;
   }
@@ -550,7 +550,7 @@ PrinceJS.Fighter.prototype.stabbed = function () {
   this.charY = PrinceJS.Utils.convertBlockYtoY(this.charBlockY);
 
   if (this.charName !== "skeleton") {
-    this.damageLife();
+    this.damageLife(false, context);
   }
 
   if (this.health === 0) {
@@ -1043,6 +1043,7 @@ PrinceJS.Fighter.prototype.checkRoomChange = function () {
 };
 
 PrinceJS.Fighter.prototype.startFall = function () {
+  this.game?.statistics?.fallStarted(this);
   this.fallingBlocks = 0;
   this.inFallDown = true;
 
@@ -1079,7 +1080,7 @@ PrinceJS.Fighter.prototype.land = function () {
   if (tile.element === PrinceJS.Level.TILE_SPIKES) {
     this.game.sound.play("SpikedBySpikes"); // HardLandingSplat
     this.alignToTile(tile);
-    this.dieSpikes();
+    this.dieSpikes(tile);
   } else if (this.alive) {
     switch (fallingBlocks) {
       case 0:
@@ -1088,7 +1089,7 @@ PrinceJS.Fighter.prototype.land = function () {
         break;
       default:
         this.game.sound.play("FreeFallLand");
-        this.die("falldead");
+        this.die("falldead", { mechanism: "fall" });
         break;
     }
   }
@@ -1194,7 +1195,7 @@ PrinceJS.Fighter.prototype.tryChopperTile = function (x, y, tile) {
     if (this.inChopDistance(tile) && this.action !== "turn") {
       tile.showBlood();
       if (this.alive) {
-        this.dieChopper();
+        this.dieChopper(tile);
         this.game.sound.play("HalvedByChopper");
         this.alignToTile(tile);
         this.charX += this.faceL() ? -5 : -9;
@@ -1236,25 +1237,31 @@ PrinceJS.Fighter.prototype.dodgeChoppers = function () {
   this.updateCharPosition();
 };
 
-PrinceJS.Fighter.prototype.dieSpikes = function () {
+PrinceJS.Fighter.prototype.dieSpikes = function (tile) {
   if (!this.alive || this.charName === "skeleton") {
     return;
   }
 
-  this.die();
+  this.die(undefined, {
+    mechanism: "spikes",
+    tile: tile || this.level.getTileAt(this.charBlockX, this.charBlockY, this.room)
+  });
   this.action = "impale";
 };
 
-PrinceJS.Fighter.prototype.dieChopper = function () {
+PrinceJS.Fighter.prototype.dieChopper = function (tile) {
   if (!this.alive || this.charName === "skeleton") {
     return;
   }
 
-  this.die();
+  this.die(undefined, {
+    mechanism: "chopper",
+    tile: tile || this.level.getTileAt(this.charBlockX, this.charBlockY, this.room)
+  });
   this.action = "halve";
 };
 
-PrinceJS.Fighter.prototype.damageLife = function () {
+PrinceJS.Fighter.prototype.damageLife = function (crouch = false, context) {
   if (!this.alive || this.charName === "skeleton") {
     return;
   }
@@ -1264,20 +1271,30 @@ PrinceJS.Fighter.prototype.damageLife = function () {
   }
   this.showSplash();
   if (this.health > 1) {
+    const healthBefore = this.health;
     this.health -= 1;
     this.onDamageLife.dispatch(1);
+    this.game?.statistics?.healthChanged(this, healthBefore, context);
     if (this.active && this.charName === "shadow" && this.opponent) {
-      this.opponent.damageLife();
+      this.opponent.damageLife(false, {
+        mechanism: "shared_shadow_damage",
+        source: { kind: "environment" },
+        originEventId: this.statisticsDamageEvent
+      });
     }
   } else {
-    this.die();
+    this.die(undefined, context);
     if (this.active && this.charName === "shadow" && this.opponent) {
-      this.opponent.die();
+      this.opponent.die(undefined, {
+        mechanism: "shared_shadow_damage",
+        source: { kind: "environment" },
+        originEventId: this.statisticsDamageEvent
+      });
     }
   }
 };
 
-PrinceJS.Fighter.prototype.die = function (action) {
+PrinceJS.Fighter.prototype.die = function (action, context) {
   if (!this.alive) {
     return;
   }
@@ -1295,6 +1312,11 @@ PrinceJS.Fighter.prototype.die = function (action) {
   this.swordDrawn = false;
   this.hideSplash();
   this.bringAboveOpponent();
+  this.game?.statistics?.healthChanged(
+    this,
+    damage,
+    context || { mechanism: action === "falldead" ? "fall" : "unknown" }
+  );
 };
 
 PrinceJS.Fighter.prototype.inLooseFloorDistance = function (tile) {

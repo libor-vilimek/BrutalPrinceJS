@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Prince of Persia (JavaScript)",
   "main": "index.js",
+  "engines": {
+    "node": "24.x"
+  },
   "directories": {
     "assets": "assets",
     "converter": "converter",
@@ -11,7 +14,13 @@
   },
   "scripts": {
     "test": "node --test",
-    "start": "http-server . -c-1",
+    "start": "node server/index.js",
+    "start:local": "node --env-file=.env server/index.js",
+    "test:mongodb": "node --env-file=.env tools/run-mongodb-tests.js",
+    "statistics:preview": "node --use-system-ca --env-file=.env tools/statistics-preview.js preview",
+    "statistics:seed": "node --use-system-ca --env-file=.env tools/statistics-preview.js seed",
+    "statistics:wipe": "node --use-system-ca --env-file=.env tools/statistics-preview.js wipe",
+    "statistics:reset": "node --use-system-ca --env-file=.env tools/statistics-preview.js reset",
     "convert": "node converter/index.js",
     "convert:own:99": "node converter/index.js './converter/98 - Own/level1.xml' 98",
     "convert:own:100": "node converter/index.js './converter/98 - Own/level2.xml' 98",
@@ -27,7 +36,10 @@
   },
   "homepage": "https://github.com/oklemenz/PrinceJS#readme",
   "dependencies": {
-    "http-server": "^14.1.1"
+    "http-server": "^14.1.1",
+    "koa": "^3.2.1",
+    "koa-static": "^5.0.0",
+    "mongodb": "^7.7.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

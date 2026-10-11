@@ -321,6 +321,7 @@ PrinceJS.Whip.prototype = {
   },
 
   attack: function () {
+    this.game?.statistics?.weaponUsed("whip");
     let kid = this.position(this.kid);
     let snags = (this.delegate.enemies || [])
       .map((enemy) => this.findSnag(enemy))
@@ -365,6 +366,7 @@ PrinceJS.Whip.prototype = {
 
   pullEnemy: function (snag) {
     let enemy = snag.enemy;
+    this.game?.statistics?.initiated(enemy, "whip");
     let state = {
       owner: this,
       phase: "pulling",
@@ -544,7 +546,7 @@ PrinceJS.Whip.prototype = {
     }
     state.damaged = true;
     let previousHealth = enemy.health;
-    enemy.damageLife();
+    enemy.damageLife(false, { mechanism: "fall", actor: this.kid, weapon: "whip" });
     if (this.delegate.bloodEffects && enemy.health < previousHealth) {
       let foot = this.position(enemy);
       this.delegate.bloodEffects.hit(enemy, {
@@ -579,6 +581,7 @@ PrinceJS.Whip.prototype = {
         enemy.land = state.land;
       }
       delete enemy.whipState;
+      delete enemy.statisticsCause;
     }
     this.pulledEnemies.delete(enemy);
     if (this.effects.tether && this.effects.tether.enemy === enemy) {
