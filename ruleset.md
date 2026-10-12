@@ -269,6 +269,8 @@ Implementační rozhodnutí pro menu: bez zobrazeného dotykového panelu trvá 
 
 - **STATS-13:** Dosavadní dva absolutní žebříčky strážců a nebezpečných míst zůstávají. Přibývají dva další podle počtu smrtí prince v poměru k počtu lidí, kteří začali příslušný level. Implementační rozhodnutí: obě nové tabulky řadí všechny zdroje podle smrtí na 100 unikátních klientů se skutečným začátkem levelu ve vybraném období a filtru, zvlášť pro mapu a revizi. Opakované pokusy a dny jednoho klienta počet začínajících klientů nezvýší, částečné pozorování bez startu také ne. Starší data používají `sessionId`. Klienti jsou přibližný počet lidí podle STATS-09; opakované smrti mohou dát hodnotu přes 100, nejde o procentní pravděpodobnost ani sledování kohorty. Zdroje bez zaznamenaného začínajícího klienta v daném výběru se z poměrového žebříčku vynechají. U výsledku jsou vidět i absolutní smrti a počet klientů ve jmenovateli.
 
+- **STATS-14:** V náhledu se zvýrazní samotný herní prvek: strážce má žlutý obrys či auru podle siluety a podlaha nebo past vybarvenou skutečnou kresbu. Zvýraznění sleduje animaci, otočení a původní grafické vrstvy; nepoužívá obdélník celé mapové buňky. Implementační rozhodnutí: průhledné pixely zůstávají průhledné mimo úzkou auru. U zaznamenané mezery bez podlahy nebo nedostupného prvku se označí pouze zaznamenaná pozice krátkou přerušovanou čarou v úrovni podlahy a vysvětlí se omezení; nezvýrazní se svévolně jiná blízká dlaždice či strážce.
+
 ## Nahrazená rozhodnutí
 
 Tento přehled brání návratu ke starším požadavkům. Nejde o aktivní alternativy.

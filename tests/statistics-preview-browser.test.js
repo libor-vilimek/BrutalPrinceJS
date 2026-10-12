@@ -6,6 +6,57 @@ const vm = require("node:vm");
 const { test } = require("node:test");
 const { createApp } = require("../server/app");
 
+// Inspect the rendered overlay in the browser, including alignment with Phaser's real sprite transform.
+function inspectHighlight(kind) {
+  const game = Phaser.GAMES[0],
+    state = game.state.getCurrentState();
+  const source =
+    kind === "guard"
+      ? state.enemies.find((enemy) => enemy.id === state.highlightedGuard)
+      : state.level.getTileAt(state.highlightedTile.column, state.highlightedTile.row, state.highlightedTile.room).back;
+  const part = state.sourceHighlight.parts.find((entry) => entry.source === source);
+  game.stage.updateTransform();
+  const { overlay, bitmap } = part;
+  const pixels = bitmap.ctx.getImageData(0, 0, bitmap.width, bitmap.height).data;
+  const bounds = { left: bitmap.width, top: bitmap.height, right: 0, bottom: 0 };
+  let painted = 0;
+  for (let y = 0; y < bitmap.height; y++) {
+    for (let x = 0; x < bitmap.width; x++) {
+      if (pixels[(y * bitmap.width + x) * 4 + 3]) {
+        painted++;
+        bounds.left = Math.min(bounds.left, x);
+        bounds.top = Math.min(bounds.top, y);
+        bounds.right = Math.max(bounds.right, x);
+        bounds.bottom = Math.max(bounds.bottom, y);
+      }
+    }
+  }
+  // The untrimmed atlas origin must land on the same screen pixel after anchors, facing and camera scaling.
+  const { trim, frame } = source.texture;
+  const origin = source.toGlobal(
+    new Phaser.Point(
+      trim ? trim.x - source.anchor.x * trim.width : -source.anchor.x * frame.width,
+      trim ? trim.y - source.anchor.y * trim.height : -source.anchor.y * frame.height
+    )
+  );
+  const highlightedOrigin = overlay.toGlobal(new Phaser.Point(3, 3));
+  return {
+    bounds,
+    painted,
+    area: bitmap.width * bitmap.height,
+    alignmentError: Math.hypot(origin.x - highlightedOrigin.x, origin.y - highlightedOrigin.y),
+    x: highlightedOrigin.x,
+    facing: overlay.worldTransform.a,
+    corners: [0, bitmap.width - 1, (bitmap.height - 1) * bitmap.width, bitmap.width * bitmap.height - 1].map(
+      (index) => pixels[index * 4 + 3]
+    ),
+    sameLayer: overlay.parent === source,
+    rectangle: !!state.marker,
+    parts: state.sourceHighlight.parts.length,
+    layers: state.sourceHighlight.parts.every((part) => part.overlay.parent === part.source)
+  };
+}
+
 test(
   "statistics: daily counts, four rankings and isolated animated room previews",
   {
@@ -212,6 +263,7 @@ test(
     assert(initial.enemies > json.guards.length);
     assert.deepEqual(initial.tile, { room: room.id, column: tileIndex % 10, row: Math.floor(tileIndex / 10) });
     const frames = new Set();
+    const glowFrames = new Set();
     for (let sample = 0; sample < 10; sample++) {
       frames.add(
         await frame.evaluate(
@@ -220,9 +272,23 @@ test(
           initial.tile
         )
       );
+      glowFrames.add(
+        await frame.evaluate(() => {
+          const state = Phaser.GAMES[0].state.getCurrentState();
+          const tile = state.level.getTileAt(
+            state.highlightedTile.column,
+            state.highlightedTile.row,
+            state.highlightedTile.room
+          );
+          return state.sourceHighlight.parts
+            .find((part) => part.source === tile.tileChildBack)
+            .bitmap.canvas.toDataURL();
+        })
+      );
       await page.waitForTimeout(90);
     }
     assert(frames.size > 1, "choppers actually animate");
+    assert(glowFrames.size > 1, "the chopper silhouette follows the moving blade artwork");
     await frame.evaluate(() => {
       const state = Phaser.GAMES[0].state.getCurrentState();
       const enemy = state.enemies[0],
@@ -240,15 +306,18 @@ test(
     }
     await page.setViewportSize({ width: 390, height: 844 });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
-    assert(
-      await frame.evaluate(() => {
+    // Phaser applies viewport changes on its next scale update, not synchronously with the browser resize.
+    await frame.waitForFunction(
+      () => {
         const canvas = document.querySelector("canvas").getBoundingClientRect();
         return canvas.right <= window.innerWidth + 1 && canvas.bottom <= window.innerHeight + 1;
-      }),
-      "the full preview fits on mobile"
+      },
+      null,
+      { timeout: 3000 }
     );
     await page.locator("#preview-close").click();
     await page.locator("#preview-content iframe").waitFor({ state: "detached" });
+    await page.setViewportSize({ width: 1440, height: 1100 });
     await page.locator("#guards-per-player button").click();
     await page.waitForFunction(
       () =>
@@ -257,6 +326,36 @@ test(
     );
     frame = page.frames().find((frame) => frame.url().includes("room-preview"));
     assert.equal(await frame.evaluate(() => Phaser.GAMES[0].state.getCurrentState().highlightedGuard), 1);
+    const guardHighlight = await frame.evaluate(inspectHighlight, "guard");
+    assert(
+      guardHighlight.painted > 0 && guardHighlight.painted < guardHighlight.area * 0.7,
+      "guard keeps a silhouette, not a box"
+    );
+    assert.deepEqual(guardHighlight.corners, [0, 0, 0, 0]);
+    assert(
+      guardHighlight.alignmentError < 0.01 &&
+        guardHighlight.sameLayer &&
+        guardHighlight.layers &&
+        !guardHighlight.rectangle
+    );
+    if (process.env.PREVIEW_GUARD_SCREENSHOT) {
+      await page.screenshot({ path: process.env.PREVIEW_GUARD_SCREENSHOT });
+    }
+    await frame.evaluate(() => {
+      const state = Phaser.GAMES[0].state.getCurrentState();
+      const enemy = state.enemies.find((enemy) => enemy.id === state.highlightedGuard);
+      enemy.changeFace();
+      enemy.charX += 10;
+      enemy.updateCharPosition();
+      enemy.updateSwordPosition();
+      state.sourceHighlight.update();
+    });
+    const turnedGuard = await frame.evaluate(inspectHighlight, "guard");
+    assert(turnedGuard.alignmentError < 0.01);
+    assert(
+      turnedGuard.facing * guardHighlight.facing < 0 && turnedGuard.x !== guardHighlight.x,
+      "aura follows a moved and mirrored guard"
+    );
     await frame.locator("canvas").click();
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => !document.querySelector("#room-preview").open);
@@ -283,6 +382,41 @@ test(
     // Exercise palace/dungeon artwork, dormant skeletons, shadows and Jaffar with the actual map assets.
     const smoke = await browserContext.newPage();
     smoke.on("pageerror", (error) => errors.push(error.message));
+    for (const level of [7, 8]) {
+      const map = JSON.parse(fs.readFileSync(`assets/maps/level${level}.json`, "utf8"));
+      const room = map.room.find((room) => room.id > 0 && room.tile.some((tile) => tile.element === 1));
+      const index = room.tile.findIndex((tile) => tile.element === 1);
+      context.map = map;
+      const revision = vm.runInContext(
+        "PrinceJS.Statistics.hash(JSON.stringify(map) + PrinceJS.HordeSpawns.create.toString())",
+        context
+      );
+      await smoke.goto(
+        `${base}/statistics/room-preview?level=${level}&room=${room.id}&column=${index % 10}&row=${Math.floor(index / 10)}&tileType=1&revision=${revision}`
+      );
+      await smoke.waitForFunction(() => window.Phaser?.GAMES?.[0]?.state.getCurrentState()?.ready);
+      const floor = await smoke.evaluate(inspectHighlight, "tile");
+      assert(
+        floor.painted > 0 && floor.bounds.top >= 50 && floor.bounds.bottom - floor.bounds.top < 30,
+        "only the visible floor surface glows"
+      );
+      assert(floor.alignmentError < 0.01 && floor.layers && !floor.rectangle);
+      assert.equal(floor.parts, 2, "floor tint excludes unrelated wall decorations behind it");
+      if (process.env.PREVIEW_FLOOR_SCREENSHOT && level === 7) {
+        await smoke.screenshot({ path: process.env.PREVIEW_FLOOR_SCREENSHOT });
+      }
+    }
+    // The screenshot's position is a gap in the real level 7 map, so never invent or select a nearby floor.
+    await smoke.goto(`${base}/statistics/room-preview?level=7&room=17&column=2&row=2&tileType=1`);
+    await smoke.waitForFunction(() => window.Phaser?.GAMES?.[0]?.state.getCurrentState()?.ready);
+    assert((await smoke.locator("#preview-status").textContent()).includes("recorded tile is not present"));
+    assert(
+      await smoke.evaluate(() => {
+        const state = Phaser.GAMES[0].state.getCurrentState();
+        return !state.sourceHighlight && state.marker.height <= 2;
+      }),
+      "missing artwork gets a short floor line, never a floating rectangle"
+    );
     for (let level = 1; level <= 14; level++) {
       const map = JSON.parse(fs.readFileSync(`assets/maps/level${level}.json`, "utf8"));
       await smoke.goto(`${base}/statistics/room-preview?level=${level}&room=${map.prince.room}&column=5&row=1`);

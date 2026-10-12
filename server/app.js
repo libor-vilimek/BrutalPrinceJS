@@ -64,6 +64,7 @@ function createApp({
       "/statistics/room-preview": "room-preview.html",
       "/statistics/room-preview.js": "room-preview.js",
       "/statistics/room-pickups.js": "room-pickups.js",
+      "/statistics/room-highlight.js": "room-highlight.js",
       "/statistics/room-preview.css": "room-preview.css"
     };
     if (!Object.hasOwn(files, ctx.path) && ctx.path !== "/api/v1/statistics") {

@@ -148,7 +148,9 @@ Select a row in any danger ranking, or a cause in Recent Prince deaths, to open 
 Escape. The preview uses the real Phaser engine, map builder, camera framing, foreground/background layers, all map and
 generated enemies, pickup artwork and laser turret. Choppers, spikes, torches and other tile animations continue; loose
 floors shake without removing the floor. Enemies retain their idle animations without AI, combat or collision damage.
-The highlighted guard or source position stays visible, with no Prince present.
+The source glows yellow along its actual artwork: guards have a silhouette outline and tiles have a translucent tint
+over their visible surfaces. Highlights follow animation frames, facing, cropped artwork and the original foreground/
+background layers. There is no Prince present.
 
 `/statistics/room-preview` runs in its own iframe and Phaser instance. It never starts `Game` or constructs a settings
 manager, statistics recorder, Prince, weapon controller or gameplay input bindings. It does not load audio, send gameplay
@@ -158,8 +160,9 @@ Closing removes the iframe and its engine. Art and pickup placement reuse the ga
 This is the initial room layout, not a replay: source summaries do not store historical world state or guard trajectories.
 Guard rows show the guard at its starting position and identify a different recorded damage room when applicable. Map
 revision is checked before matching a guard ID. If the recorded revision is unavailable, a notice identifies the current
-layout and only the recorded tile is highlighted. Missing maps, rooms or source positions are stated instead of silently
-highlighting a different enemy. Generated sample sources can therefore differ from the real current layout.
+layout and only the recorded position is marked. Empty gaps use a short dashed floor line, not a filled box in the air.
+Missing maps, rooms, source positions or a tile type absent at the recorded position are stated instead of silently
+highlighting a different enemy or nearby tile. Generated sample sources can therefore differ from the real current layout.
 
 ### Sample data preview
 

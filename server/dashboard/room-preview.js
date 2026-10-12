@@ -130,8 +130,6 @@ const previewState = {
     this.roomCamera = new PrinceJS.RoomCamera(this);
     this.roomCamera.setRoom(target.room);
     this.level.checkGates(target.room, null, this.roomCamera.visibleRooms());
-    this.marker = this.game.add.graphics(0, 0);
-    this.marker.z = 100;
     this.world.sort("z");
     this.world.alpha = 1;
     this.highlight();
@@ -146,35 +144,51 @@ const previewState = {
   },
 
   highlight: function () {
-    const room = this.level.rooms[target.room];
-    let x, y, width, height;
+    let description,
+      unavailable = false;
     const enemy =
       this.revisionMatches && this.enemies.find((entry) => entry.id === target.guard && entry.room === target.room);
     if (enemy) {
-      x = enemy.baseX + PrinceJS.Utils.convertX(enemy.charX) - 19;
-      y = enemy.baseY + enemy.charY - 58;
-      width = 38;
-      height = 62;
+      this.sourceHighlight = new PrinceJS.RoomHighlight(this.game, [enemy, enemy.sword]);
       this.highlightedGuard = enemy.id;
+      description = `guard #${enemy.id}`;
     } else if (target.column !== null && target.row !== null) {
-      x = room.x * PrinceJS.ROOM_WIDTH + target.column * PrinceJS.BLOCK_WIDTH;
-      y = room.y * PrinceJS.ROOM_HEIGHT + target.row * PrinceJS.BLOCK_HEIGHT - 13;
-      width = PrinceJS.BLOCK_WIDTH;
-      height = PrinceJS.BLOCK_HEIGHT;
+      const tile = this.level.getTileAt(target.column, target.row, target.room);
       this.highlightedTile = { room: target.room, column: target.column, row: target.row };
+      unavailable = target.tileType !== null && tile.element !== target.tileType;
+      if (tile.element === PrinceJS.Level.TILE_SPACE || unavailable || target.guard) {
+        // Empty air (e.g. the start of a fall) has no source silhouette. Mark its floor line, never another tile.
+        this.marker = this.game.add.graphics(tile.x, tile.y + PrinceJS.BLOCK_HEIGHT);
+        this.marker.z = 100;
+        this.marker.lineStyle(1, 0xffc857, 1);
+        for (let x = 0; x < PrinceJS.BLOCK_WIDTH; x += 6) {
+          this.marker.moveTo(x, 0);
+          this.marker.lineTo(x + 3, 0);
+        }
+        this.world.sort("z");
+        description =
+          tile.element === PrinceJS.Level.TILE_SPACE ? "recorded gap (dashed line)" : "recorded position (dashed line)";
+      } else {
+        // A plain floor's modifier child is background wall decoration, not part of its walkable surface.
+        this.sourceHighlight = new PrinceJS.RoomHighlight(
+          this.game,
+          [tile.back, tile.front],
+          tile.element !== PrinceJS.Level.TILE_FLOOR
+        );
+        description = "source tile";
+      }
     } else {
       status.textContent = "Room shown; this observation has no precise source position.";
       return;
     }
-    this.marker.lineStyle(2, 0xffc857, 1);
-    this.marker.beginFill(0xffc857, 0.12);
-    this.marker.drawRect(x, y, width, height);
-    this.marker.endFill();
-    let note = `Level ${target.level} · Room ${target.room} · highlighted ${enemy ? `guard #${enemy.id}` : "recorded location"}`;
+    let note = `Level ${target.level} · Room ${target.room} · highlighted ${description}`;
     if (!this.revisionMatches) {
       note += ". Map revision differs: recorded location is shown on the current layout.";
     } else if (target.guard && !enemy) {
-      note += ". Guard is shown at its recorded starting location.";
+      note += ". The guard is unavailable; only its recorded starting position is marked.";
+    }
+    if (unavailable) {
+      note += ". The recorded tile is not present in this layout.";
     }
     if (target.guard && target.recordedRoom && target.recordedRoom !== target.room) {
       note += ` · Guard's starting room; damage was recorded in room ${target.recordedRoom}.`;
@@ -208,7 +222,11 @@ const previewState = {
       enemy.updateCharPosition();
       enemy.updateSwordPosition();
     }
-    this.marker.alpha = 0.8 + Math.sin(this.tick / 5) * 0.2;
+    const alpha = 0.85 + Math.sin(this.tick / 5) * 0.15;
+    this.sourceHighlight?.update(alpha);
+    if (this.marker) {
+      this.marker.alpha = alpha;
+    }
   },
 
   // LevelBuilder's callbacks have no gameplay side effects in the preview.

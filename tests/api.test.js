@@ -196,6 +196,7 @@ test("statistics dashboard is public by default, with bounded filters and an exp
     "/statistics/room-preview.js",
     "/statistics/room-preview.css",
     "/statistics/room-pickups.js",
+    "/statistics/room-highlight.js",
     "/api/v1/statistics"
   ]) {
     const publicHostStatus = await new Promise((resolve, reject) => {
