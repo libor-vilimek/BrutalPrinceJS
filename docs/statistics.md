@@ -124,6 +124,21 @@ screens. Completion compares starts/completions within the selected period, not 
 The dashboard refreshes every 15 seconds while visible and immediately on return. Allow for the three-second game batch
 delay, or use manual refresh.
 
+### Currently playing
+
+**Currently playing** counts unique gameplay clients from which the server received an accepted statistics update in
+the last **180 seconds**, including the exact 180-second boundary. A client counts once across levels, map revisions,
+days and repeated updates. The read API returns the number as `currentlyPlaying` (zero when nobody qualifies).
+This is a live, all-level count independent of the historical period, level and data filters; generated samples are
+always excluded. It refreshes with the dashboard every 15 seconds while visible. A failed refresh shows “—” for the live
+count instead of keeping an outdated number.
+
+The query uses the existing server-written `updatedAt` on compact summaries and `receivedAt`/`sessionId` on legacy
+events, with indexes on both receipt fields. Client event timestamps and historical play dates do not determine whether
+someone is currently playing. No additional heartbeat or player tracking is added: idle clients, closed pages and clients
+with statistics disabled disappear after their last receipt ages out. Reloads create new client IDs, so this estimates
+active clients rather than identifying individual people.
+
 ### Daily charts and relative danger
 
 Prince deaths and enemy kills have separate bar charts and independent scales. Every bar is that UTC play day's count,

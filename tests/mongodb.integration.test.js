@@ -8,6 +8,7 @@ const { createEventStore } = require("../server/store");
 const { createApp } = require("../server/app");
 const { fixture } = require("./statistics-fixture");
 const { StatisticsSummary } = require("../src/StatisticsSummary");
+const { readCurrentlyPlaying } = require("../server/currently-playing");
 
 test(
   "real MongoDB: HTTP batch persistence, indexes, retries, conflicts, mixed validity, concurrent deduplication and expiry",
@@ -72,6 +73,8 @@ test(
       assert(indexes.some((index) => index.key.eventId && index.unique));
       assert(indexes.some((index) => index.key.semanticKey && index.unique));
       assert(indexes.some((index) => index.expireAfterSeconds === 0));
+      assert(indexes.some((index) => index.key.updatedAt && index.key.clientId));
+      assert(indexes.some((index) => index.key.receivedAt && index.key.sessionId));
       const activity = { ...events[0], eventId: randomUUID(), eventType: "room_entered", payload: { fromRoom: 1 } };
       const mixed = await post([{ ...events[0], eventId: randomUUID(), email: "rejected@example.com" }, activity]);
       assert.equal(mixed[0].status, "rejected");
@@ -90,6 +93,7 @@ test(
       const report = await store.report({ days: 30 });
       assert.equal(report.totals.enemyDeaths, 1);
       assert.equal(report.totals.starts, 1);
+      assert.equal(report.currentlyPlaying, 1, "multiple legacy updates from one session count once");
       assert.equal(report.weapons.find((row) => row._id === "molotov").kills, 1);
       assert.equal((await store.report({ days: 7, level: 99 })).totals.events, 0);
       f.kid.die = f.PrinceJS.Fighter.prototype.die;
@@ -293,6 +297,83 @@ test(
       assert.equal(
         (await store.report({ days: 7, level: 71, source: "samples" })).guardsPerPlayer[0].killsPer100Starters,
         400
+      );
+      await t.test(
+        "currently playing uses unique server receipts within 180 seconds, independent of history",
+        async () => {
+          const expired = new Date(Date.now() - 3600000);
+          // Only this run's private test collection is changed; existing fixtures become inactive.
+          await collection.updateMany({}, { $set: { updatedAt: expired, receivedAt: expired } });
+          assert.equal((await store.report()).currentlyPlaying, 0);
+          const liveClient = randomUUID();
+          const liveRows = [rankingSummary(80, today, 1, 0), rankingSummary(81, yesterday, 1, 0)];
+          assert((await compact(liveClient, liveRows)).every((row) => row.status === "stored"));
+          const response = await fetch(
+            `http://127.0.0.1:${listener.address().port}/api/v1/statistics?days=7&level=99&source=samples`
+          );
+          const liveReport = await response.json();
+          assert.equal(liveReport.totals.events, 0);
+          assert.equal(
+            liveReport.currentlyPlaying,
+            1,
+            "live clients are global, even in an empty historical selection"
+          );
+          await collection.updateMany({ clientId: liveClient }, { $set: { updatedAt: expired, receivedAt: expired } });
+          assert.equal(await readCurrentlyPlaying(collection), 0);
+          await compact(liveClient, [liveRows[1]]);
+          assert.equal(await readCurrentlyPlaying(collection), 1, "a receipt refreshes an existing older-day summary");
+          await compact(randomUUID(), [invalid]);
+          assert.equal(await readCurrentlyPlaying(collection), 1, "rejected updates cannot create active clients");
+
+          const now = new Date();
+          const boundary = new Date(now.getTime() - 180000);
+          const outside = new Date(boundary.getTime() - 1);
+          const future = new Date(now.getTime() + 3600000);
+          const document = await collection.findOne({ clientId: liveClient });
+          const compactReceipt = (fields) => {
+            const id = randomUUID();
+            return {
+              ...document,
+              _id: id,
+              eventId: id,
+              clientId: randomUUID(),
+              receivedAt: now,
+              updatedAt: now,
+              ...fields
+            };
+          };
+          const legacyClient = randomUUID();
+          const legacyReceipt = (fields) => ({
+            ...events[0],
+            eventId: randomUUID(),
+            sessionId: legacyClient,
+            receivedAt: now,
+            ...fields
+          });
+          await collection.insertMany([
+            compactReceipt({ updatedAt: boundary, receivedAt: expired }),
+            compactReceipt({ updatedAt: outside }),
+            compactReceipt({ updatedAt: future }),
+            compactReceipt({ sampleData: true }),
+            compactReceipt({ clientId: null }),
+            legacyReceipt({ sessionId: liveClient }),
+            legacyReceipt({ occurredAt: expired.toISOString() }),
+            legacyReceipt({ occurredAt: future.toISOString() }),
+            legacyReceipt({ sessionId: randomUUID(), receivedAt: boundary }),
+            legacyReceipt({ sessionId: randomUUID(), receivedAt: outside, occurredAt: now.toISOString() }),
+            legacyReceipt({ sessionId: randomUUID(), sampleData: true })
+          ]);
+          assert.equal(
+            await readCurrentlyPlaying(collection, now),
+            4,
+            "count clients once, include exactly 180s, ignore client clocks, samples and future/expired server times"
+          );
+          assert.equal(
+            await readCurrentlyPlaying(collection, new Date(now.getTime() + 180001)),
+            0,
+            "clients expire without receiving any further updates"
+          );
+        }
       );
     } catch (error) {
       if (error instanceof assert.AssertionError) {

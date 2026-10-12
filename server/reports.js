@@ -2,9 +2,11 @@
 const { reportRows } = require("./report-rows");
 const { milestonePipeline } = require("./milestones");
 const { dangerRanking } = require("./danger-rankings");
+const { readCurrentlyPlaying } = require("./currently-playing");
 
 async function readStatistics(collection, { days = 30, level, source = "all" } = {}) {
-  const since = new Date(new Date().toISOString().slice(0, 10));
+  const now = new Date();
+  const since = new Date(now.toISOString().slice(0, 10));
   since.setUTCDate(since.getUTCDate() - days + 1);
   const match = { receivedAt: { $gte: since } };
   if (source === "samples") {
@@ -42,7 +44,7 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
     activeMs: sum(["level_activity", "level_ended"], "$payload.activeMs")
   };
   const observationCount = { $cond: [{ $eq: ["$eventType", "milestone"] }, 0, { $ifNull: ["$count", 1] }] };
-  const [result] = await collection
+  const statistics = collection
     .aggregate([
       {
         $match: {
@@ -132,8 +134,10 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
       }
     ])
     .toArray();
+  const [[result], currentlyPlaying] = await Promise.all([statistics, readCurrentlyPlaying(collection, now)]);
   return {
     ...result,
+    currentlyPlaying,
     totals: result.totals[0] || {
       events: 0,
       starts: 0,

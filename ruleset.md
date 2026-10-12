@@ -271,6 +271,8 @@ Implementační rozhodnutí pro menu: bez zobrazeného dotykového panelu trvá 
 
 - **STATS-14:** V náhledu se zvýrazní samotný herní prvek: strážce má žlutý obrys či auru podle siluety a podlaha nebo past vybarvenou skutečnou kresbu. Zvýraznění sleduje animaci, otočení a původní grafické vrstvy; nepoužívá obdélník celé mapové buňky. Implementační rozhodnutí: průhledné pixely zůstávají průhledné mimo úzkou auru. U zaznamenané mezery bez podlahy nebo nedostupného prvku se označí pouze zaznamenaná pozice krátkou přerušovanou čarou v úrovni podlahy a vysvětlí se omezení; nezvýrazní se svévolně jiná blízká dlaždice či strážce.
 
+- **STATS-15:** Statistiky zobrazují počet právě hrajících jako počet unikátních klientů, od nichž server přijal aktualizaci v posledních 180 sekundách. Implementační rozhodnutí: každý klient se počítá jednou napříč levely, revizemi a dny; rozhoduje serverový čas přijetí, nikoli čas události od klienta. Ukazatel zahrnuje skutečné hraní ve všech levelech, nezávisí na historických filtrech a vylučuje generované ukázky. Obnovuje se s dashboardem každých 15 sekund; při chybě obnovení ukazuje pomlčku. Používá existující `updatedAt` souhrnů a u starých událostí `receivedAt` a `sessionId`, nepřidává další zprávy o aktivitě ani trvalou identitu. Hraniční stáří přesně 180 sekund se ještě započítá. Vypnutý sběr či nečinnost vyřadí klienta po zestárnutí poslední přijaté aktualizace; reload může dočasně započítat staré i nové ID podle STATS-09.
+
 ## Nahrazená rozhodnutí
 
 Tento přehled brání návratu ke starším požadavkům. Nejde o aktivní alternativy.

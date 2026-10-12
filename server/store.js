@@ -40,6 +40,8 @@ function createEventStore({ uri, database, retentionDays = 90, collectionName = 
             }
           },
           { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
+          { key: { updatedAt: 1, clientId: 1 } },
+          { key: { receivedAt: 1, sessionId: 1 } },
           { key: { schemaVersion: 1, day: 1, levelNumber: 1 } }
         ]);
         return events;

@@ -197,7 +197,7 @@ function render(data) {
   const t = data.totals;
   const metrics = byId("metrics");
   metrics.replaceChildren();
-  for (const [label, value, note] of [
+  for (const [label, value, note, id] of [
     ["Prince deaths", number(t.princeDeaths), "Observed fatal outcomes"],
     ["Enemies defeated", number(t.enemyDeaths), "One kill per actor per attempt"],
     ["Level attempts", number(t.starts), `${number(t.observations)} additional partial observations`],
@@ -206,9 +206,13 @@ function render(data) {
       t.starts ? `${Math.round((t.completed / t.starts) * 100)}%` : "—",
       `${number(t.completed)} full attempts completed`
     ],
-    ["Active play", duration(t.activeMs), `${number(t.hpLost)} Prince HP lost`]
+    ["Active play", duration(t.activeMs), `${number(t.hpLost)} Prince HP lost`],
+    ["Currently playing", number(data.currentlyPlaying), "Unique clients · last 180s · all levels", "currently-playing"]
   ]) {
     const card = element("article", undefined, "metric");
+    if (id) {
+      card.id = id;
+    }
     card.append(
       element("div", label, "metric-label"),
       element("div", value, "metric-value"),
@@ -346,6 +350,10 @@ async function refresh() {
   } catch (error) {
     if (current === request) {
       byId("status").textContent = "Statistics unavailable. Use refresh to try again.";
+      const liveCount = byId("currently-playing")?.querySelector(".metric-value");
+      if (liveCount) {
+        liveCount.textContent = "—";
+      }
     }
   }
 }

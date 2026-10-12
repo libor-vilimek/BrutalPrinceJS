@@ -58,7 +58,7 @@ function inspectHighlight(kind) {
 }
 
 test(
-  "statistics: daily counts, four rankings and isolated animated room previews",
+  "statistics: daily counts, live clients, four rankings and isolated animated room previews",
   {
     skip: process.env.RUN_BROWSER_TESTS !== "1",
     timeout: 90000
@@ -116,6 +116,7 @@ test(
       }
     ];
     const report = {
+      currentlyPlaying: 3,
       totals: {
         events: 12,
         starts: 2,
@@ -172,6 +173,9 @@ test(
     const base = `http://127.0.0.1:${server.address().port}`;
     await page.goto(`${base}/statistics`);
     await page.waitForFunction(() => document.getElementById("status").textContent.includes("updated"));
+    assert.equal(await page.locator(".metric").count(), 6);
+    assert.equal(await page.locator("#currently-playing .metric-value").textContent(), "3");
+    assert((await page.locator("#currently-playing .metric-note").textContent()).includes("180s"));
     await page.evaluate(() =>
       localStorage.setItem(
         "brutal-prince-settings-v1",
@@ -452,6 +456,23 @@ test(
     await smoke.goto(`${base}/statistics/room-preview?level=7&room=999`);
     await smoke.waitForFunction(() => document.querySelector("#preview-status").textContent.includes("not available"));
     await smoke.close();
+    await page.bringToFront();
+    await page.clock.install();
+    // Register the dashboard interval under the test clock instead of waiting three real 15-second periods.
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById("status").textContent.includes("updated"));
+    report.currentlyPlaying = 0;
+    await page.clock.fastForward(15000);
+    await page.waitForFunction(() => document.querySelector("#currently-playing .metric-value").textContent === "0");
+    await page.route("**/api/v1/statistics?**", (route) =>
+      route.fulfill({ status: 503, json: { error: "unavailable" } })
+    );
+    await page.clock.fastForward(15000);
+    await page.waitForFunction(() => document.querySelector("#currently-playing .metric-value").textContent === "—");
+    await page.unroute("**/api/v1/statistics?**");
+    report.currentlyPlaying = 2;
+    await page.clock.fastForward(15000);
+    await page.waitForFunction(() => document.querySelector("#currently-playing .metric-value").textContent === "2");
     assert.deepEqual(errors, []);
   }
 );

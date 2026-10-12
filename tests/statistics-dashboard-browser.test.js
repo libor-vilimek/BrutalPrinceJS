@@ -23,7 +23,8 @@ test(
     assert(data.sampleData && data.totals.events > 0);
     await page.goto(base + "/statistics");
     await page.waitForFunction(() => document.getElementById("status").textContent.includes("updated"));
-    assert.equal(await page.locator(".metric").count(), 5);
+    assert.equal(await page.locator(".metric").count(), 6);
+    assert.equal(await page.locator("#currently-playing .metric-value").textContent(), String(data.currentlyPlaying));
     assert.equal(await page.locator("#milestones .weapon").count(), 7);
     for (const milestone of data.milestones || []) {
       const card = page.locator(`[data-milestone="${milestone._id}"]`);
