@@ -1,6 +1,7 @@
 "use strict";
 const { reportRows } = require("./report-rows");
 const { milestonePipeline } = require("./milestones");
+const { dangerRanking } = require("./danger-rankings");
 
 async function readStatistics(collection, { days = 30, level, source = "all" } = {}) {
   const since = new Date(new Date().toISOString().slice(0, 10));
@@ -73,6 +74,8 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
               $project: {
                 _id: 0,
                 levelNumber: 1,
+                mapId: 1,
+                mapRevision: 1,
                 receivedAt: 1,
                 location: 1,
                 sampleData: 1,
@@ -86,7 +89,7 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
           days: [
             {
               $group: {
-                _id: { $dateToString: { date: "$receivedAt", format: "%Y-%m-%d", timezone: "UTC" } },
+                _id: "$playDay",
                 ...totals
               }
             },
@@ -107,52 +110,10 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
             },
             { $sort: { deaths: -1 } }
           ],
-          guards: [
-            { $match: { eventType: { $in: ["prince_damaged", "prince_died"] }, "payload.source.kind": "guard" } },
-            {
-              $group: {
-                _id: {
-                  level: "$levelNumber",
-                  map: "$mapId",
-                  revision: "$mapRevision",
-                  guard: "$payload.source.guardId",
-                  room: "$payload.source.roomId",
-                  spawn: "$payload.source.spawnLocation"
-                },
-                hpLost: sum(["prince_damaged"], "$payload.hpLost"),
-                kills: count("prince_died"),
-                hits: count("prince_damaged")
-              }
-            },
-            { $sort: { hpLost: -1, kills: -1 } },
-            { $limit: 8 }
-          ],
-          traps: [
-            {
-              $match: {
-                eventType: { $in: ["prince_damaged", "prince_died"] },
-                "payload.source.kind": { $in: ["tile", "environment"] }
-              }
-            },
-            {
-              $group: {
-                _id: {
-                  level: "$levelNumber",
-                  map: "$mapId",
-                  revision: "$mapRevision",
-                  cause: "$payload.mechanism",
-                  room: "$payload.source.roomId",
-                  column: "$payload.source.tileColumn",
-                  row: "$payload.source.tileRow",
-                  tileType: "$payload.source.tileType"
-                },
-                hpLost: sum(["prince_damaged"], "$payload.hpLost"),
-                kills: count("prince_died")
-              }
-            },
-            { $sort: { kills: -1, hpLost: -1 } },
-            { $limit: 8 }
-          ],
+          guards: dangerRanking("guards"),
+          traps: dangerRanking("traps"),
+          guardsPerPlayer: dangerRanking("guards", true),
+          trapsPerPlayer: dangerRanking("traps", true),
           weapons: [
             { $match: { eventType: { $in: ["weapon_used", "enemy_died"] } } },
             {

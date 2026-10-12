@@ -14,6 +14,13 @@ function reportRows() {
         levelNumber: 1,
         sampleData: 1,
         clientId: { $ifNull: ["$clientId", "$sessionId"] },
+        playDay: {
+          $cond: [
+            { $eq: ["$schemaVersion", 2] },
+            "$day",
+            { $dateToString: { date: "$receivedAt", format: "%Y-%m-%d", timezone: "UTC" } }
+          ]
+        },
         receivedAt: {
           $cond: [{ $eq: ["$schemaVersion", 2] }, { $dateFromString: { dateString: "$day" } }, "$receivedAt"]
         },
@@ -111,6 +118,7 @@ function reportRows() {
             levelNumber: "$levelNumber",
             sampleData: "$sampleData",
             clientId: "$clientId",
+            playDay: "$playDay",
             receivedAt: "$receivedAt"
           },
           "$reportingRows"

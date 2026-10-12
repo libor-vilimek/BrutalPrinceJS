@@ -152,6 +152,8 @@ test(
       assert.equal(combined.totals.princeDeaths, 4);
       assert.equal(combined.totals.hpLost, actual.totals.hpLost * 4);
       assert.equal(combined.guards[0].kills, 4);
+      assert.equal(combined.guardsPerPlayer[0].levelStarters, 2, "legacy session and compact client each count once");
+      assert.equal(combined.guardsPerPlayer[0].killsPer100Starters, 200);
       assert.equal(combined.latestDeaths.find((row) => row.count === 3).payload.mechanism, "sword");
       assert.equal(combined.weapons.find((row) => row._id === "molotov").kills, 1001);
       const freshId = randomUUID();
@@ -221,6 +223,77 @@ test(
       const jets = (await store.report({ days: 30, level: 6 })).milestones.find((row) => row._id === "jetpack");
       assert.equal(jets.clients, 4);
       assert.equal(jets.occurrences, 5);
+
+      // A rare level must rank ahead of common sources even outside the absolute top eight.
+      const rankingSummary = (levelNumber, day, starts, count, sources = 1, revision = "danger-test") => {
+        const base = {
+          mapId: `campaign:${levelNumber}`,
+          mapRevision: revision,
+          levelNumber,
+          day,
+          counters: { starts, princeDeaths: count * sources * 2, hpLost: count * sources * 20 },
+          kills: [],
+          damage: [],
+          deaths: [],
+          weapons: [],
+          rooms: [],
+          extras: []
+        };
+        for (let index = 1; index <= sources; index++) {
+          for (const source of [
+            { kind: "guard", guardId: index, roomId: 1, spawnLocation: { roomId: 1, tileColumn: index, tileRow: 1 } },
+            { kind: "tile", roomId: 1, tileColumn: index, tileRow: 1, tileType: 18 }
+          ]) {
+            if (!count) {
+              continue;
+            }
+            const cause = source.kind === "guard" ? "sword" : "chopper";
+            base.damage.push({ cause, source, hits: count, hpLost: count * 10 });
+            base.deaths.push({
+              cause,
+              source,
+              location: { roomId: 1, tileColumn: index, tileRow: 1 },
+              weapon: "unknown",
+              count,
+              lastAt: `${day}T00:00:01.000Z`
+            });
+          }
+        }
+        return base;
+      };
+      for (let index = 0; index < 10; index++) {
+        const results = await compact(randomUUID(), [
+          rankingSummary(70, today, 3, index === 0 ? 20 : 0, 9),
+          rankingSummary(70, yesterday, 2, 0, 9)
+        ]);
+        assert(results.every((result) => result.status === "stored"));
+      }
+      const rareClient = randomUUID();
+      await compact(rareClient, [rankingSummary(71, today, 3, 3), rankingSummary(71, yesterday, 2, 1)]);
+      await compact(randomUUID(), [rankingSummary(72, today, 0, 100)]);
+      await compact(randomUUID(), [rankingSummary(71, today, 1, 0, 1, "different-revision")]);
+      const ranked = await store.report({ days: 7 });
+      assert(!ranked.guards.some((row) => row._id.level === 71));
+      assert(!ranked.traps.some((row) => row._id.level === 71));
+      for (const rows of [ranked.guardsPerPlayer, ranked.trapsPerPlayer]) {
+        assert.equal(rows[0]._id.level, 71);
+        assert.equal(rows[0].levelStarters, 1);
+        assert.equal(rows[0].kills, 4);
+        assert.equal(rows[0].killsPer100Starters, 400);
+        assert(!rows.some((row) => row._id.level === 72), "zero denominators are excluded");
+        const common = rows.find((row) => row._id.level === 70);
+        assert.equal(common.levelStarters, 10);
+        assert.equal(common.killsPer100Starters, 200);
+      }
+      const perDay = await store.report({ days: 7, level: 71 });
+      assert.equal(perDay.days.find((day) => day._id === yesterday).princeDeaths, 2);
+      assert.equal(perDay.days.find((day) => day._id === today).princeDeaths, 6);
+      await collection.updateMany({ clientId: rareClient }, { $set: { sampleData: true } });
+      assert.equal((await store.report({ days: 7, level: 71, source: "gameplay" })).guardsPerPlayer.length, 0);
+      assert.equal(
+        (await store.report({ days: 7, level: 71, source: "samples" })).guardsPerPlayer[0].killsPer100Starters,
+        400
+      );
     } catch (error) {
       if (error instanceof assert.AssertionError) {
         throw error;

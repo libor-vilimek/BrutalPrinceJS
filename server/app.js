@@ -60,7 +60,11 @@ function createApp({
       "/statistics": "index.html",
       "/statistics/": "index.html",
       "/statistics/dashboard.js": "dashboard.js",
-      "/statistics/style.css": "style.css"
+      "/statistics/style.css": "style.css",
+      "/statistics/room-preview": "room-preview.html",
+      "/statistics/room-preview.js": "room-preview.js",
+      "/statistics/room-pickups.js": "room-pickups.js",
+      "/statistics/room-preview.css": "room-preview.css"
     };
     if (!Object.hasOwn(files, ctx.path) && ctx.path !== "/api/v1/statistics") {
       await next();
@@ -74,7 +78,8 @@ function createApp({
     ctx.set("X-Content-Type-Options", "nosniff");
     ctx.set(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; " +
+        `frame-ancestors ${ctx.path === "/statistics/room-preview" ? "'self'" : "'none'"}; object-src 'none'; form-action 'none'`
     );
     if (!["GET", "HEAD"].includes(ctx.method)) {
       ctx.status = 405;

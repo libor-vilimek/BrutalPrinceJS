@@ -235,12 +235,12 @@ h2 {
   margin-right: 5px;
   border-radius: 50%;
 }
-#trend svg {
+.daily-chart svg {
   width: 100%;
   height: 200px;
   display: block;
 }
-#trend text {
+.daily-chart text {
   fill: var(--muted);
   font: 10px system-ui;
 }
@@ -320,6 +320,12 @@ tbody tr:last-child td {
   gap: 14px;
   border-bottom: 1px solid var(--edge);
   padding: 13px 0;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--edge);
+  border-radius: 0;
+  text-align: left;
 }
 .rank:last-child {
   border-bottom: 0;
@@ -339,6 +345,7 @@ tbody tr:last-child td {
   color: var(--muted);
   display: block;
   font-size: 10px;
+  overflow-wrap: anywhere;
 }
 .rank-value {
   font-size: 18px;
@@ -383,6 +390,42 @@ footer {
   margin: 26px 0 0;
   text-align: center;
   font-size: 10px;
+}
+.text-button {
+  font: inherit;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--gold);
+  text-decoration: underline;
+}
+.rate-note {
+  margin: -6px 0 24px;
+}
+#room-preview {
+  width: min(960px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  padding: 20px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+}
+#room-preview::backdrop {
+  background: #000b;
+}
+#room-preview .panel-heading {
+  flex-direction: row;
+  align-items: center;
+}
+#preview-content iframe {
+  display: block;
+  width: 100%;
+  height: min(62dvh, 600px);
+  min-height: 240px;
+  border: 0;
+  background: #000;
 }
 @media (max-width: 900px) {
   .heading {

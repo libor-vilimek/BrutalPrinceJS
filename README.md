@@ -106,6 +106,11 @@ Reset fills only `testbrutalprince.test_dashboard_events` with random observatio
 `statistics:seed` to add samples or `statistics:wipe` to empty that collection. The dashboard and reporting API are public,
 including on Heroku: open `/statistics` on the deployed game. See [preview details](docs/statistics.md#statistics-page-and-local-preview).
 
+Prince deaths and enemy kills have separate daily charts. Alongside the two absolute danger rankings, two more show
+deaths per 100 unique clients who started each level and map revision. Select a guard, dangerous place or recent death
+to open its animated room with the source highlighted. This silent preview has no Prince or damage and cannot alter
+your game, saved settings or gameplay statistics. Old map revisions are identified when only the current layout is available.
+
 ## Controls
 
 | Key          | Action                                                       |

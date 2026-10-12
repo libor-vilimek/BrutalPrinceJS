@@ -122,7 +122,48 @@ groups and their repeat counts. Period filters include complete UTC play days; g
 screens. Completion compares starts/completions within the selected period, not individually tracked cohorts.
 
 The dashboard refreshes every 15 seconds while visible and immediately on return. Allow for the three-second game batch
-delay, or use manual refresh. To view varied samples in isolated test storage:
+delay, or use manual refresh.
+
+### Daily charts and relative danger
+
+Prince deaths and enemy kills have separate bar charts and independent scales. Every bar is that UTC play day's count,
+not a running total. Missing days are zero; hover, focus or select a bar for its exact date and value. The summary cards
+continue to show totals for the selected period. Compact rows use their stored play day rather than the delivery date.
+
+The absolute guard ranking (HP removed) and place ranking (Prince deaths) are retained. Two additional rankings show
+**Prince deaths per 100 unique clients who started the level**: `deaths / levelStarters × 100`. The denominator uses the
+same period, data filter, level, map and revision. Restarts and multiple days count once per client; a partial observation
+without an actual start does not count. Legacy records use `sessionId`. Reloads create new clients, so these are an
+approximation of people. Repeated deaths can exceed 100 per 100 starters; this is not a probability or a tracked cohort.
+Sources with no observed starters are omitted from the relative lists. Absolute deaths and denominator are shown beside
+each rate. All sources are ranked before taking eight results, independently of the absolute top eight.
+
+The read API adds `guardsPerPlayer` and `trapsPerPlayer`; rows retain source `_id`, `kills`, `hpLost` and `hits`, plus
+`levelStarters` and `killsPer100Starters`. The relative aggregation uses MongoDB 5.0+ `$setWindowFields` after deduplicating
+client starts across days. Reporting remains read-only and collection never sends additional player or enemy data.
+
+### Animated room previews
+
+Select a row in any danger ranking, or a cause in Recent Prince deaths, to open its room. Close with the × button or
+Escape. The preview uses the real Phaser engine, map builder, camera framing, foreground/background layers, all map and
+generated enemies, pickup artwork and laser turret. Choppers, spikes, torches and other tile animations continue; loose
+floors shake without removing the floor. Enemies retain their idle animations without AI, combat or collision damage.
+The highlighted guard or source position stays visible, with no Prince present.
+
+`/statistics/room-preview` runs in its own iframe and Phaser instance. It never starts `Game` or constructs a settings
+manager, statistics recorder, Prince, weapon controller or gameplay input bindings. It does not load audio, send gameplay
+requests, read/write saved preferences, change the main game's URL, inventory, timer or level, or advance the campaign.
+Closing removes the iframe and its engine. Art and pickup placement reuse the game's drawing/placement routines.
+
+This is the initial room layout, not a replay: source summaries do not store historical world state or guard trajectories.
+Guard rows show the guard at its starting position and identify a different recorded damage room when applicable. Map
+revision is checked before matching a guard ID. If the recorded revision is unavailable, a notice identifies the current
+layout and only the recorded tile is highlighted. Missing maps, rooms or source positions are stated instead of silently
+highlighting a different enemy. Generated sample sources can therefore differ from the real current layout.
+
+### Sample data preview
+
+To view varied samples in isolated test storage:
 
 ```text
 npm run statistics:reset
@@ -195,6 +236,9 @@ Missing ends do not establish deaths or abandonment. Exact attempt histories and
   creates and removes only its own fresh `test_gameplay_events_<random-id>` collection.
 - Optional `tests/statistics-browser.test.js` uses `RUN_BROWSER_TESTS=1`, Playwright and `BROWSER_EXECUTABLE`, and keeps
   music/effects muted. It checks the real game, compact batches, attribution, opt-out, failures, inventory and restarts.
+- The same switch runs `tests/statistics-preview-browser.test.js`: separate daily counts including zero days, all four
+  rankings, actual animated traps, no damage/telemetry/settings changes, modal cleanup, mobile framing, old revisions,
+  missing rooms and all fourteen campaign maps. It uses a local fixture server without database writes.
 - With preview running, `RUN_DASHBOARD_TESTS=1` enables `tests/statistics-dashboard-browser.test.js` for real reports,
   filters, auto refresh, empty state and responsive layout. Set `PLAYWRIGHT_MODULE` to an installed module if needed.
 

@@ -77,19 +77,30 @@
           <div class="panel-heading">
             <div>
               <p class="eyebrow">THE BIG PICTURE</p>
-              <h2>Death over time</h2>
+              <h2>Prince deaths per day</h2>
             </div>
-            <div class="legend"><span class="coral">Prince</span><span class="gold">Enemies</span></div>
+            <div class="legend"><span class="coral">Prince</span></div>
           </div>
-          <div id="trend"></div>
+          <div id="prince-trend" class="daily-chart"></div>
           <p class="footnote">Daily totals · UTC · grouped by day of play</p>
         </section>
-        <section class="panel">
-          <p class="eyebrow">WHAT ENDS AN ATTEMPT</p>
-          <h2>Prince death causes</h2>
-          <div id="causes" class="bars"></div>
+        <section class="panel trend">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">THE BIG PICTURE</p>
+              <h2>Enemies defeated per day</h2>
+            </div>
+            <div class="legend"><span class="gold">Enemies</span></div>
+          </div>
+          <div id="enemy-trend" class="daily-chart"></div>
+          <p class="footnote">Daily totals · UTC · grouped by day of play</p>
         </section>
       </div>
+      <section class="panel level-panel">
+        <p class="eyebrow">WHAT ENDS AN ATTEMPT</p>
+        <h2>Prince death causes</h2>
+        <div id="causes" class="bars"></div>
+      </section>
       <section class="panel level-panel">
         <div class="panel-heading">
           <div>
@@ -121,14 +132,33 @@
           <h2>The most dangerous guards</h2>
           <p class="subtle">Ranked by actual Prince health removed</p>
           <div id="guards" class="rankings"></div>
+          <p class="footnote">Select a guard to view its room.</p>
         </section>
         <section class="panel">
           <p class="eyebrow">WATCH YOUR STEP</p>
           <h2>The deadliest places</h2>
           <p class="subtle">Traps and falls · ranked by kills</p>
           <div id="traps" class="rankings"></div>
+          <p class="footnote">Select a place to view its room.</p>
         </section>
       </div>
+      <div class="grid two">
+        <section class="panel">
+          <p class="eyebrow">DANGER PER PLAYER</p>
+          <h2>Guards · deaths per 100 starters</h2>
+          <div id="guards-per-player" class="rankings"></div>
+        </section>
+        <section class="panel">
+          <p class="eyebrow">DANGER PER PLAYER</p>
+          <h2>Places · deaths per 100 starters</h2>
+          <div id="traps-per-player" class="rankings"></div>
+        </section>
+      </div>
+      <p class="footnote rate-note">
+        Deaths divided by unique clients who started that level and map revision in this selection, × 100. Restarts
+        count once per client; reloading creates a new client, so this approximates people. Repeated deaths can produce
+        rates above 100. Sources without observed starters are omitted.
+      </p>
       <section class="panel">
         <div class="panel-heading">
           <div>
@@ -154,5 +184,13 @@
         revisions stay separate. No cross-session player tracking.
       </footer>
     </main>
+    <dialog id="room-preview" aria-labelledby="preview-title">
+      <div class="panel-heading">
+        <h2 id="preview-title">Room preview</h2>
+        <button id="preview-close" aria-label="Close room preview" autofocus>✕</button>
+      </div>
+      <p class="subtle">Animated room preview · no Prince · no damage or statistics recorded</p>
+      <div id="preview-content"></div>
+    </dialog>
   </body>
 </html>

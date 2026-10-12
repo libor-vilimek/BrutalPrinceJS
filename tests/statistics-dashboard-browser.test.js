@@ -40,7 +40,8 @@ test(
     );
     assert((await page.locator("#guards .rank").count()) > 0);
     assert((await page.locator("#traps .rank").count()) > 0);
-    assert(await page.locator("#trend svg").isVisible());
+    assert(await page.locator("#prince-trend svg").isVisible());
+    assert(await page.locator("#enemy-trend svg").isVisible());
     const milestones = ["exitDoors", "healthPotions", "jaffar", "jetpack", "laserRockets", "doors", "walls"].map(
       (_id, index) => ({ _id, clients: index + 2, occurrences: index + 12 })
     );
@@ -111,6 +112,8 @@ test(
           causes: [],
           guards: [],
           traps: [],
+          guardsPerPlayer: [],
+          trapsPerPlayer: [],
           weapons: [],
           latestDeaths: [],
           dataSources: [],
@@ -119,7 +122,7 @@ test(
       })
     );
     await page.locator("#refresh").click();
-    await page.waitForFunction(() => document.querySelector("#trend .empty"));
+    await page.waitForFunction(() => document.querySelector("#prince-trend .empty"));
     // A background batch arriving after the dashboard loaded must become visible without a manual refresh.
     await page.clock.install();
     await page.unroute("**/api/v1/statistics?**");

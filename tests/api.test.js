@@ -152,6 +152,7 @@ test("statistics dashboard is public by default, with bounded filters and an exp
   const disabled = await server(t, { dashboard: false });
   assert.equal((await fetch(disabled + "/statistics")).status, 404);
   assert.equal((await fetch(disabled + "/api/v1/statistics")).status, 404);
+  assert.equal((await fetch(disabled + "/statistics/room-preview")).status, 404);
   let options;
   const url = await server(t, {
     sampleData: true,
@@ -166,6 +167,13 @@ test("statistics dashboard is public by default, with bounded filters and an exp
   assert.equal(page.status, 200);
   assert(page.headers.get("Content-Security-Policy").includes("frame-ancestors 'none'"));
   assert((await page.text()).includes("Every death tells a story."));
+  const preview = await fetch(url + "/statistics/room-preview");
+  assert.equal(preview.status, 200);
+  assert(preview.headers.get("Content-Security-Policy").includes("frame-ancestors 'self'"));
+  const previewHtml = await preview.text();
+  assert(!previewHtml.includes('src="/src/Game.js"'));
+  assert(!previewHtml.includes('src="/src/Statistics.js"'));
+  assert(!previewHtml.includes('src="/src/GameSettings.js"'));
   const response = await fetch(url + "/api/v1/statistics?days=7&level=3");
   assert.deepEqual(await response.json(), { totals: { events: 42 }, sampleData: true });
   assert.deepEqual(options, { days: 7, level: 3, source: "all" });
@@ -184,6 +192,10 @@ test("statistics dashboard is public by default, with bounded filters and an exp
     "/statistics/",
     "/statistics/dashboard.js",
     "/statistics/style.css",
+    "/statistics/room-preview",
+    "/statistics/room-preview.js",
+    "/statistics/room-preview.css",
+    "/statistics/room-pickups.js",
     "/api/v1/statistics"
   ]) {
     const publicHostStatus = await new Promise((resolve, reject) => {

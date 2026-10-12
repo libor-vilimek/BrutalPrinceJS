@@ -27,8 +27,8 @@ function svg(tag, attrs, text) {
   }
   return node;
 }
-function trend(rows, daysRange) {
-  const root = byId("trend");
+function trend(id, rows, daysRange, key, color, label) {
+  const root = byId(id);
   root.replaceChildren();
   if (!rows.length) {
     empty(root);
@@ -40,47 +40,106 @@ function trend(rows, daysRange) {
     const key = new Date(Date.now() - index * 86400000).toISOString().slice(0, 10);
     values.push(days.get(key) || { _id: key, princeDeaths: 0, enemyDeaths: 0 });
   }
-  const chart = svg("svg", { viewBox: "0 0 620 200", role: "img", "aria-label": "Daily Prince and enemy deaths" });
-  const maximum = Math.max(1, ...values.map((row) => Math.max(row.princeDeaths, row.enemyDeaths)));
+  const chart = svg("svg", { viewBox: "0 0 620 200", role: "img", "aria-label": label });
+  const maximum = Math.ceil(Math.max(1, ...values.map((row) => row[key] || 0)) / 4) * 4;
   for (let i = 0; i <= 4; i++) {
     const y = 15 + i * 37;
     chart.append(
-      svg("line", { x1: 30, x2: 610, y1: y, y2: y, stroke: "#2b2e33" }),
-      svg("text", { x: 22, y: y + 4, "text-anchor": "end" }, Math.round((maximum * (4 - i)) / 4))
+      svg("line", { x1: 52, x2: 610, y1: y, y2: y, stroke: "#2b2e33" }),
+      svg("text", { x: 44, y: y + 4, "text-anchor": "end" }, number((maximum * (4 - i)) / 4))
     );
   }
-  for (const [key, color] of [
-    ["enemyDeaths", "#dbb56d"],
-    ["princeDeaths", "#eb8174"]
-  ]) {
-    const points = values
-      .map((row, index) => `${30 + (index * 580) / Math.max(1, values.length - 1)},${163 - (row[key] / maximum) * 148}`)
-      .join(" ");
-    chart.append(
-      svg("polyline", { points, stroke: color, "stroke-width": 2, fill: "none", "stroke-linejoin": "round" })
-    );
-  }
+  const slot = 558 / values.length;
+  values.forEach((row, index) => {
+    const value = row[key] || 0;
+    const height = (value / maximum) * 148;
+    const description = `${row._id} UTC: ${number(value)}`;
+    const bar = svg("rect", {
+      x: 52 + index * slot + slot * 0.15,
+      y: 163 - height,
+      width: slot * 0.7,
+      height: Math.max(1, height),
+      fill: color,
+      opacity: value ? 1 : 0.25,
+      "data-day": row._id,
+      "data-count": value,
+      "aria-label": description,
+      tabindex: 0
+    });
+    bar.append(svg("title", {}, description));
+    bar.addEventListener("focus", () => {
+      byId(`${id}-value`).textContent = description;
+    });
+    bar.addEventListener("pointerenter", () => {
+      byId(`${id}-value`).textContent = description;
+    });
+    bar.addEventListener("click", () => {
+      byId(`${id}-value`).textContent = description;
+    });
+    chart.append(bar);
+  });
   chart.append(
-    svg("text", { x: 30, y: 190 }, values[0]._id.slice(5)),
+    svg("text", { x: 52, y: 190 }, values[0]._id.slice(5)),
     svg("text", { x: 610, y: 190, "text-anchor": "end" }, values.at(-1)._id.slice(5))
   );
   root.append(chart);
+  root.append(element("p", "Select a day to see its count.", "footnote"));
+  root.lastChild.id = `${id}-value`;
 }
-function ranks(id, rows, details, primary) {
+function previewTarget(row) {
+  const id = row._id;
+  return {
+    level: id.level,
+    map: id.map,
+    revision: id.revision,
+    room: id.spawn?.roomId ?? id.room,
+    recordedRoom: id.room,
+    guard: id.guard,
+    column: id.spawn?.tileColumn ?? id.column,
+    row: id.spawn?.tileRow ?? id.row,
+    tileType: id.tileType
+  };
+}
+function showPreview(target, label) {
+  const dialog = byId("room-preview");
+  byId("preview-title").textContent = label;
+  const query = new window.URLSearchParams();
+  for (const [key, value] of Object.entries(target)) {
+    if (value !== null && value !== undefined) {
+      query.set(key, value);
+    }
+  }
+  const frame = element("iframe");
+  frame.title = `Room preview: ${label}`;
+  frame.setAttribute("sandbox", "allow-scripts allow-same-origin");
+  frame.src = `/statistics/room-preview?${query}`;
+  byId("preview-content").replaceChildren(frame);
+  if (!dialog.open) {
+    dialog.showModal();
+  }
+}
+function ranks(id, rows, details, primary, relative = false) {
   const root = byId(id);
   root.replaceChildren();
   if (!rows.length) {
     empty(root);
   }
   rows.forEach((row, index) => {
-    const item = element("div", undefined, "rank");
-    const name = element("div", details(row)[0], "rank-name");
+    const item = element("button", undefined, "rank");
+    item.type = "button";
+    const name = element("span", details(row)[0], "rank-name");
     name.append(element("small", details(row)[1]));
-    const value = element("div", number(row[primary]), "rank-value");
+    item.title = "View this source in the room";
+    item.addEventListener("click", () => showPreview(previewTarget(row), details(row)[0]));
+    const value = element("span", relative ? row.killsPer100Starters.toFixed(1) : number(row[primary]), "rank-value");
     value.append(
       element(
         "small",
-        primary === "hpLost" ? `${number(row.kills)} kills · ${number(row.hits)} hits` : `${number(row.hpLost)} HP lost`
+        relative
+          ? `${number(row.kills)} deaths / ${number(row.levelStarters)} clients`
+          : primary === "hpLost"
+            ? `${number(row.kills)} kills · ${number(row.hits)} hits`
+            : `${number(row.hpLost)} HP lost`
       )
     );
     item.append(element("span", String(index + 1).padStart(2, "0"), "rank-number"), name, value);
@@ -101,12 +160,31 @@ function render(data) {
       new Date(death.receivedAt).toLocaleString(),
       `Level ${death.levelNumber}`,
       title(death.payload.mechanism),
-      death.location.roomId,
+      death.location?.roomId ?? "unknown",
       number(death.count || 1),
       death.sampleData ? "Sample" : "Gameplay"
     ]) {
       row.append(element("td", value));
     }
+    const source = death.payload.source || {};
+    const button = element("button", title(death.payload.mechanism), "text-button");
+    button.addEventListener("click", () =>
+      showPreview(
+        {
+          level: death.levelNumber,
+          map: death.mapId,
+          revision: death.mapRevision,
+          room: source.spawnLocation?.roomId ?? source.roomId ?? death.location?.roomId,
+          recordedRoom: source.roomId,
+          guard: source.guardId,
+          column: source.spawnLocation?.tileColumn ?? source.tileColumn ?? death.location?.tileColumn,
+          row: source.spawnLocation?.tileRow ?? source.tileRow ?? death.location?.tileRow,
+          tileType: source.tileType
+        },
+        `${title(death.payload.mechanism)} · Level ${death.levelNumber}`
+      )
+    );
+    row.children[2].replaceChildren(button);
     deathsTable.append(row);
   }
   if (!deathsTable.children.length) {
@@ -138,7 +216,8 @@ function render(data) {
     );
     metrics.append(card);
   }
-  trend(data.days, data.daysRange);
+  trend("prince-trend", data.days, data.daysRange, "princeDeaths", "#eb8174", "Prince deaths per UTC day");
+  trend("enemy-trend", data.days, data.daysRange, "enemyDeaths", "#dbb56d", "Enemies defeated per UTC day");
   const causes = byId("causes");
   causes.replaceChildren();
   const deaths = data.causes.filter((row) => row._id.type === "prince_died").slice(0, 6);
@@ -182,24 +261,18 @@ function render(data) {
     row.append(cell);
     levels.append(row);
   }
-  ranks(
-    "guards",
-    data.guards,
-    (r) => [
-      `Guard #${r._id.guard} · Level ${r._id.level}`,
-      `Room ${r._id.room ?? r._id.spawn?.roomId ?? "unknown"} · spawn ${r._id.spawn?.roomId ?? "unknown"} · ${r._id.map} / ${r._id.revision.slice(0, 8)}`
-    ],
-    "hpLost"
-  );
-  ranks(
-    "traps",
-    data.traps,
-    (r) => [
-      `${title(r._id.cause)} · Level ${r._id.level}`,
-      `Room ${r._id.room ?? "unknown"} · tile ${r._id.column ?? "?"}, ${r._id.row ?? "?"} · revision ${r._id.revision.slice(0, 8)}`
-    ],
-    "kills"
-  );
+  const guardDetails = (r) => [
+    `Guard #${r._id.guard} · Level ${r._id.level}`,
+    `Room ${r._id.room ?? r._id.spawn?.roomId ?? "unknown"} · spawn ${r._id.spawn?.roomId ?? "unknown"} · ${r._id.map} / ${r._id.revision.slice(0, 8)}`
+  ];
+  const trapDetails = (r) => [
+    `${title(r._id.cause)} · Level ${r._id.level}`,
+    `Room ${r._id.room ?? "unknown"} · tile ${r._id.column ?? "?"}, ${r._id.row ?? "?"} · revision ${r._id.revision.slice(0, 8)}`
+  ];
+  ranks("guards", data.guards, guardDetails, "hpLost");
+  ranks("traps", data.traps, trapDetails, "kills");
+  ranks("guards-per-player", data.guardsPerPlayer || [], guardDetails, "kills", true);
+  ranks("traps-per-player", data.trapsPerPlayer || [], trapDetails, "kills", true);
   const weapons = byId("weapons");
   weapons.replaceChildren();
   if (!data.weapons.length) {
@@ -280,6 +353,18 @@ byId("refresh").addEventListener("click", refresh);
 byId("days").addEventListener("change", refresh);
 byId("level").addEventListener("change", refresh);
 byId("source").addEventListener("change", refresh);
+byId("preview-close").addEventListener("click", () => byId("room-preview").close());
+byId("room-preview").addEventListener("close", () => byId("preview-content").replaceChildren());
+window.addEventListener("message", (event) => {
+  const frame = byId("preview-content").querySelector("iframe");
+  if (
+    event.origin === window.location.origin &&
+    event.source === frame?.contentWindow &&
+    event.data?.type === "statistics-preview-close"
+  ) {
+    byId("room-preview").close();
+  }
+});
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
     refresh();
