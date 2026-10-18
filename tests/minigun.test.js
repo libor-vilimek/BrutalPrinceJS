@@ -555,7 +555,7 @@ test("game frames advance death physics and blood after weapons, and shutdown di
   });
   const state = {
     game: {
-      time: { elapsedMS: 16 },
+      time: { physicsElapsed: 0.016 },
       onPause: { remove() {} },
       onResume: { remove() {} }
     },

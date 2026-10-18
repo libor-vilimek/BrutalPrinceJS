@@ -187,7 +187,7 @@ test("render updates and shutdown manage the molotov once through the shared inv
     molotov,
     weapons: [molotov],
     game: {
-      time: { elapsedMS: 16 },
+      time: { physicsElapsed: 1 / 60 },
       onPause: { remove() {} },
       onResume: { remove() {} }
     },

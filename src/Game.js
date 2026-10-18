@@ -218,7 +218,9 @@ PrinceJS.Game.prototype = {
     if (this.tutorial && this.tutorial.active) {
       return;
     }
-    const delta = this.game.time.elapsedMS / 1000;
+    // update() runs per fixed logic step, not per requestAnimationFrame callback.
+    // elapsedMS is only the last display interval (or near zero during catch-up).
+    const delta = this.game.time.physicsElapsed;
     if (this.laserTurret) {
       this.laserTurret.update(delta);
     }

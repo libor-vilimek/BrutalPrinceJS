@@ -83,7 +83,7 @@ function fixture() {
   let gamepadDown = false;
   let observedGamepadDown = false;
   const game = {
-    time: { elapsedMS: 20 },
+    time: { physicsElapsed: 0.02 },
     input: {
       reset() {
         keys.forEach((key) => key.reset());

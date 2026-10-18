@@ -163,7 +163,7 @@ PrinceJS.Cutscene.prototype = {
 
   update: function () {
     if (this.finale) {
-      this.finale.update(this.game.time.elapsedMS / 1000);
+      this.finale.update(this.game.time.physicsElapsed);
     }
     if (PrinceJS.Utils.continueGame(this.game)) {
       this.continue();

@@ -81,6 +81,10 @@ PrinceJS.Boot.prototype = {
   },
 
   create: function () {
+    // Keep logic at 60 Hz even when the browser presents fewer display frames.
+    // Phaser bounds catch-up to three steps, so a stall cannot replay indefinitely.
+    this.game.time.desiredFps = 60;
+    this.game.forceSingleUpdate = false;
     this.game.settings = new PrinceJS.GameSettings(this.game);
     this.game.statistics = new PrinceJS.Statistics(this.game);
     this.game.touchControls = new PrinceJS.TouchControls(this.game);

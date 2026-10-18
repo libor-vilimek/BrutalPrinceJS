@@ -229,6 +229,7 @@ Implementační rozhodnutí: samostatná sekvence nahrazuje původní objetí ve
 ## Čas a zobrazení v prohlížeči
 
 - **TIME-01:** Výchozí čas hry je 600 minut místo původních 60 minut.
+- **TIME-02:** Rychlost hry nesmí záviset na obnovovací frekvenci obrazovky ani na běžném omezení prohlížeče na 30 fps. Implementační rozhodnutí: logika Phaseru běží v pevných krocích 1/60 s s nejvýše třemi doháněcími kroky na vykreslení; zbraně, efekty, kamera, asistence tutoriálu a filmové animace používají délku logického kroku, nikoli posledního intervalu vykreslení. Pauza nadále zastavuje hru; dlouhý výpadek nezpůsobí neomezené dohánění.
 - **VIEW-01:** Hra se v prohlížeči vejde do viditelné plochy bez vodorovných i svislých scrollbarů. Při změně velikosti okna se přizpůsobí a zachová správné proporce.
 - **VIEW-02:** Titulek karty prohlížeče zní přesně `Brutal Pince of Persia`.
 - **VIEW-03:** Celá hra včetně HUD se vejde na mobilní web v orientaci na výšku i na šířku. Na šířku hra využívá celou dostupnou plochu bez místa vyhrazeného pro ovládání; dotykový panel ji překrývá vlevo dole. Na výšku zůstává panel pod obrazem a nezakrývá jej. Hra zachovává proporce a neořezává obraz.

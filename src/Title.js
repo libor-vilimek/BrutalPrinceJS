@@ -157,7 +157,7 @@ PrinceJS.Title.prototype = {
     }
 
     if (this.prince.visible) {
-      this.updateBrutalTitle(Math.min(this.game.time.elapsedMS, 100) / 1000);
+      this.updateBrutalTitle(this.game.time.physicsElapsed);
     }
 
     this.tick++;

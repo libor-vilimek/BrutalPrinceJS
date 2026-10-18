@@ -87,7 +87,7 @@ function fixture(number, inventory) {
     sound: { stopAll() {}, play: (name) => sounds.push(name) },
     onPause: signal(),
     onResume: signal(),
-    time: { elapsedMS: 16, events: { loop() {} } },
+    time: { physicsElapsed: 1 / 60, events: { loop() {} } },
     world: { sort() {} },
     add: { graphics: () => ({ clear() {}, destroy() {} }) },
     input: {
@@ -480,7 +480,7 @@ for (const number of [4, 12, 13, 14, 99]) {
     assert.equal(state.kid.activeWeapon, "molotov");
     state.selectWeapon("minigun");
     assert.equal(state.kid.activeWeapon, "molotov", "weapon selection cannot skip the whip animation");
-    state.game.time.elapsedMS = 10;
+    state.game.time.physicsElapsed = 0.01;
     for (let i = 0; i < 85; i++) {
       state.update();
     }

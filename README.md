@@ -100,6 +100,10 @@ Run `npm test` for automated checks. To test actual MongoDB persistence using yo
 Each run creates and removes only its own `test_gameplay_events_…` collection; it never wipes
 the production collection. These network tests are opt-in and do not run during `npm test`.
 
+Game logic runs at 60 fixed steps per second independently of the display refresh rate, with bounded catch-up when
+the browser renders at 30 fps. Weapons, effects, camera movement and cinematic animations use this same logic step;
+120/144 Hz displays therefore keep the same gameplay speed as 60 Hz. Timing regression tests cover 30–240 fps and pause/stall handling.
+
 To view statistics locally, open `/statistics` on the local Koa server. For a sample preview, run
 `npm run statistics:reset` and then `npm run statistics:preview`, and open `http://127.0.0.1:8081/statistics`.
 Reset fills only `testbrutalprince.test_dashboard_events` with random observations through the API. Use
