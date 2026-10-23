@@ -26,7 +26,11 @@ PrinceJS.Enemy = function (game, level, location, direction, room, skill, color,
     this.sword.visible = false;
   }
 
-  this.health = PrinceJS.Enemy.EXTRA_STRENGTH[skill] + PrinceJS.Enemy.STRENGTH[this.level.number];
+  this.health =
+    this.baseCharName === "jaffar"
+      ? PrinceJS.Enemy.JAFFAR_HEALTH
+      : PrinceJS.Enemy.EXTRA_STRENGTH[skill] + PrinceJS.Enemy.STRENGTH[this.level.number];
+  this.maxHealth = this.health;
 
   this.charSkill = skill;
   this.charColor = color;
@@ -48,6 +52,7 @@ PrinceJS.Enemy.ADVANCE_PROBABILITY = [255, 200, 200, 200, 255, 255, 200, 0, 0, 2
 PrinceJS.Enemy.REFRAC_TIMER = [16, 16, 16, 16, 8, 8, 8, 8, 0, 8, 0, 0];
 PrinceJS.Enemy.EXTRA_STRENGTH = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0];
 PrinceJS.Enemy.STRENGTH = [4, 3, 3, 3, 3, 4, 5, 4, 4, 5, 5, 5, 4, 6, 10, 0];
+PrinceJS.Enemy.JAFFAR_HEALTH = 50;
 PrinceJS.Enemy.COLOR = [0x4890fc, 0xa83000, 0xfc5000, 0x0c9000, 0x5a00fc, 0xc858fc, 0xfcfc00];
 
 PrinceJS.Enemy.prototype = Object.create(PrinceJS.Fighter.prototype);

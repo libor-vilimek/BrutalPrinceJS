@@ -7,6 +7,14 @@ PrinceJS.FinaleEffects = function (game, scene) {
   this.flashes = [0, 0, 0];
   this.guns = [];
   this.layers = [];
+  this.pillars = [
+    { x: 67, hits: 0, chips: 0 },
+    { x: 248, hits: 0, chips: 0 },
+    { x: 112, hits: 0, chips: 0 }
+  ];
+  this.sourcePillar =
+    scene.front && scene.front.children.find((child) => child.frameName === "room_pillar" && child.x === 59);
+  this.sourcePillarVisible = this.sourcePillar && this.sourcePillar.visible;
   const layer = (z) => {
     const graphics = game.add.graphics(0, 0);
     graphics.z = z;
@@ -15,12 +23,46 @@ PrinceJS.FinaleEffects = function (game, scene) {
   };
   this.glass = layer(11);
   this.damage = layer(12);
+  this.pillarBackdrop = layer(18);
+  // The room atlas bakes in the shaft's lower continuation. Reveal the matching
+  // adjacent backdrop/carpet when this foreground column leaves its socket.
+  const roomPatch = game.make.sprite(59, 120, "cutscene", "room");
+  roomPatch.crop(new Phaser.Rectangle(79, 120, 16, 80));
+  this.pillarBackdrop.addChild(roomPatch);
+  const carpetPatch = game.make.sprite(59, 142, "cutscene", "room_bed");
+  carpetPatch.crop(new Phaser.Rectangle(79, 0, 16, 41));
+  this.pillarBackdrop.addChild(carpetPatch);
+  this.pillarBackdrop.visible = false;
   this.floor = layer(19);
   this.prince = layer(21);
   this.princess = layer(20);
-  this.headLayer = layer(22);
-  this.debris = layer(23);
-  this.tracers = layer(24);
+  this.bodyLayer = layer(22);
+  this.headLayer = layer(23);
+  this.debris = layer(24);
+  this.tracers = layer(25);
+  this.pillarDamage = layer(31);
+  this.fallingPillar = layer(32);
+  if (scene.front && typeof scene.front.addChildAt === "function") {
+    const coverIndex = scene.front.children.findIndex((child) => child.key === "cover");
+    const index = coverIndex < 0 ? scene.front.children.length : coverIndex;
+    // Foreground cracks and the falling shaft must also sit behind the existing fade cover.
+    scene.front.addChildAt(this.pillarDamage, index);
+    scene.front.addChildAt(this.fallingPillar, index + 1);
+  }
+  this.pillarSprite = game.make.sprite(0, 0, "cutscene", "room_pillar");
+  this.pillarSprite.anchor.setTo(0.5, 1);
+  this.fallingPillar.addChild(this.pillarSprite);
+  this.windowMask = layer(0);
+  // The mask shares the world's scale. Keep it transformable but never paint it.
+  this.windowMask.isMask = true;
+  this.rect(this.windowMask, 0xffffff, 29, 0, 307, 200);
+  // Rectangles stay in one WebGL mask batch; mixed complex polygons would be
+  // ignored by this Phaser version's single-batch stencil-mask implementation.
+  for (let y = 90; y <= 137; y++) {
+    const half = y < 99 ? Math.max(1, Math.floor(Math.sqrt(81 - (99 - y) ** 2))) : 8;
+    this.rect(this.windowMask, 0xffffff, 21 - half, y, half * 2, 1);
+  }
+  this.headLayer.mask = this.windowMask;
   this.princeHead = this.headSprite(this.prince, "kid", "kid-15", 0, 0, 12, 8);
   this.princeHead.scale.x = -1;
   this.faceBlood = game.make.graphics(0, 0);
@@ -28,10 +70,17 @@ PrinceJS.FinaleEffects = function (game, scene) {
   this.rect(this.faceBlood, 0xa21e30, 2, -5, 2, 1);
   this.rect(this.faceBlood, 0x8b1528, 3, -4, 1, 2);
   this.princessHead = this.headSprite(this.princess, "princess", "princess-11", 2, 0, 12, 12);
-  this.jaffar = this.headSprite(this.headLayer, "jaffar", "jaffar-1", 12, 0, 14, 8);
-  this.jaffar.y = 3;
-  this.rect(this.headLayer, 0x830d22, -3, 3, 5, 2);
-  this.rect(this.headLayer, 0xc42b34, -2, 4, 2, 2);
+  // Split the native dead frame at its neck. The turban, face, sash and robes stay original.
+  this.jaffarBody = game.make.sprite(0, -11, "jaffar", "jaffar-35");
+  this.jaffarBody.crop(new Phaser.Rectangle(0, 0, 33, 11));
+  this.bodyLayer.addChild(this.jaffarBody);
+  this.attachedHead = game.make.sprite(33, -11, "jaffar", "jaffar-35");
+  this.attachedHead.crop(new Phaser.Rectangle(33, 0, 10, 11));
+  this.bodyLayer.addChild(this.attachedHead);
+  this.jaffar = this.headSprite(this.headLayer, "jaffar", "jaffar-35", 33, 0, 10, 11);
+  this.jaffar.anchor.setTo(0.5, 0.5);
+  this.rect(this.headLayer, 0x830d22, -5, 1, 3, 2);
+  this.rect(this.headLayer, 0xc42b34, -5, 2, 2, 2);
   this.princeGun = game.make.graphics(0, 0);
   this.prince.addChild(this.princeGun);
   this.princessGuns = [game.make.graphics(0, 0), game.make.graphics(0, 0)];
@@ -39,6 +88,8 @@ PrinceJS.FinaleEffects = function (game, scene) {
   this.audio = new PrinceJS.WeaponAudio(game);
   this.glassSound = game.add.audio("Mirror", 0.65);
   this.kickSound = game.add.audio("BumpIntoWallHard", 0.7);
+  this.collapseSound = game.add.audio("LooseFloorLands", 0.7);
+  this.squishSound = game.add.audio("HardLandingSplat", 0.7);
   this.drawWindow(false);
 };
 
@@ -160,6 +211,7 @@ PrinceJS.FinaleEffects.prototype = {
       y: actor.y + muzzle.y,
       dx: Math.cos(position.angle) * direction,
       dy: Math.sin(position.angle),
+      target: position.target,
       visible: graphic.visible
     };
   },
@@ -215,9 +267,15 @@ PrinceJS.FinaleEffects.prototype = {
       y: -20 - p.raise * 13 + dip,
       angle: (Math.PI - 0.35) * (1 - p.raise) + (-Math.PI / 2 + 0.22 + p.sway * 0.16) * p.raise
     };
+    if (p.firing) {
+      gun.target = p.aim;
+      gun.angle = Math.atan2(p.aim.y - p.y - gun.y, p.x - p.aim.x - gun.x);
+    }
     const hold = this.localPoint(gun, -1, -4);
     this.arm(g, { x: lean - 3, y: -30 + dip }, hold, -1, false);
-    let other = pose.headHeld ? { x: p.x - pose.head.x, y: pose.head.y - p.y - 5 } : { x: lean + 9, y: -20 + dip };
+    let other = pose.body.held
+      ? { x: p.x - pose.body.x - 36, y: pose.body.y - p.y - 6 }
+      : { x: lean + 9, y: -20 + dip };
     if (p.raise > 0) {
       const support = this.localPoint(gun, 7, 3);
       other = { x: other.x + (support.x - other.x) * p.raise, y: other.y + (support.y - other.y) * p.raise };
@@ -259,6 +317,10 @@ PrinceJS.FinaleEffects.prototype = {
         y: -18 - p.draw * 17,
         angle: -Math.PI / 2 + side * (0.22 + p.sway * 0.12) - (1 - p.draw) * side * 1.2
       };
+      if (p.firing) {
+        gun.target = p.aims[i];
+        gun.angle = Math.atan2(gun.target.y - p.y - gun.y, gun.target.x - p.x - gun.x);
+      }
       this.princessGuns[i].visible = p.draw > 0;
       this.arm(
         g,
@@ -274,14 +336,104 @@ PrinceJS.FinaleEffects.prototype = {
   render: function (pose) {
     this.drawPrince(pose);
     this.drawPrincess(pose.princess);
+    this.bodyLayer.clear();
+    this.bodyLayer.x = pose.body.x;
+    this.bodyLayer.y = pose.body.crushed ? PrinceJS.Finale.STAGE.floorY + 1 : pose.body.y;
+    this.bodyLayer.rotation = pose.body.rotation;
+    this.bodyLayer.scale.y = pose.body.crushed ? 0.38 : 1;
+    this.attachedHead.visible = pose.body.headAttached;
+    this.bodyLayer.z = pose.body.held ? 22 : 19.5;
+    if (!pose.body.headAttached) {
+      this.rect(this.bodyLayer, 0x761027, 30, -6, 4, 4);
+      this.rect(this.bodyLayer, 0xc63443, 32, -5, 2, 2);
+    }
     this.headLayer.x = pose.head.x;
     this.headLayer.y = pose.head.y;
     this.headLayer.rotation = pose.head.rotation;
     this.headLayer.visible = pose.head.visible;
-    if (pose.headGrounded && !this.bloodOnFloor) {
+    // Interior + aperture form one clipping region; the outside wall is never exposed.
+    this.headLayer.mask = this.windowMask;
+    if (!pose.body.held && !this.bloodOnFloor) {
       this.bloodOnFloor = true;
-      this.rect(this.floor, 0x741125, pose.head.x - 5, 164, 10, 2);
-      this.rect(this.floor, 0xa11e32, pose.head.x - 2, 163, 5, 2);
+      this.rect(this.floor, 0x741125, pose.body.x + 4, 164, 35, 3);
+      this.rect(this.floor, 0xa11e32, pose.body.x + 22, 163, 15, 2);
+    }
+    this.drawPillars(pose);
+  },
+
+  crack: function (g, x, y, height, strength) {
+    const points = [
+      { x, y },
+      { x: x - 3, y: y + height * 0.24 },
+      { x: x + 2, y: y + height * 0.48 },
+      { x: x - 2, y: y + height * 0.73 },
+      { x: x + 2, y: y + height }
+    ];
+    for (let i = 1; i < points.length; i++) {
+      this.limb(g, points[i - 1], points[i], 0x37291f, strength > 2 ? 2 : 1);
+      if (strength > 1 && i % 2) {
+        this.limb(g, points[i], { x: points[i].x + 5, y: points[i].y - 4 }, 0x37291f, 1);
+        this.rect(g, 0xffd28b, points[i].x - 1, points[i].y, 1, 2);
+      }
+    }
+  },
+
+  drawPillars: function (pose) {
+    this.pillarDamage.clear();
+    this.fallingPillar.clear();
+    const falling = pose.pillarFall > 0 && this.pillars[0].hits >= 24;
+    this.fallingPillar.visible = falling;
+    this.pillarBackdrop.visible = falling;
+    for (let i = 0; i < this.pillars.length; i++) {
+      const pillar = this.pillars[i];
+      const strength = Math.min(3, Math.floor(pillar.hits / 8));
+      if (!strength) {
+        continue;
+      }
+      this.crack(this.pillarDamage, pillar.x, 24, i === 2 ? 45 : 91, strength);
+      if (i < 2 && !(i === 0 && falling)) {
+        this.crack(this.pillarDamage, pillar.x, 122, 37, strength);
+      }
+    }
+    if (falling) {
+      const stage = PrinceJS.Finale.STAGE;
+      if (this.sourcePillar) {
+        this.sourcePillar.visible = false;
+      }
+      this.pillarFallen = true;
+      this.fallingPillar.x = stage.pillarX;
+      this.fallingPillar.y = stage.pillarY;
+      // Accelerate out of the cracked socket, then stop against the corpse.
+      this.fallingPillar.rotation = Math.pow(pose.pillarFall, 1.6) * Math.PI * 0.49;
+      this.crack(this.fallingPillar, 0, -46, 40, 3);
+      this.rect(this.pillarDamage, 0x38251c, 59, 119, 16, 3);
+      this.polygon(this.pillarDamage, 0xc59a61, [59, 120, 62, 124, 65, 120, 69, 122, 74, 120]);
+      if (pose.body.crushed && !this.bodyCrushed) {
+        this.crushBody();
+      }
+    }
+  },
+
+  crushBody: function () {
+    this.bodyCrushed = true;
+    this.collapseSound.play();
+    this.squishSound.play();
+    this.rect(this.floor, 0x580b1d, 83, 164, 57, 5);
+    this.rect(this.floor, 0xa81d32, 99, 163, 31, 3);
+    for (let i = 0; i < 32; i++) {
+      const side = i % 2 ? -1 : 1;
+      this.particle(
+        113 + side * 5,
+        161,
+        side * (20 + (i % 8) * 12),
+        -26 - (i % 7) * 12,
+        i % 3 ? 0xa71930 : 0xe0444d,
+        1.8,
+        "blood"
+      );
+    }
+    for (let i = 0; i < 14; i++) {
+      this.particle(111, 162, (i - 7) * 10, -10 - (i % 4) * 13, 0xc9a572, 0.8, "stone");
     }
   },
 
@@ -326,13 +478,32 @@ PrinceJS.FinaleEffects.prototype = {
       return;
     }
     this.flashes[index] = index === 0 ? 0.045 : 0.06;
-    // The arch's upper masonry is the ceiling of this cinematic, never the other actor.
-    const y = 22 + Math.floor(Math.random() * 5);
-    const distance = (gun.y - y) / -gun.dy;
-    const x = gun.x + gun.dx * distance;
+    const target = gun.target;
+    if (!target) {
+      return;
+    }
+    // Every tracer ends on the actual gold support/arch toward which the weapon is aimed.
+    const { x, y } = target;
+    const distance = Math.hypot(x - gun.x, y - gun.y);
     this.particles.push({ type: "tracer", x: gun.x, y: gun.y, dx: gun.dx, dy: gun.dy, distance, life: 0.045 });
-    this.rect(this.damage, 0x493426, x - 1, y - 1, 3, 2);
-    this.rect(this.damage, 0x1f242c, x, y, 1, 1);
+    this.rect(this.damage, 0x493426, x - 1, y - 1, 3, 3);
+    this.rect(this.damage, 0x1f242c, x, y, 2, 1);
+    const pillar = this.pillars[target.pillar];
+    pillar.hits++;
+    if (pillar.hits % 8 === 0) {
+      pillar.chips++;
+      this.particle(x, y + 4, (Math.random() - 0.5) * 28, 15, 0xcba56c, 2, "stone");
+      this.particle(
+        pillar.x + (pillar.chips % 2 ? 4 : -4),
+        107,
+        (Math.random() - 0.5) * 35,
+        10,
+        0xe6bc7e,
+        1.4,
+        "stone"
+      );
+      this.polygon(this.damage, 0x35251d, [x - 3, y - 1, x + 3, y, x + 1, y + 4, x - 2, y + 3]);
+    }
     for (let i = 0; i < 3; i++) {
       this.particle(x, y, (Math.random() - 0.5) * 50, 10 + Math.random() * 30, i ? 0xb99867 : 0xffe4a3, 0.45);
     }
@@ -378,10 +549,14 @@ PrinceJS.FinaleEffects.prototype = {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       if (p.y >= 166 && p.type !== "dust") {
-        this.rect(this.floor, p.color, p.x, 165 + Math.floor(Math.abs(p.x * 3) % 5), p.type === "glass" ? 3 : 2, 1);
+        const width = p.type === "stone" ? 5 : p.type === "glass" ? 3 : 2;
+        this.rect(this.floor, p.color, p.x, 165 + Math.floor(Math.abs(p.x * 3) % 5), width, p.type === "stone" ? 3 : 1);
         return false;
       }
-      if (p.type === "glass") {
+      if (p.type === "stone") {
+        this.polygon(this.debris, 0x775237, [p.x - 3, p.y - 2, p.x + 2, p.y - 3, p.x + 4, p.y + 2, p.x - 2, p.y + 3]);
+        this.polygon(this.debris, p.color, [p.x - 3, p.y - 2, p.x + 2, p.y - 3, p.x + 2, p.y + 1, p.x - 2, p.y + 1]);
+      } else if (p.type === "glass") {
         this.polygon(this.debris, p.color, [p.x, p.y - 2, p.x + 3, p.y, p.x - 1, p.y + 2]);
       } else {
         this.rect(this.debris, p.color, p.x, p.y, p.type === "brass" ? 2 : 1, 1);
@@ -394,6 +569,12 @@ PrinceJS.FinaleEffects.prototype = {
     this.audio.destroy();
     this.glassSound.destroy();
     this.kickSound.destroy();
+    this.collapseSound.destroy();
+    this.squishSound.destroy();
+    this.headLayer.mask = null;
+    if (this.sourcePillar) {
+      this.sourcePillar.visible = this.sourcePillarVisible;
+    }
     this.layers.forEach((layer) => layer.destroy(true));
     this.particles.length = 0;
   }

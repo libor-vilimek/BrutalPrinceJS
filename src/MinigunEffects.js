@@ -30,6 +30,7 @@ PrinceJS.MinigunEffects = function (game, kid, pickup) {
   this.croppedKid = false;
   this.weapon = game.add.graphics(0, 0);
   this.hands = game.add.graphics(0, 0);
+  this.casingBackLayer = game.add.graphics(0, 0);
   this.casingLayer = game.add.graphics(0, 0);
   this.debris = game.add.graphics(0, 0);
   this.flash = game.add.graphics(0, 0);
@@ -39,6 +40,7 @@ PrinceJS.MinigunEffects = function (game, kid, pickup) {
   this.head.z = 25;
   this.weapon.z = 25;
   this.hands.z = 26;
+  this.casingBackLayer.z = 19.8;
   this.casingLayer.z = 27;
   this.debris.z = 28;
   this.flash.z = 29;
@@ -58,7 +60,10 @@ PrinceJS.MinigunEffects = function (game, kid, pickup) {
   this.casingDepths = [];
   for (let depth = 0; depth < 10; depth++) {
     let graphics = game.add.graphics(0, 0);
-    this.casingLayer.addChild(graphics);
+    // Prince walks through the middle of the slab: five lanes behind his body,
+    // five in front, with both halves still underneath the foreground masonry.
+    let layer = depth < 5 ? this.casingBackLayer : this.casingLayer;
+    layer.addChild(graphics);
     let moving = game.add.graphics(0, 0);
     graphics.addChild(moving);
     this.casingDepths.push({ graphics: graphics, moving: moving });
@@ -1003,6 +1008,7 @@ PrinceJS.MinigunEffects.prototype.destroy = function () {
     this.head,
     this.weapon,
     this.hands,
+    this.casingBackLayer,
     this.casingLayer,
     this.debris,
     this.flash

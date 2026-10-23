@@ -56,6 +56,8 @@ PrinceJS.Interface = function (game, delegate) {
   this.opp = null;
   this.oppHPs = [];
   this.oppHPActive = 0;
+  this.oppHPMaximum = 0;
+  this.oppHealthText = null;
 
   this.pressButtonToContinueTimer = -1;
   this.hideTextTimer = -1;
@@ -127,8 +129,10 @@ PrinceJS.Interface.prototype = {
 
     this.oppHPs = [];
     this.oppHPActive = actor.health;
+    this.oppHPMaximum = Math.max(actor.health, actor.maxHealth || 0);
+    let compact = this.oppHPMaximum > 10;
 
-    for (let i = actor.health; i > 0; i--) {
+    for (let i = compact ? 1 : actor.health; i > 0; i--) {
       this.oppHPs[i - 1] = this.game.add.sprite(
         PrinceJS.SCREEN_WIDTH - i * 7 + 1,
         2,
@@ -140,6 +144,13 @@ PrinceJS.Interface.prototype = {
       }
       this.layer.addChild(this.oppHPs[i - 1]);
     }
+
+    if (compact) {
+      this.oppHealthText = this.game.make.bitmapText(PrinceJS.SCREEN_WIDTH - 9, 4, "font", "", 16);
+      this.oppHealthText.anchor.setTo(1, 0.5);
+      this.layer.addChild(this.oppHealthText);
+    }
+    this.refreshOpponentLives();
 
     actor.onDamageLife.add(this.damageOpponentLive, this);
     actor.onDead.add(this.resetOpponentLive, this);
@@ -153,11 +164,16 @@ PrinceJS.Interface.prototype = {
     for (let i = 0; i < this.oppHPs.length; i++) {
       this.oppHPs[i].destroy();
     }
+    if (this.oppHealthText) {
+      this.oppHealthText.destroy();
+      this.oppHealthText = null;
+    }
     this.opp.onDamageLife.remove(this.damageOpponentLive, this);
     this.opp.onDead.remove(this.resetOpponentLive, this);
     this.opp = null;
     this.oppHPs = [];
     this.oppHPActive = 0;
+    this.oppHPMaximum = 0;
   },
 
   damageOpponentLive: function (num) {
@@ -165,10 +181,20 @@ PrinceJS.Interface.prototype = {
       return;
     }
 
-    let n = Math.min(this.oppHPActive, num);
-    for (let i = 0; i < n; i++) {
-      this.oppHPActive--;
-      this.oppHPs[this.oppHPActive].visible = false;
+    this.oppHPActive = Math.max(0, this.oppHPActive - num);
+    this.refreshOpponentLives();
+  },
+
+  refreshOpponentLives: function () {
+    for (let i = 0; i < this.oppHPs.length; i++) {
+      this.oppHPs[i].visible = i < this.oppHPActive;
+    }
+    if (this.oppHealthText) {
+      this.oppHealthText.text = this.oppHPActive + "/" + this.oppHPMaximum;
+      this.oppHealthText.fontSize = 16;
+      if (this.oppHealthText.width > 60) {
+        this.oppHealthText.fontSize *= 60 / this.oppHealthText.width;
+      }
     }
   },
 

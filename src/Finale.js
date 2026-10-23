@@ -15,21 +15,34 @@ PrinceJS.Finale.TIMES = {
   enter: 1.2,
   stop: 4,
   place: 4.65,
-  release: 5.4,
-  stand: 6,
-  windup: 6.15,
-  kick: 6.48,
-  recover: 6.95,
-  glass: 7.12,
-  outside: 7.55,
-  raise: 7.7,
-  princeFire: 8.4,
-  princessDraw: 8.7,
-  princessFire: 9.5,
-  end: 17.5
+  release: 5.7,
+  stand: 6.25,
+  windup: 6.5,
+  kick: 6.95,
+  recover: 7.45,
+  glass: 7.65,
+  outside: 7.84,
+  raise: 8.15,
+  princeFire: 9,
+  princessDraw: 9.45,
+  princessFire: 10.3,
+  pillarFall: 14,
+  pillarImpact: 15.35,
+  end: 20
 };
 
-PrinceJS.Finale.STAGE = { princeX: 154, princessX: 200, headX: 134, floorY: 165, windowX: 22, windowY: 112 };
+PrinceJS.Finale.STAGE = {
+  princeX: 149,
+  princessX: 200,
+  headX: 129,
+  floorY: 165,
+  windowX: 22,
+  windowY: 112,
+  windowLeft: 13,
+  windowRight: 29,
+  pillarX: 67,
+  pillarY: 168
+};
 
 PrinceJS.Finale.prototype = {
   progress: function (time, start, end) {
@@ -61,37 +74,48 @@ PrinceJS.Finale.prototype = {
       dancing,
       sway,
       raise: progress(t.raise, t.princeFire),
-      firing: dancing
+      firing: dancing,
+      aim: { x: 67 + Math.sin(beat * 0.35) * 5, y: 30 + Math.cos(beat * 0.4) * 13, pillar: 0 }
     };
+    const lowering = progress(t.place, t.release);
+    const body = {
+      x: prince.x - 29 - lowering * 29,
+      y: prince.y - 25 + lowering * 25,
+      rotation: walking ? Math.sin(time * 9) * 0.025 : 0,
+      held: time < t.release,
+      headAttached: time < t.kick,
+      crushed: time >= t.pillarImpact
+    };
+    if (!body.held) {
+      body.x = stage.headX - 38;
+      body.y = stage.floorY;
+    }
     let head = {
-      x: prince.x - 12,
-      y: prince.y - 14,
-      rotation: Math.sin(time * 7) * (walking ? 0.12 : 0.02),
-      visible: true
+      x: body.x + 38,
+      y: body.y - 5.5,
+      rotation: 0,
+      visible: false,
+      throughWindow: false
     };
-    if (time < t.release) {
-      head.x -= placing * 8;
-      head.y += placing * 8;
-    } else if (time < t.kick) {
-      head = { x: stage.headX, y: stage.floorY - 6, rotation: 0, visible: true };
-    } else {
+    if (time >= t.kick) {
       const flight = time - t.kick;
       const hit = t.glass - t.kick;
       const vx = (stage.windowX - stage.headX) / hit;
-      const vy = (stage.windowY - (stage.floorY - 6) - 50 * hit * hit) / hit;
+      const vy = (stage.windowY - (stage.floorY - 5.5) - 50 * hit * hit) / hit;
       head = {
         x: stage.headX + vx * flight,
-        y: stage.floorY - 6 + vy * flight + 50 * flight * flight,
+        y: stage.floorY - 5.5 + vy * flight + 50 * flight * flight,
         rotation: -flight * 15,
-        visible: time < t.outside
+        visible: time < t.outside,
+        throughWindow: stage.headX + vx * flight <= stage.windowRight + 1
       };
     }
     return {
       time,
       prince,
+      body,
       head,
-      headHeld: time < t.release,
-      headGrounded: time >= t.release && time < t.kick,
+      pillarFall: progress(t.pillarFall, t.pillarImpact),
       windowBroken: time >= t.glass,
       princess: {
         x: stage.princessX + princessSway * 3,
@@ -99,7 +123,11 @@ PrinceJS.Finale.prototype = {
         sway: princessSway,
         dancing: princessDancing,
         draw: progress(t.princessDraw, t.princessFire),
-        firing: princessDancing
+        firing: princessDancing,
+        aims: [
+          { x: 112 + princessSway * 4, y: 42 + princessSway * 4, pillar: 2 },
+          { x: 248 + princessSway * 5, y: 40 - princessSway * 12, pillar: 1 }
+        ]
       }
     };
   },

@@ -13,7 +13,7 @@ PrinceJS.Tutorial = function (delegate) {
   this.downKeys = new Set();
   this.heldKeys = new Set();
   this.destroyed = false;
-  this.overlay = new PrinceJS.TutorialOverlay((code) => this.accept(code, false));
+  this.overlay = new PrinceJS.TutorialOverlay((code) => this.accept(code, false), this.game);
   this.sequence = PrinceJS.TutorialSequence ? new PrinceJS.TutorialSequence(delegate, this) : null;
   this.keyDown = this.onKeyDown.bind(this);
   this.keyUp = this.onKeyUp.bind(this);

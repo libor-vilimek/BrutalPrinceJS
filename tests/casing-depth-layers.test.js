@@ -45,8 +45,28 @@ for (const name of [
   vm.runInContext(phaserSource.slice(start, end), boundsContext);
 }
 
-function fixture() {
+function fixture(enemyCount = 0) {
   const graphics = [];
+  const reparent = (parent, child, index = parent.children.length) => {
+    if (child.parent) {
+      child.parent.children.splice(child.parent.children.indexOf(child), 1);
+    }
+    child.parent = parent;
+    parent.children.splice(index, 0, child);
+    return child;
+  };
+  const world = {
+    children: [],
+    add(child) {
+      child.z = this.children.length;
+      return reparent(this, child);
+    },
+    sort(key) {
+      this.children.sort((a, b) => a[key] - b[key]);
+      // Phaser 2 replaces z priorities with display-list indices after sorting.
+      this.children.forEach((child, index) => (child.z = index));
+    }
+  };
   class Graphics {
     constructor(x, y) {
       this.x = x;
@@ -79,14 +99,18 @@ function fixture() {
     drawPolygon() {}
     endFill() {}
     addChild(child) {
-      this.children.push(child);
+      return reparent(this, child);
     }
     addChildAt(child, index) {
-      this.children.splice(index, 0, child);
+      return reparent(this, child, index);
     }
     destroy() {
       this.destroyed = true;
-      this.children.forEach((child) => child.destroy());
+      [...this.children].forEach((child) => child.destroy());
+      if (this.parent) {
+        this.parent.children.splice(this.parent.children.indexOf(this), 1);
+        this.parent = null;
+      }
     }
     updateLocalBounds() {
       const left = Math.min(...this.rects.map((rect) => rect.x));
@@ -146,21 +170,35 @@ function fixture() {
     baseX: 0,
     baseY: 3,
     charFace: 1,
-    minigunEquipped: false
+    minigunEquipped: false,
+    crop(rect) {
+      this.cropRect = rect;
+    }
   };
+  const terrain = { back: world.add(new Graphics(0, 0)), front: world.add(new Graphics(0, 0)) };
+  terrain.back.z = 10;
+  terrain.front.z = 30;
+  for (let i = 0; i < enemyCount; i++) {
+    world.add({}).z = 20;
+  }
+  world.add(kid).z = 20;
   const game = {
     camera: { view: new Rectangle(0, 0, 320, 189) },
     add: {
-      graphics: (x, y) => new Graphics(x, y),
-      sprite: () => ({
-        anchor: { setTo() {} },
-        crop() {},
-        destroy() {}
-      })
+      graphics: (x, y) => world.add(new Graphics(x, y)),
+      sprite: () =>
+        world.add({
+          scale: { x: 1, y: 1 },
+          anchor: { setTo() {} },
+          crop() {},
+          destroy() {}
+        })
     }
   };
-  game.world = { camera: game.camera };
+  game.world = world;
+  world.camera = game.camera;
   const effects = new PrinceJS.MinigunEffects(game, kid, { room: 1, worldX: 120, worldY: 119, collected: true });
+  world.sort("z");
   const emit = (depthLayer, x = 120, y = 92, vx = 0, vy = 0) => {
     const casing = effects.emitCasing(x, y, vx, vy, 0xffdb70, 119, depthLayer);
     casing.width = 3;
@@ -203,8 +241,83 @@ function fixture() {
       }
     }
   };
-  return { effects, kid, rooms, graphics, emit, advance, settle, cameraFrame };
+  const renderOrder = () => {
+    const entries = [];
+    const visit = (entry) => {
+      entries.push(entry);
+      (entry.children || []).forEach(visit);
+    };
+    world.children.forEach(visit);
+    return entries;
+  };
+  return { effects, kid, rooms, graphics, game, world, terrain, emit, advance, settle, cameraFrame, renderOrder };
 }
+
+test("five brass depths render behind Prince and five in front through movement and weapon poses", () => {
+  const f = fixture(60);
+  const effects = f.effects;
+  const rearBlood = f.game.add.graphics(0, 0);
+  const frontBlood = f.game.add.graphics(0, 0);
+  f.terrain.back.addChild(rearBlood);
+  f.terrain.front.addChild(frontBlood);
+  const roots = effects.casingDepths.map((depth) => depth.graphics);
+  assert.equal(effects.casingBackLayer.children.length, 5);
+  assert.equal(effects.casingLayer.children.length, 5);
+  const checkOrder = () => {
+    // Settling and adding foreground blood may reindex z values. Check the real
+    // display tree, including cached batches and moving shells, instead of z27.
+    f.world.sort("z");
+    const order = f.renderOrder();
+    const princeParts = [f.kid, effects.body, effects.head, effects.weapon, effects.hands];
+    effects.casingDepths.forEach((depth, layer) => {
+      const container = layer < 5 ? effects.casingBackLayer : effects.casingLayer;
+      assert.equal(depth.graphics, roots[layer], "depth containers retain their identity");
+      assert.equal(depth.graphics.parent, container);
+      assert.equal(depth.moving.parent, depth.graphics);
+      assert.equal(depth.graphics.children.at(-1), depth.moving);
+      for (const child of depth.graphics.children) {
+        assert.ok(order.indexOf(rearBlood) < order.indexOf(child), "floor and rear-wall blood remain underneath brass");
+        for (const princePart of princeParts) {
+          assert.equal(order.indexOf(child) < order.indexOf(princePart), layer < 5);
+        }
+        assert.ok(order.indexOf(child) < order.indexOf(f.terrain.front), "foreground stone still occludes every lane");
+        assert.ok(order.indexOf(child) < order.indexOf(frontBlood), "foreground blood stays with its stone");
+      }
+    });
+  };
+  for (let layer = 0; layer < 10; layer++) {
+    f.emit(layer);
+  }
+  f.advance(1 / 60);
+  assert.ok(
+    effects.casingDepths.every((depth) => depth.moving.rects.length > 0),
+    "flying brass uses both halves"
+  );
+  checkOrder();
+  f.advance(3);
+  assert.equal(effects.casingRooms[1].settled.length, 10);
+  assert.ok(effects.casingRooms[1].batches.every((batch) => batch.graphics.cacheAsBitmap));
+  checkOrder();
+  for (const direction of [-1, 1]) {
+    f.kid.charFace = direction;
+    for (const charX of [45, 52, 59]) {
+      f.kid.action = "run";
+      f.kid.charX = charX;
+      f.advance(1 / 60);
+      checkOrder();
+    }
+    f.kid.minigunEquipped = true;
+    effects.setAction("firing", 1);
+    for (const action of ["stand", "stoop"]) {
+      f.kid.action = action;
+      f.advance(1 / 60);
+      assert.ok(effects.body.visible && effects.head.visible && effects.weapon.visible && effects.hands.visible);
+      checkOrder();
+    }
+    f.kid.minigunEquipped = false;
+    effects.setAction("hidden", 0);
+  }
+});
 
 test("bursts use all ten floor depths and land on ten visible, diagonally staggered lanes", () => {
   const f = fixture();
@@ -343,5 +456,9 @@ test("thousands of permanent casings use bounded batches and no per-frame simula
   assert.equal(f.effects.casings.length, 4000);
   f.effects.destroy();
   assert.equal(f.effects.casings.length, 0);
+  assert.ok(f.effects.casingBackLayer.destroyed);
   assert.ok(f.effects.casingLayer.destroyed);
+  assert.ok(
+    f.graphics.every((graphic) => graphic === f.terrain.back || graphic === f.terrain.front || graphic.destroyed)
+  );
 });

@@ -52,7 +52,7 @@ Navazující implementační rozhodnutí: pořadí zbraní je `1` pochodně, `2`
 
 ## Tutoriál
 
-- **TUTORIAL-01:** Novou mechaniku vysvětlí oranžová obrazovka s ornamentálním rámem ve stylu Prince of Persia. Obsahuje popis a požadovanou klávesu.
+- **TUTORIAL-01:** Novou mechaniku vysvětlí oranžová obrazovka s ornamentálním rámem ve stylu původního Prince of Persia. Mozaiky, text i písmo mají co nejvěrněji odpovídat původním úvodním a příběhovým obrazovkám, s ostrými pixely bez vyhlazování. Obsahuje popis a požadovanou klávesu. Implementační rozhodnutí: rám přebírá původní titulkovou mozaiku a text používá již načtenou bitmapovou abecedu hry; přístupný text a dotyková tlačítka zůstávají zachované.
 - **TUTORIAL-02:** Během obrazovky je hra pozastavená. Stisk požadované klávesy obrazovku zavře, obnoví hru a provede danou akci. Nesouvisející klávesa obrazovku nezavře.
 - **TUTORIAL-03:** Lekce může požadovanou klávesu uměle podržet, aby proběhla vyučovaná sekvence i po krátkém stisku. Délka je nastavitelná pro konkrétní lekci; běžné ovládání a pravidla animací zůstávají platné.
 - **TUTORIAL-04:** Systém má být rozšiřitelný o další lekce a jeho aktuální obsah i způsob rozšíření musí být popsaný v anglické dokumentaci.
@@ -142,6 +142,7 @@ Implementační rozhodnutí: levely 1–13 obsahují celkem 56 dalších léčiv
 - **GUN-04:** Raketa doletí alespoň do jedné další propojené místnosti a umožní ji probourat i tehdy, když tam ještě není volný průchod. Směr doprava nesmí mít kratší nebo zablokovaný dosah oproti směru doleva.
 - **GUN-05:** Střely a exploze respektují skutečné překážky; otevřená/probouraná místa lze dále používat při pohybu i střelbě.
 - **GUN-06:** Vystřelené nábojnice se trvale kupí a zůstávají po celý level, včetně odchodu z obrazovky a návratu. Kamera ani ořezávání vykreslování je nesmí odstranit. Při zániku podpory spadnou na další skutečnou podlahu; reset levelu hromady vyčistí.
+- **GUN-07:** Hromady nábojnic mají deset hloubkových vrstev. Pět se vykresluje za princem a pět před ním, aby princ při průchodu stál mezi nimi. Každá vrstva se kupí samostatně; rozdělení nesmí změnit trvalost nábojnic ani jejich pád při zániku podpory.
 
 ## Bič
 
@@ -186,6 +187,7 @@ Implementační rozhodnutí: zničitelné části jsou původní uvolněné podl
 - **ENEMY-06:** Hořící nepřítel je pro boj ihned mrtvý. Jeho hořící tělo ještě pět sekund pobíhá doleva/doprava; může spadnout nebo se napíchnout do pastí. Po pěti sekundách animace končí smrtí/kolapsem. Během této doby nesmí znovu útočit jako živý strážce.
 - **ENEMY-07:** Hořící nepřátelé křičí, ale současně smějí být slyšet nejvýše dva překrývající se křiky hoření. Je to výjimka pro hoření, nikoli návrat obecného zvuku při každém zabití podle ENEMY-03.
 - **ENEMY-08:** Stín prince v levelu 12 vůbec neútočí mečem. Princ se s ním může přímo sloučit při přiblížení, bez nutnosti nejprve kapitulovat. Zabití stínu dál zabije i prince; sdílené poškození zůstává zachované.
+- **ENEMY-09:** Jaffar začíná souboj s 50 životy. Ostatní nepřátelé si zachovávají dosavadní zdraví a pravidla poškození. Implementační rozhodnutí: zdraví protivníka nad deset životů zobrazuje kompaktní ikona s přesným počtem `aktuální/maximum`, aby nepřekrývalo zbytek HUD.
 
 Implementační rozhodnutí pro stín: od objevení je ihned propojený s princem a zůstává aktivní pro zásahy zbraněmi, ale netasí meč ani nezahajuje boj. Sloučení vyžaduje oba živé ve stejné místnosti a patře; zachovává původní bonus života, animaci a zpřístupnění neviditelného mostu. Šipka dolů u tohoto pasivního stínu běžně přikrčí prince.
 
@@ -220,11 +222,12 @@ Implementační rozhodnutí pro věžičku: chrání mříž ve sloupci 2, řád
 
 ## Závěrečná scéna
 
-- **END-01:** Ve vítězné scéně s princeznou přijde zakrvácený princ s Jaffarovou hlavou v jedné ruce a minigunem v druhé.
-- **END-02:** Princ se zastaví, položí hlavu na zem a kopne ji ven oknem. Hlava sklo viditelně roztříští a okno zůstane rozbité.
+- **END-01:** Ve vítězné scéně s princeznou přinese zakrvácený princ celé mrtvé Jaffarovo tělo s dosud připojenou hlavou a minigun. Jaffar musí být dobře rozpoznatelný podle svého původního vzhledu.
+- **END-02:** Princ se zastaví, položí tělo na zem a viditelně mu odkopne hlavu ven oknem. Hlava sklo roztříští a okno zůstane rozbité. Při průletu se hlava správně ořízne oknem a po průchodu úplně zmizí za zdí; nesmí zůstat částečně viditelná přes zdivo.
 - **END-03:** Po vykopnutí hlavy princ zvedne minigun nad sebe, střílí do stropu a tancuje. Princezna vytáhne dva kalašnikovy, v každé ruce jeden, a také tancuje a střílí do stropu.
+- **END-04:** Závěrečná střelba viditelně rozpraská sloupy a odlamuje jejich padající části. Jeden větší sloup spadne vcelku na Jaffarovo tělo a při dopadu z něj vystříkne krev. Zásahy musí souviset s poškozovaným prostředím; zřícený sloup nesmí zároveň zůstat stát na původním místě.
 
-Implementační rozhodnutí: samostatná sekvence nahrazuje původní objetí ve scéně 15. Zachovává původní místnost, hlavy a proporce postav i grafiku minigunu. Příchod, zastavení, položení, nápřah, kop, rozbití okna a zvednutí zbraní mají vlastní časování; teprve pak následuje společný tanec se záblesky, nábojnicemi a zásahy stropu. Princ při střelbě minigun podepírá oběma rukama. Jde pouze o filmový závěr: kalašnikovy nevstupují do inventáře a běžná pravidla pohybu ani střelby se nemění. Scéna automaticky pokračuje do původního epilogu a lze ji přeskočit původním ovládáním. Odchod uklidí efekty, zvuk i čekající přechod.
+Implementační rozhodnutí: samostatná sekvence nahrazuje původní objetí ve scéně 15. Zachovává původní místnost, hlavy a proporce postav i grafiku minigunu. Příchod s tělem, zastavení, položení, nápřah, oddělení hlavy kopem, rozbití okna a zvednutí zbraní mají vlastní časování; teprve pak následuje společný tanec se záblesky, nábojnicemi, praskáním sloupů a pádem trosek i celého sloupu. Princ při střelbě minigun podepírá oběma rukama. Jde pouze o filmový závěr: kalašnikovy nevstupují do inventáře a běžná pravidla pohybu ani střelby se nemění. Scéna automaticky pokračuje do původního epilogu a lze ji přeskočit původním ovládáním. Odchod uklidí efekty, zvuk i čekající přechod.
 
 ## Čas a zobrazení v prohlížeči
 
@@ -247,6 +250,7 @@ Implementační rozhodnutí pro menu: bez zobrazeného dotykového panelu trvá 
 - **WORK-02:** Paralelní změny je nutné následně propojit a ověřit jako celek, zejména sdílený inventář, animace, vstupy, vrstvy a přechody mezi levely.
 - **WORK-03:** Ruleset popisuje platná rozhodnutí, nikoli seznam slibů. Nedodělané nebo nejasné body označ; neprohlašuj je za vyřešené pouze proto, že jsou zapsané zde.
 - **WORK-04:** Testy a prohlídky hry probíhají s vypnutým zvukem. Výjimkou je cílené testování zvuku; po něm se zvuk zase vypne.
+- **WORK-05:** Lokální náhledy mají tlačítka rozdělená do kategorií, která přímo spouštějí konkrétní ukázku v enginu bez hraní celých levelů. Nabízejí průchod prince hromadami nábojnic od nízkých po vysoké, skutečný vzhled tutoriálu s textem a celou závěrečnou animaci. Nepřipojují se k MongoDB, nesbírají ani neodesílají statistiky a nemění uloženou hru či nastavení. Implementační rozhodnutí: `npm run preview` spouští samostatný statický server na localhostu a izolovanou instanci Phaseru bez stavu Game a sběrače statistik; přehrávání, pauza a časová osa finále slouží pro prohlídku. Zvuk je vypnutý.
 
 ## Statistiky hraní
 

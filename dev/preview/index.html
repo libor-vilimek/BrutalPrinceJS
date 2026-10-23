@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Brutal Prince · Local previews</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="gallery.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Brutal Prince</h1>
+        <p>Local animation previews</p>
+      </div>
+      <span class="badge">Sound off · Statistics off</span>
+    </header>
+    <main>
+      <nav aria-label="Preview categories">
+        <section>
+          <h2>01 · Casings</h2>
+          <button data-demo="casings" aria-pressed="true">Walk through growing piles</button>
+          <button data-demo="deep-casings" aria-pressed="false">Walk through deep piles</button>
+          <p>Five layers behind the Prince, five in front. The piles get taller from left to right.</p>
+        </section>
+        <section>
+          <h2>02 · Tutorials</h2>
+          <button data-demo="tutorial-torches" aria-pressed="false">Text and mosaic frame</button>
+          <button data-demo="tutorial-inventory" aria-pressed="false">Weapon selection</button>
+          <button data-demo="tutorial-ledge" aria-pressed="false">Shift + Down lesson</button>
+        </section>
+        <section>
+          <h2>03 · Ending</h2>
+          <button data-demo="finale" aria-pressed="false">Play the full ending</button>
+          <p>The entire 20-second animation. Pause or move the timeline to inspect a moment.</p>
+        </section>
+      </nav>
+      <article>
+        <div class="preview-heading">
+          <h2 id="demo-title">Walk through growing piles</h2>
+          <span id="clock"></span>
+        </div>
+        <div class="stage">
+          <iframe id="engine" src="engine.html" title="Isolated Prince of Persia engine preview"></iframe>
+        </div>
+        <div class="toolbar">
+          <button id="replay">Replay</button>
+          <button id="pause" aria-pressed="false">Pause</button>
+          <label id="walk-control"><input id="auto-walk" type="checkbox" checked /> Auto-walk</label>
+          <label id="timeline-control" hidden
+            >Ending <input id="timeline" type="range" min="0" max="20" step="0.05" value="0"
+          /></label>
+        </div>
+        <p id="status" role="status">Loading original sprites and artwork…</p>
+        <p class="note">
+          These are isolated scenes using the actual renderer, sprites and animations. No campaign level or statistics
+          recorder runs here.
+        </p>
+      </article>
+    </main>
+  </body>
+</html>

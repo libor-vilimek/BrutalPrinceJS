@@ -16,6 +16,7 @@
     "test": "node --test",
     "start": "node server/index.js",
     "start:local": "node --env-file=.env server/index.js",
+    "preview": "node tools/preview-server.js",
     "test:mongodb": "node --env-file=.env tools/run-mongodb-tests.js",
     "statistics:preview": "node --use-system-ca --env-file=.env tools/statistics-preview.js preview",
     "statistics:seed": "node --use-system-ca --env-file=.env tools/statistics-preview.js seed",
