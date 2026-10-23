@@ -16,7 +16,14 @@ function fixture() {
     children: [],
     shapes: [],
     scale: { x: 1, y: 1 },
-    anchor: { setTo() {} },
+    anchor: {
+      x: 0,
+      y: 0,
+      setTo(x, y = x) {
+        this.x = x;
+        this.y = y;
+      }
+    },
     clear() {
       this.shapes = [];
     },
@@ -44,11 +51,43 @@ function fixture() {
   const sounds = [];
   const tweens = [];
   const removed = [];
+  const cutsceneFrames = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "../assets/gfx/cutscene.json"), "utf8")
+  ).frames;
   const game = {
+    cache: {
+      getFrameByName(key, name) {
+        return cutsceneFrames[name].frame;
+      },
+      getImage() {
+        return {};
+      }
+    },
     sound: { noAudio: true, mute: true, volume: 0, stopAll() {}, play() {} },
     make: { graphics, sprite: graphics },
     add: {
       graphics,
+      bitmapData(width, height) {
+        const pixels = new Uint8ClampedArray(width * height * 4).fill(255);
+        const bitmap = {
+          width,
+          height,
+          pixels,
+          ctx: {
+            drawImage(...args) {
+              bitmap.source = args;
+            },
+            getImageData() {
+              return { data: pixels };
+            },
+            putImageData() {}
+          },
+          destroy() {
+            this.destroyed = true;
+          }
+        };
+        return bitmap;
+      },
       audio() {
         const sound = {
           played: 0,
@@ -229,56 +268,106 @@ test("the Prince fires first, then the Princess draws and fires both rifles whil
   );
 });
 
-test("shots crack the original supports, shed stone chunks, and topple the actual left pillar onto Jaffar once", () => {
+test("shots crack the supports, release a native arch fragment, and crush Jaffar while every pillar stays upright", () => {
   const { PrinceJS, finale, advance, sourcePillar, scene, sounds } = fixture();
   const times = PrinceJS.Finale.TIMES;
   advance(12.2);
-  assert.ok(finale.effects.pillars[0].hits >= 24);
   assert.ok(finale.effects.pillars.every((pillar) => pillar.hits > 0));
   assert.ok(finale.effects.pillars.every((pillar) => pillar.chips > 0));
   assert.ok(finale.effects.particles.some((particle) => particle.type === "stone"));
   assert.ok(finale.effects.pillarDamage.shapes.length > 30);
+  assert.equal(finale.effects.fallingArch.visible, false);
+  assert.equal(finale.effects.archHole.visible, false);
+  advance(times.archFall + 0.6);
   assert.equal(sourcePillar.visible, true);
-  assert.equal(finale.effects.pillarBackdrop.visible, false);
-  advance(times.pillarFall + 0.6);
-  assert.equal(sourcePillar.visible, false, "the standing foreground source does not duplicate the falling pillar");
-  assert.equal(finale.effects.fallingPillar.visible, true);
-  assert.equal(
-    finale.effects.pillarBackdrop.visible,
-    true,
-    "the baked upright shaft and black atlas placeholder are replaced"
-  );
-  assert.equal(finale.effects.pillarBackdrop.children[0].frameName, "room");
-  assert.equal(finale.effects.pillarBackdrop.children[0].cropRect.height, 80);
-  assert.equal(finale.effects.pillarBackdrop.children[1].frameName, "room_bed");
-  assert.ok(finale.effects.fallingPillar.rotation > 0.2);
-  assert.ok(finale.effects.fallingPillar.rotation < Math.PI / 2);
-  assert.equal(finale.effects.pillarSprite.frameName, "room_pillar");
+  assert.equal(finale.effects.fallingArch.visible, true);
+  assert.equal(finale.effects.archHole.visible, true, "the detached piece leaves a hole in the actual ceiling arch");
+  assert.equal(finale.effects.archDetached, true);
+  assert.equal(finale.effects.archSprite.key, finale.effects.archBitmap);
   assert.equal(finale.effects.bodyCrushed, undefined);
-  advance(times.pillarImpact + 0.02);
+  advance(times.archImpact + 0.02);
   assert.equal(finale.effects.bodyCrushed, true);
   assert.equal(finale.effects.bodyLayer.scale.y, 0.38);
   assert.ok(finale.effects.particles.filter((particle) => particle.type === "blood").length >= 24);
   assert.equal(sounds[2].played, 1);
   assert.equal(sounds[3].played, 1);
-  const tipX = finale.effects.fallingPillar.x + Math.sin(finale.effects.fallingPillar.rotation) * 48;
-  const tipY = finale.effects.fallingPillar.y - Math.cos(finale.effects.fallingPillar.rotation) * 48;
-  const body = finale.pose(times.pillarImpact).body;
-  assert.ok(tipX >= body.x && tipX <= body.x + 33, "the whole pillar reaches the actual headless corpse");
-  assert.ok(tipY >= 160 && tipY <= 168);
-  assert.ok(finale.effects.fallingPillar.z > finale.effects.bodyLayer.z);
-  assert.equal(scene.front.children.at(-1).key, "cover", "the closing fade covers the foreground destruction too");
-  assert.ok(
-    scene.front.children.indexOf(finale.effects.pillarDamage) <
-      scene.front.children.indexOf(finale.effects.fallingPillar)
+  const fragment = finale.effects.fallingArch;
+  const body = finale.pose(times.archImpact).body;
+  const arch = PrinceJS.Finale.ARCH;
+  assert.ok(fragment.x >= body.x && fragment.x <= body.x + 33, "the heavy stone lands on the actual corpse");
+  const bottom = Math.max(
+    ...arch.outline.map(
+      ([x, y]) =>
+        fragment.y +
+        Math.sin(fragment.rotation) * (x - Math.floor(arch.width / 2)) +
+        Math.cos(fragment.rotation) * (y - Math.floor(arch.height / 2))
+    )
   );
+  assert.ok(bottom >= 160 && bottom <= 168);
+  assert.equal(scene.front.children.at(-1).key, "cover", "the fade still covers the falling stone");
+  assert.ok(scene.front.children.indexOf(finale.effects.pillarDamage) < scene.front.children.indexOf(fragment));
   advance(18);
   assert.equal(sounds[2].played, 1);
   assert.equal(sounds[3].played, 1);
-  assert.equal(sourcePillar.visible, false);
+  const pillars = scene.front.children.filter((child) => child.frameName === "room_pillar");
+  assert.equal(pillars.length, 2);
+  assert.ok(pillars.every((pillar) => pillar.visible));
+  assert.deepEqual(
+    pillars.map((pillar) => [pillar.x, pillar.y]),
+    [
+      [59, 120],
+      [240, 120]
+    ]
+  );
   finale.destroy();
-  assert.equal(sourcePillar.visible, true, "cleanup restores the borrowed scene art for replay");
+  assert.equal(sourcePillar.visible, true);
+  assert.equal(finale.effects.archBitmap.destroyed, true);
   assert.ok(sounds.every((sound) => sound.destroyed));
+});
+
+test("the arch stone starts at its source pixels, accelerates downward, and never removes or moves a pillar", () => {
+  const { PrinceJS, finale, advance, sourcePillar } = fixture();
+  const arch = PrinceJS.Finale.ARCH;
+  const times = PrinceJS.Finale.TIMES;
+  const sourceX = arch.x + Math.floor(arch.width / 2);
+  const sourceY = arch.y + Math.floor(arch.height / 2);
+  const bitmap = finale.effects.archBitmap;
+  assert.equal(bitmap.width, arch.width);
+  assert.equal(bitmap.height, arch.height);
+  assert.ok(
+    bitmap.pixels.some((value, index) => index % 4 === 3 && value === 0),
+    "the native piece has an irregular transparent outline"
+  );
+  assert.ok(bitmap.pixels.filter((value, index) => index % 4 === 3 && value > 0).length > 300);
+  const frame = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/gfx/cutscene.json"), "utf8")).frames.room
+    .frame;
+  assert.deepEqual(bitmap.source.slice(1, 5), [frame.x + arch.x, frame.y + arch.y, arch.width, arch.height]);
+  advance(times.archFall - 0.01);
+  assert.equal(finale.effects.archHole.visible, false);
+  advance(times.archFall + 0.0001);
+  assert.ok(Math.abs(finale.effects.fallingArch.x - sourceX) < 0.001);
+  assert.ok(Math.abs(finale.effects.fallingArch.y - sourceY) < 0.001);
+  assert.equal(finale.effects.archHole.visible, true);
+  assert.ok(
+    finale.effects.archHole.shapes.every(
+      ({ args: [x, y, width, height] }) =>
+        x >= arch.x && y >= arch.y && x + width <= arch.x + arch.width && y + height <= arch.y + arch.height
+    )
+  );
+  const first = finale.pose(times.archFall + 0.3).arch;
+  const second = finale.pose(times.archFall + 0.6).arch;
+  assert.ok(
+    Math.abs(second.y - sourceY - 4 * (first.y - sourceY)) < 1e-8,
+    "vertical motion follows gravity rather than a sideways topple"
+  );
+  for (const time of [14.3, 14.9, 15.4, 18]) {
+    advance(time);
+    assert.equal(sourcePillar.visible, true);
+    assert.deepEqual([sourcePillar.x, sourcePillar.y], [59, 120]);
+    assert.equal(finale.effects.archBitmap, bitmap, "one intact native texture remains throughout the fall");
+  }
+  const aim = finale.pose(15.4).princess.aims[0];
+  assert.ok(aim.x > arch.x + arch.width, "later shots hit the surviving arch instead of the new hole");
 });
 
 test("cinematic timing is stable at low and high frame rates, and long frames do not skip the action", () => {

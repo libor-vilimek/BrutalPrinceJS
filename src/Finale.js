@@ -26,8 +26,8 @@ PrinceJS.Finale.TIMES = {
   princeFire: 9,
   princessDraw: 9.45,
   princessFire: 10.3,
-  pillarFall: 14,
-  pillarImpact: 15.35,
+  archFall: 14,
+  archImpact: 15.35,
   end: 20
 };
 
@@ -39,9 +39,29 @@ PrinceJS.Finale.STAGE = {
   windowX: 22,
   windowY: 112,
   windowLeft: 13,
-  windowRight: 29,
-  pillarX: 67,
-  pillarY: 168
+  windowRight: 29
+};
+
+// A wedge cut from the native outer arch, directly above Jaffar's body.
+PrinceJS.Finale.ARCH = {
+  x: 103,
+  y: 16,
+  width: 28,
+  height: 31,
+  outline: [
+    [0, 16],
+    [3, 12],
+    [9, 8],
+    [16, 4],
+    [24, 0],
+    [27, 14],
+    [23, 17],
+    [17, 20],
+    [12, 24],
+    [8, 30]
+  ],
+  landingX: 108,
+  landingRotation: 0.45
 };
 
 PrinceJS.Finale.prototype = {
@@ -53,6 +73,17 @@ PrinceJS.Finale.prototype = {
   pose: function (time) {
     const t = PrinceJS.Finale.TIMES;
     const stage = PrinceJS.Finale.STAGE;
+    const masonry = PrinceJS.Finale.ARCH;
+    const fall = Math.max(0, Math.min(1, (time - t.archFall) / (t.archImpact - t.archFall)));
+    const archX = masonry.x + Math.floor(masonry.width / 2);
+    const archY = masonry.y + Math.floor(masonry.height / 2);
+    const bottom = Math.max(
+      ...masonry.outline.map(
+        ([x, y]) =>
+          Math.sin(masonry.landingRotation) * (x - Math.floor(masonry.width / 2)) +
+          Math.cos(masonry.landingRotation) * (y - Math.floor(masonry.height / 2))
+      )
+    );
     const progress = (start, end) => this.progress(time, start, end);
     const walking = time >= t.enter && time < t.stop;
     const placing = progress(t.place, t.release) * (1 - progress(t.release + 0.15, t.stand));
@@ -84,7 +115,7 @@ PrinceJS.Finale.prototype = {
       rotation: walking ? Math.sin(time * 9) * 0.025 : 0,
       held: time < t.release,
       headAttached: time < t.kick,
-      crushed: time >= t.pillarImpact
+      crushed: time >= t.archImpact
     };
     if (!body.held) {
       body.x = stage.headX - 38;
@@ -115,7 +146,12 @@ PrinceJS.Finale.prototype = {
       prince,
       body,
       head,
-      pillarFall: progress(t.pillarFall, t.pillarImpact),
+      arch: {
+        falling: time > t.archFall,
+        x: archX + (masonry.landingX - archX) * fall,
+        y: archY + (stage.floorY - bottom - archY) * fall * fall,
+        rotation: masonry.landingRotation * fall
+      },
       windowBroken: time >= t.glass,
       princess: {
         x: stage.princessX + princessSway * 3,
@@ -125,7 +161,11 @@ PrinceJS.Finale.prototype = {
         draw: progress(t.princessDraw, t.princessFire),
         firing: princessDancing,
         aims: [
-          { x: 112 + princessSway * 4, y: 42 + princessSway * 4, pillar: 2 },
+          {
+            x: (time <= t.archFall ? archX : 144) + princessSway * 3,
+            y: (time <= t.archFall ? archY : 24) + princessSway * 3,
+            pillar: 2
+          },
           { x: 248 + princessSway * 5, y: 40 - princessSway * 12, pillar: 1 }
         ]
       }

@@ -91,7 +91,18 @@ test(
     await frame.waitForFunction(() => window.PrincePreview.id === "finale" && window.PrincePreview.finale);
     await page.locator("#timeline").fill("15.7");
     await frame.waitForFunction(() => window.PrincePreview.paused && window.PrincePreview.finale.effects.bodyCrushed);
-    assert.equal(await frame.evaluate(() => window.PrincePreview.finale.effects.sourcePillar.visible), false);
+    assert.deepEqual(
+      await frame.evaluate(() =>
+        window.PrincePreview.scene.front.children
+          .filter((child) => child.frameName === "room_pillar")
+          .map((pillar) => [pillar.x, pillar.y, pillar.visible])
+      ),
+      [
+        [59, 120, true],
+        [240, 120, true]
+      ]
+    );
+    assert.equal(await frame.evaluate(() => window.PrincePreview.finale.effects.archHole.visible), true);
     if (process.env.PREVIEW_SCREENSHOT_DIR) {
       await page.screenshot({ path: path.join(process.env.PREVIEW_SCREENSHOT_DIR, "preview-ending.png") });
     }
@@ -99,7 +110,7 @@ test(
     await frame.waitForFunction(
       () => window.PrincePreview.elapsed < 3 && window.PrincePreview.finale.pose(window.PrincePreview.elapsed).body.held
     );
-    assert.equal(await frame.evaluate(() => window.PrincePreview.finale.effects.sourcePillar.visible), true);
+    assert.equal(await frame.evaluate(() => window.PrincePreview.finale.effects.archHole.visible), false);
     await page.locator("#timeline").fill("19.95");
     await frame.waitForFunction(() => window.PrincePreview.elapsed > 19.9);
     await page.getByRole("button", { name: "Resume", exact: true }).click();

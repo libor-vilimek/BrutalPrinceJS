@@ -10,11 +10,8 @@ PrinceJS.FinaleEffects = function (game, scene) {
   this.pillars = [
     { x: 67, hits: 0, chips: 0 },
     { x: 248, hits: 0, chips: 0 },
-    { x: 112, hits: 0, chips: 0 }
+    { x: 117, hits: 0, chips: 0 }
   ];
-  this.sourcePillar =
-    scene.front && scene.front.children.find((child) => child.frameName === "room_pillar" && child.x === 59);
-  this.sourcePillarVisible = this.sourcePillar && this.sourcePillar.visible;
   const layer = (z) => {
     const graphics = game.add.graphics(0, 0);
     graphics.z = z;
@@ -23,16 +20,7 @@ PrinceJS.FinaleEffects = function (game, scene) {
   };
   this.glass = layer(11);
   this.damage = layer(12);
-  this.pillarBackdrop = layer(18);
-  // The room atlas bakes in the shaft's lower continuation. Reveal the matching
-  // adjacent backdrop/carpet when this foreground column leaves its socket.
-  const roomPatch = game.make.sprite(59, 120, "cutscene", "room");
-  roomPatch.crop(new Phaser.Rectangle(79, 120, 16, 80));
-  this.pillarBackdrop.addChild(roomPatch);
-  const carpetPatch = game.make.sprite(59, 142, "cutscene", "room_bed");
-  carpetPatch.crop(new Phaser.Rectangle(79, 0, 16, 41));
-  this.pillarBackdrop.addChild(carpetPatch);
-  this.pillarBackdrop.visible = false;
+  this.archHole = layer(13);
   this.floor = layer(19);
   this.prince = layer(21);
   this.princess = layer(20);
@@ -41,17 +29,15 @@ PrinceJS.FinaleEffects = function (game, scene) {
   this.debris = layer(24);
   this.tracers = layer(25);
   this.pillarDamage = layer(31);
-  this.fallingPillar = layer(32);
+  this.fallingArch = layer(32);
   if (scene.front && typeof scene.front.addChildAt === "function") {
     const coverIndex = scene.front.children.findIndex((child) => child.key === "cover");
     const index = coverIndex < 0 ? scene.front.children.length : coverIndex;
-    // Foreground cracks and the falling shaft must also sit behind the existing fade cover.
+    // Foreground cracks and falling masonry also sit behind the existing fade cover.
     scene.front.addChildAt(this.pillarDamage, index);
-    scene.front.addChildAt(this.fallingPillar, index + 1);
+    scene.front.addChildAt(this.fallingArch, index + 1);
   }
-  this.pillarSprite = game.make.sprite(0, 0, "cutscene", "room_pillar");
-  this.pillarSprite.anchor.setTo(0.5, 1);
-  this.fallingPillar.addChild(this.pillarSprite);
+  this.createArchFragment();
   this.windowMask = layer(0);
   // The mask shares the world's scale. Keep it transformable but never paint it.
   this.windowMask.isMask = true;
@@ -94,6 +80,62 @@ PrinceJS.FinaleEffects = function (game, scene) {
 };
 
 PrinceJS.FinaleEffects.prototype = {
+  createArchFragment: function () {
+    const arch = PrinceJS.Finale.ARCH;
+    const frame = this.game.cache.getFrameByName("cutscene", "room");
+    this.archBitmap = this.game.add.bitmapData(arch.width, arch.height);
+    const context = this.archBitmap.ctx;
+    context.imageSmoothingEnabled = false;
+    context.drawImage(
+      this.game.cache.getImage("cutscene"),
+      frame.x + arch.x,
+      frame.y + arch.y,
+      arch.width,
+      arch.height,
+      0,
+      0,
+      arch.width,
+      arch.height
+    );
+    const image = context.getImageData(0, 0, arch.width, arch.height);
+    // Cut both the moving stone and its hole on the same native pixel grid.
+    // A single bitmap keeps the rotated texture continuous across every row.
+    for (let y = 0; y < arch.height; y++) {
+      let left = arch.width;
+      let right = 0;
+      for (let x = 0; x < arch.width; x++) {
+        let inside = false;
+        for (let i = 0, j = arch.outline.length - 1; i < arch.outline.length; j = i++) {
+          const [ax, ay] = arch.outline[i];
+          const [bx, by] = arch.outline[j];
+          if (ay > y + 0.5 !== by > y + 0.5 && x + 0.5 < ax + ((bx - ax) * (y + 0.5 - ay)) / (by - ay)) {
+            inside = !inside;
+          }
+        }
+        if (inside) {
+          left = Math.min(left, x);
+          right = x + 1;
+        } else {
+          image.data[(y * arch.width + x) * 4 + 3] = 0;
+        }
+      }
+      if (right > left) {
+        this.rect(this.archHole, 0x65452b, arch.x + left, arch.y + y, right - left, 1);
+        if (right - left > 2) {
+          this.rect(this.archHole, 0x100c08, arch.x + left + 1, arch.y + y, right - left - 2, 1);
+        }
+      }
+    }
+    context.putImageData(image, 0, 0);
+    this.archBitmap.dirty = true;
+    this.archSprite = this.game.make.sprite(-Math.floor(arch.width / 2), -Math.floor(arch.height / 2), this.archBitmap);
+    this.fallingArch.addChild(this.archSprite);
+    this.archCracks = this.game.make.graphics(0, 0);
+    this.fallingArch.addChild(this.archCracks);
+    this.crack(this.archCracks, -2, -8, 15, 3);
+    this.archHole.visible = this.fallingArch.visible = false;
+  },
+
   rect: function (g, color, x, y, w, h, alpha = 1) {
     g.beginFill(color, alpha);
     g.drawRect(Math.round(x), Math.round(y), w, h);
@@ -380,34 +422,38 @@ PrinceJS.FinaleEffects.prototype = {
 
   drawPillars: function (pose) {
     this.pillarDamage.clear();
-    this.fallingPillar.clear();
-    const falling = pose.pillarFall > 0 && this.pillars[0].hits >= 24;
-    this.fallingPillar.visible = falling;
-    this.pillarBackdrop.visible = falling;
+    const falling = pose.arch.falling && this.pillars[2].hits >= 24;
+    this.fallingArch.visible = this.archHole.visible = falling;
     for (let i = 0; i < this.pillars.length; i++) {
       const pillar = this.pillars[i];
       const strength = Math.min(3, Math.floor(pillar.hits / 8));
-      if (!strength) {
+      if (!strength || (i === 2 && falling)) {
         continue;
       }
-      this.crack(this.pillarDamage, pillar.x, 24, i === 2 ? 45 : 91, strength);
-      if (i < 2 && !(i === 0 && falling)) {
+      this.crack(this.pillarDamage, pillar.x, i === 2 ? 21 : 24, i === 2 ? 22 : 91, strength);
+      if (i < 2) {
         this.crack(this.pillarDamage, pillar.x, 122, 37, strength);
       }
     }
     if (falling) {
-      const stage = PrinceJS.Finale.STAGE;
-      if (this.sourcePillar) {
-        this.sourcePillar.visible = false;
+      this.fallingArch.x = pose.arch.x;
+      this.fallingArch.y = pose.arch.y;
+      this.fallingArch.rotation = pose.arch.rotation;
+      if (!this.archDetached) {
+        this.archDetached = true;
+        const arch = PrinceJS.Finale.ARCH;
+        for (let i = 0; i < 14; i++) {
+          this.particle(
+            arch.x + 2 + i * 1.7,
+            arch.y + 10 + (i % 4) * 3,
+            (i - 7) * 5,
+            5 + (i % 3) * 5,
+            i % 2 ? 0xd0ad74 : 0x88613f,
+            0.5,
+            i % 3 ? "dust" : "stone"
+          );
+        }
       }
-      this.pillarFallen = true;
-      this.fallingPillar.x = stage.pillarX;
-      this.fallingPillar.y = stage.pillarY;
-      // Accelerate out of the cracked socket, then stop against the corpse.
-      this.fallingPillar.rotation = Math.pow(pose.pillarFall, 1.6) * Math.PI * 0.49;
-      this.crack(this.fallingPillar, 0, -46, 40, 3);
-      this.rect(this.pillarDamage, 0x38251c, 59, 119, 16, 3);
-      this.polygon(this.pillarDamage, 0xc59a61, [59, 120, 62, 124, 65, 120, 69, 122, 74, 120]);
       if (pose.body.crushed && !this.bodyCrushed) {
         this.crushBody();
       }
@@ -494,8 +540,8 @@ PrinceJS.FinaleEffects.prototype = {
       pillar.chips++;
       this.particle(x, y + 4, (Math.random() - 0.5) * 28, 15, 0xcba56c, 2, "stone");
       this.particle(
-        pillar.x + (pillar.chips % 2 ? 4 : -4),
-        107,
+        (target.pillar === 2 ? x : pillar.x) + (pillar.chips % 2 ? 4 : -4),
+        target.pillar === 2 ? y + 6 : 107,
         (Math.random() - 0.5) * 35,
         10,
         0xe6bc7e,
@@ -572,10 +618,8 @@ PrinceJS.FinaleEffects.prototype = {
     this.collapseSound.destroy();
     this.squishSound.destroy();
     this.headLayer.mask = null;
-    if (this.sourcePillar) {
-      this.sourcePillar.visible = this.sourcePillarVisible;
-    }
     this.layers.forEach((layer) => layer.destroy(true));
+    this.archBitmap.destroy();
     this.particles.length = 0;
   }
 };
