@@ -6,9 +6,9 @@
   place-items: center;
   padding: 16px;
   box-sizing: border-box;
-  background: #000c;
+  background: #000e;
   color: #fff;
-  font-family: monospace;
+  font-family: serif;
   touch-action: manipulation;
 }
 
@@ -18,28 +18,37 @@
 
 .tutorial-panel {
   --tutorial-pixel: 2px;
+  --tutorial-art-pixel: 3px;
+  --tutorial-gold: #e9c56c;
   position: relative;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
-  width: min(768px, 100%);
-  max-height: 100%;
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: #ff0 #820000;
-  padding: 24px 24px 20px;
+  width: min(1248px, 100%);
+  height: min(780px, 100%);
+  min-height: 0;
+  overflow: hidden;
   border-style: solid;
   border-width: 32px 32px 52px;
-  /* Exact pixels from the original title/story screen, with its text removed. */
   border-image: url("tutorial-frame.png") 16 16 26 16 repeat;
   outline: 2px solid #000;
-  background: #a50;
-  box-shadow: inset 0 0 0 2px #ff0;
+  background: #100061 url("tutorial-checker.svg") 0 0 / 4px 4px;
   image-rendering: pixelated;
   text-align: center;
 }
 
 .tutorial-panel:focus {
   outline: 2px solid #000;
+}
+
+.tutorial-page {
+  flex: 1;
+  min-height: 0;
+  padding: 22px 44px 14px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #e9c56c #100061;
 }
 
 .tutorial-readable {
@@ -55,7 +64,7 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  column-gap: calc(var(--tutorial-pixel) * 4);
+  column-gap: calc(var(--tutorial-pixel) * 6);
   font-size: 0;
   line-height: 0;
 }
@@ -70,8 +79,7 @@
   position: relative;
   display: inline-block;
   flex: none;
-  vertical-align: top;
-  height: 11em;
+  height: 18em;
   font-size: var(--tutorial-pixel);
   line-height: 0;
 }
@@ -84,8 +92,11 @@
 }
 
 .tutorial-glyph {
-  mask-image: url("../font/prince_0.png");
-  mask-size: 256em 256em;
+  top: 0;
+  left: 0;
+  height: 18em;
+  mask-image: url("../font/prince-story.svg");
+  mask-size: 320em 120em;
   mask-repeat: no-repeat;
   image-rendering: pixelated;
 }
@@ -95,14 +106,9 @@
   height: 1em;
 }
 
-.tutorial-eyebrow {
-  margin: 0 0 18px;
-  color: #ff0;
-}
-
 .tutorial-category {
-  margin: 0 0 12px;
-  color: #ff0;
+  margin: 0 0 8px;
+  color: var(--tutorial-gold);
 }
 
 .tutorial-panel h1 {
@@ -111,24 +117,102 @@
   font-weight: normal;
 }
 
-.tutorial-description {
+.tutorial-lesson {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  max-width: 1000px;
   margin: 0 auto;
-  max-width: 608px;
+}
+
+.tutorial-description {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.tutorial-description .tutorial-bitmap {
+  justify-content: flex-start;
+}
+
+.tutorial-illustration {
+  position: relative;
+  flex: none;
+  width: 210px;
+  height: 144px;
+  margin: 0;
+  image-rendering: pixelated;
+}
+
+.tutorial-illustration[hidden] {
+  display: none;
+}
+
+.tutorial-prince {
+  position: absolute;
+  z-index: 1;
+  bottom: 12px;
+  left: 24px;
+  font-size: var(--tutorial-art-pixel);
+  background-image: url("../gfx/kid.png");
+  background-repeat: no-repeat;
+}
+
+.tutorial-illustration[data-pose="stand"] .tutorial-prince {
+  transform: scaleX(-1);
+}
+
+.tutorial-art-weapon {
+  position: absolute;
+  bottom: 22px;
+  right: 0;
+  width: 128px;
+  height: 80px;
+}
+
+.tutorial-art-weapon svg,
+.tutorial-weapon-picture svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  shape-rendering: crispEdges;
+}
+
+.tutorial-art-floor {
+  position: absolute;
+  inset: auto 0 0;
+  height: 10px;
+  border-top: 4px solid #f6dab1;
+  background: #966847;
+  box-shadow: inset 0 -4px #4b3025;
+}
+
+.tutorial-illustration[data-pose="ledge"] .tutorial-prince {
+  top: 0;
+  bottom: auto;
+  left: 60px;
+}
+
+.tutorial-illustration[data-pose="ledge"] .tutorial-art-floor {
+  top: 0;
+  bottom: auto;
+  right: auto;
+  width: calc(60px + 16 * var(--tutorial-art-pixel));
 }
 
 .tutorial-divider {
-  width: 128px;
-  height: 8px;
-  margin: 18px auto;
-  background: url("tutorial-frame.png") -32px -8px / 640px 400px;
-  image-rendering: pixelated;
+  width: 160px;
+  height: 2px;
+  margin: 16px auto;
+  background: var(--tutorial-gold);
+  box-shadow: 0 4px #820000;
 }
 
 .tutorial-inventory {
   display: flex;
   justify-content: center;
-  gap: 8px;
-  margin: 18px auto 0;
+  gap: 24px;
+  margin: 20px auto 0;
 }
 
 .tutorial-inventory[hidden] {
@@ -138,23 +222,48 @@
 .tutorial-weapon {
   flex: 1;
   min-width: 0;
-  max-width: 200px;
-  padding: 10px 4px 6px;
-  border: 2px solid #ff0;
-  background: #000082;
+  max-width: 280px;
+  padding: 8px 8px 0;
 }
 
-.tutorial-weapon-picture svg {
-  display: block;
+.tutorial-weapon-picture {
   width: 128px;
   height: 80px;
   margin: 0 auto 8px;
-  shape-rendering: crispEdges;
+}
+
+.tutorial-weapon .tutorial-bitmap {
+  justify-content: center;
+}
+
+.tutorial-instruction {
+  margin: 0 0 12px;
+  color: #fff;
+}
+
+.tutorial-hint {
+  margin: 0;
+  color: var(--tutorial-gold);
+}
+
+.tutorial-hint:empty,
+.tutorial-instruction:empty {
+  display: none;
+}
+
+.tutorial-action {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 12px 20px 18px;
+  border-top: 2px solid #b47b16;
 }
 
 .tutorial-prompt {
-  margin: 0 0 12px;
-  color: #ff0;
+  margin: 0;
+  color: var(--tutorial-gold);
 }
 
 .tutorial-keys {
@@ -162,27 +271,27 @@
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 16px;
+  gap: 18px;
 }
 
 .tutorial-key {
-  --tutorial-pixel: 3px;
-  min-width: 80px;
+  --tutorial-pixel: 2px;
+  min-width: 88px;
   min-height: 52px;
-  padding: 12px 20px 6px;
-  border: 2px solid #ff0;
+  padding: 10px 18px 6px;
+  border: 2px solid var(--tutorial-gold);
   border-radius: 0;
-  background: #000082;
-  box-shadow: 4px 4px 0 #000;
+  background: #100061;
+  box-shadow: 3px 3px #820000;
   color: #fff;
-  font-family: monospace;
+  font-family: serif;
   cursor: pointer;
 }
 
 .tutorial-key:hover,
 .tutorial-key:focus-visible {
-  background: #0000c3;
-  color: #ff0;
+  background: #820000;
+  color: #fff;
 }
 
 .tutorial-key:focus-visible {
@@ -192,165 +301,185 @@
 
 .tutorial-key:active {
   transform: translate(2px, 2px);
-  box-shadow: 2px 2px 0 #000;
+  box-shadow: 1px 1px #820000;
 }
 
 .tutorial-or {
-  color: #ff0;
+  color: var(--tutorial-gold);
 }
 
-.tutorial-instruction {
-  margin: 22px 0 10px;
+@media (min-width: 1500px) and (min-height: 900px) {
+  .tutorial-panel {
+    --tutorial-pixel: 3px;
+    --tutorial-art-pixel: 4px;
+    width: min(1536px, 100%);
+    height: min(960px, 100%);
+    border-width: 48px 48px 78px;
+    background-size: 6px 6px;
+  }
+
+  .tutorial-panel h1 {
+    --tutorial-pixel: 4px;
+  }
+
+  .tutorial-illustration {
+    height: 196px;
+  }
+
+  .tutorial-action {
+    padding-bottom: 26px;
+  }
 }
 
-.tutorial-hint {
-  margin: 0;
-  color: #ff0;
-}
-
-.tutorial-hint:empty,
-.tutorial-instruction:empty {
-  display: none;
-}
-
-.tutorial-footer {
-  margin: 22px 0 0;
-  color: #ff0;
-}
-
-@media (max-width: 600px), (max-height: 700px) {
+@media (max-width: 900px) {
   .tutorial-overlay {
     padding: 8px;
   }
 
   .tutorial-panel {
-    padding: 18px 16px 14px;
     border-width: 16px 16px 26px;
   }
 
-  .tutorial-eyebrow {
-    margin-bottom: 12px;
+  .tutorial-page {
+    padding: 18px 24px;
   }
 
   .tutorial-panel h1 {
     --tutorial-pixel: 2px;
-    margin-bottom: 14px;
+    margin-bottom: 16px;
   }
 
-  .tutorial-category {
-    margin-bottom: 8px;
+  .tutorial-illustration {
+    --tutorial-art-pixel: 2px;
+    width: 160px;
+    height: 112px;
   }
 
-  .tutorial-weapon-picture svg {
-    width: 64px;
-    height: 40px;
+  .tutorial-art-weapon {
+    width: 96px;
+    height: 60px;
+    bottom: 18px;
+  }
+
+  .tutorial-inventory {
+    gap: 8px;
   }
 
   .tutorial-weapon {
-    padding-top: 8px;
+    --tutorial-pixel: 1px;
   }
 
-  .tutorial-divider {
-    margin: 12px auto;
-  }
-
-  .tutorial-key {
-    --tutorial-pixel: 2px;
-    padding: 10px 16px 6px;
-  }
-
-  .tutorial-instruction {
-    margin-top: 18px;
-  }
-
-  .tutorial-footer {
-    margin-top: 16px;
+  .tutorial-action {
+    gap: 18px;
+    padding: 10px 12px 14px;
   }
 }
 
 @media (max-width: 600px) {
+  .tutorial-panel {
+    --tutorial-pixel: 1px;
+    background-size: 2px 2px;
+  }
+
+  .tutorial-page {
+    padding: 20px 14px;
+  }
+
+  .tutorial-category {
+    --tutorial-pixel: 1px;
+    margin-bottom: 10px;
+  }
+
+  .tutorial-hint {
+    --tutorial-pixel: 1px;
+  }
+
+  .tutorial-lesson {
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .tutorial-description .tutorial-bitmap {
+    justify-content: center;
+  }
+
+  .tutorial-illustration {
+    width: 180px;
+    height: 112px;
+  }
+
+  .tutorial-inventory {
+    flex-wrap: wrap;
+    gap: 16px 8px;
+  }
+
   .tutorial-weapon {
     --tutorial-pixel: 1px;
+    flex-basis: 40%;
+    max-width: 160px;
+    padding: 0;
+  }
+
+  .tutorial-weapon-picture {
+    width: 96px;
+    height: 60px;
+  }
+
+  .tutorial-action {
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 8px 14px;
+  }
+
+  .tutorial-key {
+    min-height: 48px;
+    padding: 8px 14px 4px;
   }
 }
 
 @media (max-height: 460px) and (min-width: 600px) {
-  .tutorial-panel {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-areas:
-      "category category"
-      "title title"
-      "description prompt"
-      "inventory keys"
-      "instruction instruction"
-      "hint hint";
-    column-gap: 24px;
-    width: min(960px, 100%);
-    padding: 14px 20px 10px;
+  .tutorial-overlay {
+    padding: 4px;
   }
 
-  .tutorial-eyebrow,
-  .tutorial-footer {
-    display: none;
+  .tutorial-panel {
+    --tutorial-pixel: 1px;
+    border-width: 16px 16px 26px;
+    background-size: 2px 2px;
+  }
+
+  .tutorial-page {
+    padding: 8px 20px 12px;
   }
 
   .tutorial-category {
-    grid-area: category;
+    margin-bottom: 0;
   }
 
   .tutorial-panel h1 {
-    grid-area: title;
+    --tutorial-pixel: 2px;
+    margin-bottom: 8px;
   }
 
-  .tutorial-description {
-    grid-area: description;
-    max-width: none;
-  }
-
-  .tutorial-divider {
-    display: none;
+  .tutorial-illustration {
+    --tutorial-art-pixel: 2px;
+    height: 100px;
   }
 
   .tutorial-inventory {
-    grid-area: inventory;
-    width: 100%;
-    margin-top: 12px;
+    margin-top: 8px;
   }
 
-  .tutorial-weapon {
-    --tutorial-pixel: 1px;
+  .tutorial-weapon-picture {
+    width: 64px;
+    height: 40px;
   }
 
-  .tutorial-prompt {
-    grid-area: prompt;
-    align-self: end;
-    margin: 0 0 6px;
+  .tutorial-divider {
+    margin: 10px auto;
   }
 
-  .tutorial-keys {
-    grid-area: keys;
-    align-self: start;
-    margin-top: 12px;
-  }
-
-  .tutorial-instruction {
-    grid-area: instruction;
-    margin: 12px 0 6px;
-  }
-
-  .tutorial-hint {
-    grid-area: hint;
-  }
-}
-
-@media (max-width: 380px) {
-  .tutorial-panel {
-    padding-right: 10px;
-    padding-left: 10px;
-  }
-
-  .tutorial-keys {
-    gap: 12px;
+  .tutorial-action {
+    padding: 6px 12px 10px;
   }
 }

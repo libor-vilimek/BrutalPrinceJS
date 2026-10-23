@@ -77,8 +77,9 @@ Blood stains, fallen body parts and brass remain throughout the level, even afte
 ## Play
 
 For isolated local previews, run `npm run preview` and open [the preview launcher](http://127.0.0.1:8090/dev/preview/).
-Category buttons show the Prince walking through increasingly tall casing piles, the real tutorial windows, and the
-full ending animation. Replay, pause and the ending timeline make each moment easy to inspect. This static server
+Category buttons show the Prince walking through increasingly tall casing piles, the real tutorial windows, the
+full ending animation, and the dripping epilogue title. Replay, pause and the ending timeline make each moment easy
+to inspect; **Open larger** gives the selected preview the full browser area. This static server
 binds only to localhost, never loads `.env` or MongoDB, and has no statistics API. Its separate engine instance does
 not start campaign levels, load a statistics recorder, change saved settings or play sound.
 
@@ -134,12 +135,12 @@ your game, saved settings or gameplay statistics. Old map revisions are identifi
 
 Torches start in level 1; collect the molotov and minigun there, the whip and rocket launcher in level 2, and the jetpack in level 12. Equipment carries forward. The kick is always available. Rockets can destroy walls and exits without blocking progress.
 
-The game also has persistent blood and casings, tougher crowds, healing and maximum-health potions, a wider camera, contextual tutorials, and optional touch controls. Jaffar has 50 life; large enemy health totals use a compact current/maximum counter. The intro adds a bloody **Brutal** above the original title.
+The game also has persistent blood and casings, tougher crowds, healing and maximum-health potions, a wider camera, contextual tutorials, and optional touch controls. Jaffar has 50 life; large enemy health totals use a compact current/maximum counter. The intro adds a bloody **Brutal** above the original title. The final story page names the hero **BRUTAL PRINCE OF PERSIA**, with blood dripping from the added word.
 
 The victory scene has its own animated finale: a bloodied Prince brings Jaffar's recognizable corpse and a minigun, puts the body down, then kicks its head off through the window, shattering the glass. The head disappears through the opening and behind the wall. He raises the minigun and dances while firing upward; the Princess draws an AK in each hand and joins him. Their shots crack pillars and knock chunks loose, then a whole larger pillar falls onto Jaffar's body with a burst of blood. The original epilogue follows automatically, and the usual cutscene skip still works. These cinematic weapons do not change the playable inventory or combat controls.
 
 For a muted local preview, open `tests/finale-browser.html` on the development server. It runs the actual transition from level 14 and provides replay, pause and key animation moments for inspection.
 
-Tutorial screens use the original title-screen mosaic and bitmap lettering, with crisp pixels and the original palette. Exit-door tutorials in levels 2 and 3 teach selecting the rocket launcher with `4` and blasting the doors with `Ctrl` / `F`. Collecting the jetpack in level 12 explains `J` to equip or remove it and the arrow keys to fly.
+Tutorial screens are larger story pages with the original red-and-gold mosaic, blue checker background, large white pixel serif lettering, and illustrations of the Prince and his equipment. Confirmation keys stay visible when the reading area scrolls on a small screen. Exit-door tutorials in levels 2 and 3 teach selecting the rocket launcher with `4` and blasting the doors with `Ctrl` / `F`. Collecting the jetpack in level 12 explains `J` to equip or remove it and the arrow keys to fly.
 
 See [the project rules](ruleset.md) and [tutorial documentation](docs/tutorials.md) for details.

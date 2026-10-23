@@ -10,10 +10,12 @@ const demos = new Set([
   "tutorial-torches",
   "tutorial-inventory",
   "tutorial-ledge",
-  "finale"
+  "finale",
+  "epilogue"
 ]);
+const requestedDemo = new URLSearchParams(window.location.search).get("demo");
 const preview = {
-  id: "casings",
+  id: demos.has(requestedDemo) ? requestedDemo : "casings",
   ready: false,
   paused: false,
   autoWalk: true,
@@ -42,7 +44,7 @@ const preview = {
     this.game.sound.mute = true;
     this.game.sound.volume = 0;
     this.load.onFileError.add((key) => this.report("Could not load " + key + ". Reload this preview."));
-    for (const key of ["kid", "palace", "general", "princess", "jaffar", "cutscene"]) {
+    for (const key of ["kid", "palace", "general", "princess", "jaffar", "cutscene", "title"]) {
       this.load.atlasJSONHash(key, `/assets/gfx/${key}.png`, `/assets/gfx/${key}.json`);
     }
     this.load.json("kid-anims", "/assets/anims/kid.json");
@@ -70,13 +72,16 @@ const preview = {
     if (this.finale) {
       this.finale.destroy();
     }
+    if (this.epilogue) {
+      this.epilogue.destroyBrutalEpilogue();
+    }
     if (this.casings) {
       this.casings.destroy();
     }
     if (this.level) {
       this.level.dummyWall.destroy();
     }
-    this.overlay = this.finale = this.casings = this.scene = this.lesson = null;
+    this.overlay = this.finale = this.epilogue = this.casings = this.scene = this.lesson = null;
     this.level = this.kid = null;
     this.keys.clear();
     this.world.removeAll(true);
@@ -100,6 +105,10 @@ const preview = {
       this.scene = new PrinceJS.Scene(this.game);
       this.finale = new PrinceJS.Finale(this.game, this.scene);
       this.report("Full ending · corpse, window, dance, cracking pillars and collapse.");
+    } else if (id === "epilogue") {
+      this.epilogue = Object.assign(Object.create(PrinceJS.EndTitle.prototype), { game: this.game });
+      this.epilogue.createBrutalEpilogue();
+      this.report("The final story page · BRUTAL Prince of Persia, with animated blood.");
     } else {
       this.buildCasingStage(id === "deep-casings");
       if (id.startsWith("tutorial-")) {
@@ -180,7 +189,9 @@ const preview = {
       "tutorial-inventory": "minigun-select",
       "tutorial-ledge": "ledge-hang"
     }[id];
-    this.lesson = PrinceJS.TutorialLessons.find((lesson) => lesson.id === lessonId);
+    const requestedLesson = new URLSearchParams(window.location.search).get("lesson");
+    this.lesson = PrinceJS.TutorialLessons.find((lesson) => lesson.id === (requestedLesson || lessonId));
+    this.lesson ||= PrinceJS.TutorialLessons.find((lesson) => lesson.id === lessonId);
     this.overlay = new PrinceJS.TutorialOverlay(() => this.confirmLesson(), this.game);
     this.overlay.show(this.lesson);
     this.report("Original tutorial text, bitmap lettering and mosaic · press the shown key or click its button.");
@@ -224,6 +235,8 @@ const preview = {
         this.paused = true;
         this.report("Ending complete · Replay to watch again.");
       }
+    } else if (this.epilogue) {
+      this.epilogue.updateBrutalEpilogue(dt);
     } else if (this.kid) {
       const left = this.keys.has(Phaser.Keyboard.LEFT),
         right = this.keys.has(Phaser.Keyboard.RIGHT);

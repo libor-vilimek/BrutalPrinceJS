@@ -13,6 +13,7 @@ document.querySelectorAll("[data-demo]").forEach((button) => {
       .querySelectorAll("[data-demo]")
       .forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
     document.getElementById("demo-title").textContent = button.textContent;
+    document.getElementById("standalone").href = "engine.html?demo=" + encodeURIComponent(current);
     document.getElementById("timeline-control").hidden = current !== "finale";
     document.getElementById("walk-control").hidden = !current.includes("casings");
     send("select", current);

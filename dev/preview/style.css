@@ -66,6 +66,7 @@ button:hover {
   background: #353331;
 }
 button:focus-visible,
+a:focus-visible,
 input:focus-visible {
   outline: 2px solid #ffd58c;
   outline-offset: 3px;
@@ -120,6 +121,11 @@ iframe {
 }
 .toolbar button {
   min-width: 80px;
+  font-size: 12px;
+}
+.toolbar a {
+  padding: 10px 0;
+  color: #edba67;
   font-size: 12px;
 }
 label {

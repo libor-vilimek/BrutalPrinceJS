@@ -2,30 +2,37 @@
 
 PrinceJS.TutorialOverlay = function (accept, game) {
   this.accept = accept;
-  this.font = game && game.cache.getBitmapFont("font").font;
+  this.game = game;
   this.root = document.createElement("div");
   this.root.className = "tutorial-overlay";
   this.root.hidden = true;
   this.root.innerHTML = `
     <section class="tutorial-panel" role="dialog" aria-modal="true" aria-labelledby="tutorial-title"
       aria-describedby="tutorial-description tutorial-instruction tutorial-hint" tabindex="-1">
-      <p class="tutorial-eyebrow">The Prince's training</p>
-      <p class="tutorial-category"></p>
-      <h1 id="tutorial-title"></h1>
-      <p id="tutorial-description" class="tutorial-description"></p>
-      <div class="tutorial-inventory" hidden></div>
-      <div class="tutorial-divider" aria-hidden="true"></div>
-      <p class="tutorial-prompt">Press to try</p>
-      <div class="tutorial-keys"></div>
-      <p id="tutorial-instruction" class="tutorial-instruction"></p>
-      <p id="tutorial-hint" class="tutorial-hint"></p>
-      <p class="tutorial-footer">The world waits while you read</p>
+      <div class="tutorial-page">
+        <p class="tutorial-category"></p>
+        <h1 id="tutorial-title"></h1>
+        <div class="tutorial-lesson">
+          <figure class="tutorial-illustration" aria-hidden="true">
+            <div class="tutorial-prince"></div>
+            <div class="tutorial-art-weapon"></div>
+            <div class="tutorial-art-floor"></div>
+          </figure>
+          <p id="tutorial-description" class="tutorial-description"></p>
+        </div>
+        <div class="tutorial-inventory" hidden></div>
+        <div class="tutorial-divider" aria-hidden="true"></div>
+        <p id="tutorial-instruction" class="tutorial-instruction"></p>
+        <p id="tutorial-hint" class="tutorial-hint"></p>
+      </div>
+      <div class="tutorial-action">
+        <p class="tutorial-prompt">Press to try</p>
+        <div class="tutorial-keys"></div>
+      </div>
     </section>`;
   this.panel = this.root.querySelector(".tutorial-panel");
-  for (const selector of [".tutorial-eyebrow", ".tutorial-prompt", ".tutorial-footer"]) {
-    const element = this.root.querySelector(selector);
-    this.setText(element, element.textContent);
-  }
+  const prompt = this.root.querySelector(".tutorial-prompt");
+  this.setText(prompt, prompt.textContent);
   this.root.addEventListener("pointerdown", (event) => event.stopPropagation());
   this.root.addEventListener("pointerup", (event) => event.stopPropagation());
   this.root.addEventListener("click", (event) => event.stopPropagation());
@@ -33,12 +40,12 @@ PrinceJS.TutorialOverlay = function (accept, game) {
 };
 
 PrinceJS.TutorialOverlay.prototype = {
-  // Use the same 1-bit atlas and character advances as the game's HUD. Native
-  // word wrapping keeps whole words together, while integer pixel masks avoid
-  // browser font smoothing. The original text remains available to readers.
+  // The large serif alphabet comes from the native title/story artwork. Each
+  // 20px atlas cell preserves the original baseline and unsmoothed pixels.
+  // Whole words wrap naturally; the exact lesson text remains accessible.
   setText: function (element, text) {
     element.textContent = text;
-    if (!this.font || !text) {
+    if (!text) {
       return;
     }
     const readable = document.createElement("span");
@@ -55,10 +62,12 @@ PrinceJS.TutorialOverlay.prototype = {
       run.className = "tutorial-word";
       for (const character of word) {
         const symbol = PrinceJS.TutorialOverlay.SYMBOLS[character];
-        const glyph = this.font.chars[character.charCodeAt(0)] || this.font.chars[63];
+        const code = character.charCodeAt(0);
+        const cell = (code >= 32 && code <= 126 ? code : 63) - 32;
+        const advance = symbol ? 10 : PrinceJS.TutorialOverlay.STORY_WIDTHS[cell];
         const letter = document.createElement("span");
         letter.className = "tutorial-letter";
-        letter.style.width = (symbol ? 8 : glyph.xAdvance) + "em";
+        letter.style.width = advance + "em";
         if (symbol) {
           symbol.forEach((row, y) => {
             [...row].forEach((pixel, x) => {
@@ -66,7 +75,7 @@ PrinceJS.TutorialOverlay.prototype = {
                 const dot = document.createElement("i");
                 dot.className = "tutorial-symbol-pixel";
                 dot.style.left = x + "em";
-                dot.style.top = y + "em";
+                dot.style.top = y + 4 + "em";
                 letter.appendChild(dot);
               }
             });
@@ -74,11 +83,8 @@ PrinceJS.TutorialOverlay.prototype = {
         } else {
           const ink = document.createElement("i");
           ink.className = "tutorial-glyph";
-          ink.style.left = glyph.xOffset + "em";
-          ink.style.top = glyph.yOffset - 4 + "em";
-          ink.style.width = glyph.width + "em";
-          ink.style.height = glyph.height + "em";
-          ink.style.maskPosition = -glyph.x + "em " + -glyph.y + "em";
+          ink.style.width = advance - 1 + "em";
+          ink.style.maskPosition = -(cell % 16) * 20 + "em " + -Math.floor(cell / 16) * 20 + "em";
           letter.appendChild(ink);
         }
         run.appendChild(letter);
@@ -86,6 +92,43 @@ PrinceJS.TutorialOverlay.prototype = {
       pixels.appendChild(run);
     }
     element.replaceChildren(readable, pixels);
+  },
+
+  illustrate: function (lesson) {
+    const illustration = this.root.querySelector(".tutorial-illustration");
+    illustration.hidden = !!lesson.inventory?.length;
+    const hanging = lesson.id.startsWith("ledge") || lesson.id === "whip-pull";
+    illustration.dataset.pose = hanging ? "ledge" : "stand";
+    const picture = this.root.querySelector(".tutorial-prince");
+    const frame = this.game && this.game.cache.getFrameByName("kid", "kid-" + (hanging ? 87 : 15));
+    picture.hidden = !frame;
+    if (frame) {
+      const atlas = this.game.cache.getImage("kid");
+      Object.assign(picture.style, {
+        width: frame.width + "em",
+        height: frame.height + "em",
+        backgroundSize: atlas.width + "em " + atlas.height + "em",
+        backgroundPosition: -frame.x + "em " + -frame.y + "em"
+      });
+    }
+    const id = lesson.id.includes("minigun")
+      ? "minigun"
+      : lesson.id.includes("rocket")
+        ? "rocketLauncher"
+        : lesson.id === "twin-torches"
+          ? "twinTorches"
+          : null;
+    const weapon = this.root.querySelector(".tutorial-art-weapon");
+    weapon.innerHTML =
+      '<svg viewBox="0 0 64 40" aria-hidden="true">' +
+      (id
+        ? PrinceJS.TutorialOverlay.WEAPONS[id].art
+        : hanging
+          ? '<path fill="#e9c56c" d="M29 4h6v20h9l-12 12-12-12h9z"/>'
+          : lesson.id === "jetpack-equip"
+            ? '<path fill="#e9c56c" d="M29 36h6V16h9L32 4 20 16h9z"/>'
+            : '<path fill="#e9c56c" d="M44 9H20V4L9 15l11 10v-7h20v12H24v6h22v-3h3V12h-5z"/>') +
+      "</svg>";
   },
 
   show: function (lesson) {
@@ -134,7 +177,9 @@ PrinceJS.TutorialOverlay.prototype = {
       card.append(picture, label);
       inventory.appendChild(card);
     }
+    this.illustrate(lesson);
     this.root.hidden = false;
+    this.root.querySelector(".tutorial-page").scrollTop = 0;
     this.panel.focus({ preventScroll: true });
   },
 
@@ -157,6 +202,13 @@ PrinceJS.TutorialOverlay.prototype = {
     this.root.remove();
   }
 };
+
+// Advances for the 16-column, 20px-cell story alphabet (ASCII 32 through 126).
+PrinceJS.TutorialOverlay.STORY_WIDTHS = [
+  6, 4, 9, 11, 11, 13, 13, 5, 7, 7, 11, 10, 5, 7, 4, 13, 10, 10, 10, 10, 11, 10, 10, 10, 10, 10, 4, 5, 9, 7, 9, 10, 10,
+  14, 10, 10, 10, 9, 10, 14, 10, 7, 7, 11, 11, 13, 10, 15, 11, 10, 12, 10, 10, 10, 14, 13, 10, 10, 13, 7, 13, 7, 10, 10,
+  7, 11, 11, 9, 11, 9, 7, 11, 12, 6, 7, 11, 6, 18, 12, 10, 11, 11, 9, 8, 7, 12, 9, 16, 10, 10, 10, 7, 4, 7, 11
+];
 
 // Supplemental 7-pixel symbols match the original font's pixel grid.
 PrinceJS.TutorialOverlay.SYMBOLS = {

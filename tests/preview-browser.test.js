@@ -105,9 +105,18 @@ test(
     await page.getByRole("button", { name: "Resume", exact: true }).click();
     await frame.waitForFunction(() => window.PrincePreview.finale.complete && window.PrincePreview.paused);
     assert.match(await page.locator("#status").textContent(), /Ending complete/);
+    await page.getByRole("button", { name: "Epilogue title", exact: true }).click();
+    await frame.waitForFunction(() => window.PrincePreview.epilogue && !window.PrincePreview.finale);
+    assert((await frame.evaluate(() => window.PrincePreview.epilogue.brutalDrips.length)) > 0);
+    await frame.waitForFunction(() => window.PrincePreview.epilogue.brutalElapsed > 0.1);
+    assert.match(await page.locator("#standalone").getAttribute("href"), /demo=epilogue$/);
     await page.getByRole("button", { name: "Walk through growing piles" }).click();
     await frame.waitForFunction(
-      () => window.PrincePreview.id === "casings" && !window.PrincePreview.finale && !window.PrincePreview.overlay
+      () =>
+        window.PrincePreview.id === "casings" &&
+        !window.PrincePreview.finale &&
+        !window.PrincePreview.epilogue &&
+        !window.PrincePreview.overlay
     );
     assert.equal(await frame.evaluate(() => localStorage.length), 0);
     assert.equal(
