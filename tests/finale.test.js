@@ -163,22 +163,34 @@ function fixture() {
   return { PrinceJS, game, scene, finale, advance, sourcePillar, sounds, tweens, removed, restarts: () => restarts };
 }
 
-test("the Prince carries recognizable native Jaffar, puts the intact body down, then kicks its head off", () => {
+test("the Prince drags native Jaffar by his ankle, releases the foot, then walks to the head and kicks it off", () => {
   const { PrinceJS, finale, advance } = fixture();
   const times = PrinceJS.Finale.TIMES;
   const arrival = finale.pose(3);
   assert.ok(arrival.prince.x > PrinceJS.Finale.STAGE.princeX);
   assert.equal(arrival.body.held, true);
+  assert.equal(arrival.body.dragging, true);
+  assert.ok(arrival.body.x > arrival.prince.x, "the corpse trails behind the Prince walking left");
+  assert.ok(Math.abs(arrival.body.floorContact.y - PrinceJS.Finale.STAGE.floorY) < 1e-9);
+  assert.ok(arrival.body.rotation > 0 && arrival.body.rotation < 0.3, "only the held ankle rises off the floor");
   assert.equal(arrival.body.headAttached, true);
-  assert.equal(arrival.head.visible, false, "the head is part of the carried native corpse");
+  assert.equal(arrival.head.visible, false, "the head stays attached to the dragged native corpse");
   assert.equal(arrival.prince.firing, false);
   assert.equal(finale.pose(4.2).prince.x, finale.pose(4.6).prince.x);
-  const placing = finale.pose(times.release - 0.01);
-  assert.ok(Math.abs(placing.body.y - 165) < 0.1);
+  const lowering = finale.pose(times.release - 0.01);
+  assert.ok(Math.abs(lowering.body.y - 165) < 0.1);
+  const approach = finale.pose((times.stepOver + times.stand) / 2);
+  assert.equal(approach.body.held, false);
+  assert.equal(approach.prince.facing, 1);
+  assert.ok(approach.prince.x > finale.pose(times.stop).prince.x);
+  assert.ok(approach.prince.x < PrinceJS.Finale.STAGE.princeX);
   const grounded = finale.pose(times.stand);
   assert.equal(grounded.body.held, false);
   assert.equal(grounded.body.headAttached, true);
   assert.equal(grounded.body.y, 165);
+  assert.equal(grounded.prince.facing, -1);
+  assert.equal(grounded.prince.x, PrinceJS.Finale.STAGE.princeX);
+  assert.equal(grounded.body.x, approach.body.x, "repositioning never slides or teleports the released body");
   const kicked = finale.pose(times.kick + 0.12);
   assert.ok(kicked.head.x < grounded.head.x);
   assert.ok(kicked.head.y < grounded.head.y);
@@ -195,6 +207,74 @@ test("the Prince carries recognizable native Jaffar, puts the intact body down, 
   advance(times.kick + 0.01);
   assert.equal(finale.effects.attachedHead.visible, false);
   assert.equal(finale.effects.headLayer.visible, true);
+});
+
+test("the pulling hand stays on the ankle and the corpse leaves a continuous permanent blood trail", () => {
+  const { PrinceJS, finale, advance } = fixture();
+  const effects = finale.effects;
+  const drawing = effects.arm;
+  let pullingHand;
+  effects.arm = function (g, shoulder, target, bend, princess) {
+    if (g === this.prince && bend === 1) {
+      pullingHand = PrinceJS.PrincePose.arm(shoulder, target, bend).hand;
+    }
+    drawing.call(this, g, shoulder, target, bend, princess);
+  };
+  for (const time of [1.8, 2.8, 3.9, 4.55, 4.79]) {
+    advance(time);
+    const pose = finale.pose(time);
+    assert.ok(Math.abs(pose.body.floorContact.y - 165) < 1e-9, "the head never lifts off the ground");
+    assert.ok(
+      Math.hypot(
+        pose.prince.x + pullingHand.x * pose.prince.facing - pose.body.grip.x,
+        pose.prince.y + pullingHand.y - pose.body.grip.y
+      ) < 1,
+      "the original arm proportions still reach the ankle"
+    );
+  }
+  const trail = JSON.stringify(effects.bloodTrail.shapes);
+  assert.ok(effects.bloodTrail.shapes.length > 350, "dragging leaves a long visible floor smear");
+  const covered = effects.bloodTrail.shapes.filter(({ color }) => color === 0x650f25).map(({ args }) => args[0]);
+  assert.deepEqual(
+    covered,
+    Array.from({ length: 320 - effects.dragBloodX }, (_, i) => 319 - i)
+  );
+  assert.ok(effects.bloodTrail.z < effects.bodyLayer.z && effects.bodyLayer.z < effects.prince.z);
+  advance(18);
+  assert.equal(JSON.stringify(effects.bloodTrail.shapes), trail, "the dance and falling stone never erase the trail");
+  for (const dt of [1 / 30, 1 / 144]) {
+    const other = fixture();
+    other.advance(4.79, dt);
+    assert.equal(JSON.stringify(other.finale.effects.bloodTrail.shapes), trail, "trail edges do not depend on fps");
+  }
+});
+
+test("the Princess turns her native head toward the Prince as he passes, without turning her body or hiding her head", () => {
+  const { finale } = fixture();
+  const effects = finale.effects;
+  const head = effects.princessHead;
+  const right = finale.pose(2.3);
+  const left = finale.pose(3);
+  assert.ok(right.prince.x > right.princess.x && right.princess.look > 0);
+  assert.ok(left.prince.x < left.princess.x && left.princess.look < 0);
+  effects.render(right);
+  assert.equal(head.scale.x, -1, "the native head is mirrored to face the arriving Prince on the right");
+  effects.render(left);
+  assert.equal(head.scale.x, 1, "she follows him to the left after he passes");
+  let turningFrames = 0;
+  for (let time = 2.5; time < 2.9; time += 0.01) {
+    const pose = finale.pose(time);
+    effects.render(pose);
+    assert.ok(Math.abs(head.scale.x) >= 0.35);
+    assert.equal(head.y, -31, "the neck stays attached through the turn");
+    assert.equal(effects.princess.x, 200);
+    assert.equal(effects.princess.scale.x, 1);
+    if (Math.abs(pose.princess.look) < 1) {
+      turningFrames++;
+    }
+  }
+  assert.ok(turningFrames > 5, "the head visibly turns over several frames");
+  assert.equal(head, effects.princessHead);
 });
 
 test("the kicked head clips to the window aperture, fully exits and leaves persistent broken glass and blood", () => {

@@ -21,6 +21,8 @@ PrinceJS.FinaleEffects = function (game, scene) {
   this.glass = layer(11);
   this.damage = layer(12);
   this.archHole = layer(13);
+  this.bloodTrail = layer(18);
+  this.dragBloodX = 320;
   this.floor = layer(19);
   this.prince = layer(21);
   this.princess = layer(20);
@@ -272,8 +274,8 @@ PrinceJS.FinaleEffects.prototype = {
       this.rect(graphic, 0xffffd9, muzzle, -1, 6, 2);
     }
     const muzzle = this.localPoint(position, minigun ? 18 : 22, 0);
-    // The Prince faces left; the Princess faces right. All firing angles point up.
-    const direction = minigun ? -1 : 1;
+    // Follow the Prince's turn while he walks around the corpse.
+    const direction = minigun ? actor.facing : 1;
     this.guns[index] = {
       x: actor.x + muzzle.x * direction,
       y: actor.y + muzzle.y,
@@ -307,9 +309,9 @@ PrinceJS.FinaleEffects.prototype = {
     g.clear();
     g.x = Math.round(p.x);
     g.y = Math.round(p.y);
-    g.scale.x = -1;
-    const dip = p.placing * 15;
-    const lean = p.placing * 9 - Math.max(0, p.kick) * 3 + p.sway * 2;
+    g.scale.x = p.facing;
+    const dip = p.crouch;
+    const lean = p.lean - Math.max(0, p.kick) * 3 + p.sway * 2;
     const hip = { x: lean, y: -18 + dip * 0.65 };
     this.leg(g, hip, { x: -4 - p.step * 5, y: -10 + dip * 0.3 }, { x: -5 - p.step * 7, y: -1 }, false, true);
     let knee = { x: 3 + p.step * 5, y: -9 };
@@ -330,10 +332,12 @@ PrinceJS.FinaleEffects.prototype = {
     this.faceBlood.x = this.princeHead.x;
     this.faceBlood.y = this.princeHead.y;
     this.princeHead.tint = this.flashes[0] > 0 ? 0xffe5a0 : 0xffffff;
+    const carry = p.dragPose * (1 - p.raise);
     const gun = {
-      x: -10 + p.raise * 17 + lean,
-      y: -20 - p.raise * 13 + dip,
-      angle: (Math.PI - 0.35) * (1 - p.raise) + (-Math.PI / 2 + 0.22 + p.sway * 0.16) * p.raise
+      x: -10 + p.raise * 17 + lean + carry * 19,
+      y: -20 - p.raise * 13 + dip - carry * 5,
+      angle:
+        (Math.PI - 0.35) * (1 - p.raise) + (-Math.PI / 2 + 0.22 + p.sway * 0.16) * p.raise - carry * (Math.PI + 0.1)
     };
     if (p.firing) {
       gun.target = p.aim;
@@ -342,7 +346,7 @@ PrinceJS.FinaleEffects.prototype = {
     const hold = this.localPoint(gun, -1, -4);
     this.arm(g, { x: lean - 3, y: -30 + dip }, hold, -1, false);
     let other = pose.body.held
-      ? { x: p.x - pose.body.x - 36, y: pose.body.y - p.y - 6 }
+      ? { x: (pose.body.grip.x - p.x) / p.facing, y: pose.body.grip.y - p.y }
       : { x: lean + 9, y: -20 + dip };
     if (p.raise > 0) {
       const support = this.localPoint(gun, 7, 3);
@@ -374,9 +378,11 @@ PrinceJS.FinaleEffects.prototype = {
     this.polygon(g, 0xfc38fc, [-3, -23, 2, -23, 7 + p.sway * 3, -8, 1, -7, -6 + p.sway * 3, -10]);
     this.polygon(g, 0xfcd8fc, [-5, -32, 3, -33, 4, -27, 1, -20, -5, -20, -4, -26]);
     this.rect(g, 0xfc9c80, -4, -21, 7, 3);
-    this.princessHead.x = 0;
+    this.princessHead.x = p.look;
     this.princessHead.y = -31;
-    this.princessHead.scale.x = -1;
+    // The native face looks left. Narrow it briefly through the turn, keeping
+    // a visible head and a fixed neck as she follows the passing Prince.
+    this.princessHead.scale.x = (p.look >= 0 ? -1 : 1) * Math.max(0.35, Math.abs(p.look));
     this.princessHead.tint = this.flashes[1] > 0 || this.flashes[2] > 0 ? 0xffe5bb : 0xffffff;
     for (let i = 0; i < 2; i++) {
       const side = i === 0 ? -1 : 1;
@@ -410,7 +416,7 @@ PrinceJS.FinaleEffects.prototype = {
     this.bodyLayer.rotation = pose.body.rotation;
     this.bodyLayer.scale.y = pose.body.crushed ? 0.38 : 1;
     this.attachedHead.visible = pose.body.headAttached;
-    this.bodyLayer.z = pose.body.held ? 22 : 19.5;
+    this.bodyLayer.z = 19.5;
     if (!pose.body.headAttached) {
       this.rect(this.bodyLayer, 0x761027, 30, -6, 4, 4);
       this.rect(this.bodyLayer, 0xc63443, 32, -5, 2, 2);
@@ -421,12 +427,33 @@ PrinceJS.FinaleEffects.prototype = {
     this.headLayer.visible = pose.head.visible;
     // Interior + aperture form one clipping region; the outside wall is never exposed.
     this.headLayer.mask = this.windowMask;
+    if (pose.body.dragging) {
+      this.drawDragBlood(pose.body.floorContact.x);
+    }
     if (!pose.body.held && !this.bloodOnFloor) {
       this.bloodOnFloor = true;
       this.rect(this.floor, 0x741125, pose.body.x + 4, 164, 35, 3);
       this.rect(this.floor, 0xa11e32, pose.body.x + 22, 163, 15, 2);
     }
     this.drawPillars(pose);
+  },
+
+  drawDragBlood: function (contactX) {
+    const next = Math.max(0, Math.min(320, Math.round(contactX)));
+    // Stamp each world pixel only once, so the smear is continuous and has
+    // identical edges at every frame rate. This layer is never cleared.
+    for (let x = this.dragBloodX - 1; x >= next; x--) {
+      const edge = (Math.floor(x / 5) % 3) - 1;
+      this.rect(this.bloodTrail, 0x650f25, x, 164 + edge, 1, 5 + (x % 3 === 0 ? 1 : 0));
+      this.rect(this.bloodTrail, 0x981b32, x, 165, 1, 2);
+      if (x % 7 === 0) {
+        this.rect(this.bloodTrail, 0xc02b3c, x, 164, 2, 1);
+      }
+      if (x % 11 === 0) {
+        this.rect(this.bloodTrail, 0x7e152b, x + 3, 171 + (x % 2), 2, 1);
+      }
+    }
+    this.dragBloodX = Math.min(this.dragBloodX, next);
   },
 
   crack: function (g, x, y, height, strength) {

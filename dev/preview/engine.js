@@ -104,7 +104,7 @@ const preview = {
     if (id === "finale") {
       this.scene = new PrinceJS.Scene(this.game);
       this.finale = new PrinceJS.Finale(this.game, this.scene);
-      this.report("Full ending · corpse, window, dance and a ceiling arch fragment crushing Jaffar.");
+      this.report("Full ending · dragging Jaffar, blood trail, window, dance and a falling ceiling arch fragment.");
     } else if (id === "epilogue") {
       this.epilogue = Object.assign(Object.create(PrinceJS.EndTitle.prototype), { game: this.game });
       this.epilogue.createBrutalEpilogue();

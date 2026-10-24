@@ -126,10 +126,42 @@ test(
     if (process.env.PREVIEW_SCREENSHOT_DIR) {
       await page.screenshot({ path: path.join(process.env.PREVIEW_SCREENSHOT_DIR, "preview-ending.png") });
     }
+    await page.locator("#timeline").fill("2.3");
+    await frame.waitForFunction(
+      () => window.PrincePreview.paused && Math.abs(window.PrincePreview.elapsed - 2.3) < 0.001
+    );
+    assert.equal(await frame.evaluate(() => window.PrincePreview.finale.effects.princessHead.scale.x), -1);
+    if (process.env.PREVIEW_SCREENSHOT_DIR) {
+      await page.screenshot({ path: path.join(process.env.PREVIEW_SCREENSHOT_DIR, "preview-before-passing.png") });
+    }
     await page.locator("#timeline").fill("2.8");
     await frame.waitForFunction(
-      () => window.PrincePreview.elapsed < 3 && window.PrincePreview.finale.pose(window.PrincePreview.elapsed).body.held
+      () => window.PrincePreview.paused && Math.abs(window.PrincePreview.elapsed - 2.8) < 0.001
     );
+    const arrival = await frame.evaluate(() => {
+      const preview = window.PrincePreview;
+      const pose = preview.finale.pose(preview.elapsed);
+      return {
+        headTurn: preview.finale.effects.princessHead.scale.x,
+        blood: preview.finale.effects.bloodTrail.graphicsData.length,
+        trailing: pose.body.x > pose.prince.x,
+        floorContact: pose.body.floorContact.y,
+        layers: preview.finale.effects.bloodTrail.z < preview.finale.effects.bodyLayer.z
+      };
+    });
+    assert.ok(arrival.headTurn > 0 && arrival.blood > 100 && arrival.trailing && arrival.layers);
+    assert.equal(arrival.floorContact, 165);
+    if (process.env.PREVIEW_SCREENSHOT_DIR) {
+      await page.screenshot({ path: path.join(process.env.PREVIEW_SCREENSHOT_DIR, "preview-dragging.png") });
+      for (const time of [3.7, 5.6]) {
+        await page.locator("#timeline").fill(String(time));
+        await frame.waitForFunction(
+          (target) => window.PrincePreview.paused && Math.abs(window.PrincePreview.elapsed - target) < 0.001,
+          time
+        );
+        await page.screenshot({ path: path.join(process.env.PREVIEW_SCREENSHOT_DIR, `preview-drag-${time}.png`) });
+      }
+    }
     assert.equal(await frame.evaluate(() => window.PrincePreview.finale.effects.archHole.visible), false);
     await page.locator("#timeline").fill("19.95");
     await frame.waitForFunction(() => window.PrincePreview.elapsed > 19.9);

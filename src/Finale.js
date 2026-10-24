@@ -14,8 +14,9 @@ PrinceJS.Finale = function (game, scene) {
 PrinceJS.Finale.TIMES = {
   enter: 1.2,
   stop: 4,
-  place: 4.65,
-  release: 5.7,
+  place: 4.3,
+  release: 4.8,
+  stepOver: 5.15,
   stand: 6.25,
   windup: 6.5,
   kick: 6.95,
@@ -87,8 +88,14 @@ PrinceJS.Finale.prototype = {
       )
     );
     const progress = (start, end) => this.progress(time, start, end);
-    const walking = time >= t.enter && time < t.stop;
-    const placing = progress(t.place, t.release) * (1 - progress(t.release + 0.15, t.stand));
+    const dragging = time >= t.enter && time < t.stop;
+    const approachingHead = time >= t.stepOver && time < t.stand;
+    const walking = dragging || approachingHead;
+    const release = progress(t.place, t.release);
+    const straighten = progress(t.release, t.stepOver);
+    const approach = progress(t.stepOver, t.stand);
+    const restingBodyX = stage.headX - 38;
+    const dragStopX = restingBodyX - 8;
     const kick =
       time < t.kick
         ? -0.8 * progress(t.windup, t.kick - 0.16) + 1.8 * progress(t.kick - 0.16, t.kick)
@@ -99,10 +106,13 @@ PrinceJS.Finale.prototype = {
     const sway = dancing ? Math.sin(beat) : 0;
     const princessSway = princessDancing ? Math.sin(beat + 0.8) : 0;
     const prince = {
-      x: 336 - (336 - stage.princeX) * progress(t.enter, t.stop) + sway * 3,
+      x: 336 - (336 - dragStopX) * progress(t.enter, t.stop) + (stage.princeX - dragStopX) * approach + sway * 3,
       y: 165 - (dancing ? Math.abs(Math.sin(beat)) * 2 : walking ? Math.abs(Math.sin(time * 9)) : 0),
       step: walking ? Math.sin(time * 9) : sway,
-      placing,
+      facing: approachingHead ? 1 : -1,
+      dragPose: 1 - straighten,
+      crouch: (12 + release * 2) * (1 - straighten),
+      lean: -(3 + release * 3) * (1 - straighten),
       kick,
       dancing,
       sway,
@@ -110,19 +120,27 @@ PrinceJS.Finale.prototype = {
       firing: dancing,
       aim: { x: 67 + Math.sin(beat * 0.35) * 5, y: 30 + Math.cos(beat * 0.4) * 13, pillar: 0 }
     };
-    const lowering = progress(t.place, t.release);
+    // The native corpse's feet are on its left. Hold that ankle behind the
+    // walking Prince while its head stays on the floor, then lower the foot.
+    const footLift = 8 * (1 - release);
+    const bodyRotation = Math.asin(footLift / 38);
     const body = {
-      x: prince.x - 29 - lowering * 29,
-      y: prince.y - 25 + lowering * 25,
-      rotation: walking ? Math.sin(time * 9) * 0.025 : 0,
+      x: time < t.stop ? prince.x + 8 : restingBodyX,
+      y: stage.floorY - footLift,
+      rotation: bodyRotation,
+      dragging,
       held: time < t.release,
       headAttached: time < t.kick,
       crushed: time >= t.archImpact
     };
-    if (!body.held) {
-      body.x = stage.headX - 38;
-      body.y = stage.floorY;
-    }
+    body.grip = {
+      x: body.x + 4 * Math.cos(bodyRotation) + 4 * Math.sin(bodyRotation),
+      y: body.y + 4 * Math.sin(bodyRotation) - 4 * Math.cos(bodyRotation)
+    };
+    body.floorContact = {
+      x: body.x + 38 * Math.cos(bodyRotation),
+      y: body.y + 38 * Math.sin(bodyRotation)
+    };
     let head = {
       x: body.x + 38,
       y: body.y - 5.5,
@@ -159,6 +177,7 @@ PrinceJS.Finale.prototype = {
         x: stage.princessX + princessSway * 3,
         y: 165 - (princessDancing ? Math.abs(Math.sin(beat + 0.8)) * 2 : 0),
         sway: princessSway,
+        look: 1 - 2 * this.progress(prince.x, stage.princessX + 12, stage.princessX - 12),
         dancing: princessDancing,
         draw: progress(t.princessDraw, t.princessFire),
         firing: princessDancing,
