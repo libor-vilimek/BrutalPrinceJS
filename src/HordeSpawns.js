@@ -76,6 +76,17 @@ PrinceJS.HordeSpawns = {
           continue;
         }
         for (let column = 0; column < 10; column++) {
+          // Jaffar's upper platform continues across both room borders. Keep
+          // only that connected floor clear; the islands beyond its gaps stay populated.
+          if (
+            json.id === undefined &&
+            json.prince.specialEvents !== false &&
+            level.number === 13 &&
+            row === 0 &&
+            ((roomId === 3 && column === 9) || (roomId === 17 && column <= 1))
+          ) {
+            continue;
+          }
           // A clear arrival beside level two's launcher leaves time to draw
           // it after the lesson before firing left into the corridor.
           if (json.id === undefined && level.number === 2 && roomId === 11 && row === 1 && column >= 5) {

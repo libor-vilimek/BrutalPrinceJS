@@ -103,6 +103,26 @@ test(
       ]
     );
     assert.equal(await frame.evaluate(() => window.PrincePreview.finale.effects.archHole.visible), true);
+    const exposedCeiling = await frame.evaluate(() => {
+      const bitmap = window.PrincePreview.finale.effects.archBackingBitmap;
+      const { data } = bitmap.ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+      let stone = 0,
+        dark = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (!data[i + 3]) {
+          continue;
+        }
+        if (data[i] > 100 && data[i + 1] > 70 && data[i] > data[i + 2]) {
+          stone++;
+        }
+        if (Math.max(data[i], data[i + 1], data[i + 2]) < 32) {
+          dark++;
+        }
+      }
+      return { stone, dark };
+    });
+    assert.ok(exposedCeiling.stone > 300, "the opening reveals surviving native golden masonry");
+    assert.equal(exposedCeiling.dark, 0, "the missing fragment never leaves a black fill");
     if (process.env.PREVIEW_SCREENSHOT_DIR) {
       await page.screenshot({ path: path.join(process.env.PREVIEW_SCREENSHOT_DIR, "preview-ending.png") });
     }

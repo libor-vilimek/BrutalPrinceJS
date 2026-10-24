@@ -48,6 +48,8 @@ PrinceJS.Finale.ARCH = {
   y: 16,
   width: 28,
   height: 31,
+  // Continue the pale inner arch behind the detached outer stone.
+  backing: { x: 127, y: 28 },
   outline: [
     [0, 16],
     [3, 12],

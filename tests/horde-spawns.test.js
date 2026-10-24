@@ -69,6 +69,7 @@ function fixture(number = 1) {
 
 const campaignLevels = Array.from({ length: 14 }, (_, index) => index + 1);
 const allowedFloors = [1, 3, 8, 14, 19];
+const jaffarPlatform = new Set(["3:9", ...Array.from({ length: 10 }, (_, column) => `1:${column}`), "17:0", "17:1"]);
 const animations = Object.fromEntries(
   ["fighter", "sword"].map((key) => [
     key + "-anims",
@@ -126,7 +127,9 @@ for (const number of campaignLevels) {
     const guards = PrinceJS.HordeSpawns.create(level, json);
     const availableFloors = Object.entries(level.rooms)
       .filter(([id]) => Number(id) !== json.prince.room)
-      .flatMap(([, room]) => room.tiles)
+      .flatMap(([id, room]) =>
+        room.tiles.filter((tile, location) => number !== 13 || !jaffarPlatform.has(`${id}:${location}`))
+      )
       .filter((tile) => allowedFloors.includes(tile.element)).length;
     assert.ok(
       guards.length >= Math.ceil(availableFloors * 0.7),
@@ -209,6 +212,38 @@ test("story scenes have clear floors while troops populate other floors around t
       assert.ok(!guards.some((guard) => guard.room === leftLanding && guard.location >= 6 && guard.location <= 9));
     }
   }
+});
+
+test("Jaffar is alone on his connected upper platform across room borders", () => {
+  const { PrinceJS, level, json } = fixture(13);
+  const before = JSON.stringify(json);
+  const guards = PrinceJS.HordeSpawns.create(level, json);
+  const actors = json.guards.concat(guards);
+  assert.deepEqual(
+    Array.from(
+      actors.filter((guard) => jaffarPlatform.has(`${guard.room}:${guard.location}`)),
+      (guard) => guard.type
+    ),
+    ["jaffar"]
+  );
+  for (const [room, location] of [
+    [3, 7],
+    [17, 8],
+    [17, 9],
+    [16, 10],
+    [23, 14]
+  ]) {
+    assert.ok(
+      guards.some((guard) => guard.room === room && guard.location === location),
+      `separate platform ${room}:${location} keeps its guard`
+    );
+  }
+  const ordinaryFloors = PrinceJS.HordeSpawns.create(level, {
+    ...json,
+    prince: { ...json.prince, specialEvents: false }
+  }).filter((guard) => !jaffarPlatform.has(`${guard.room}:${guard.location}`));
+  assert.deepEqual(guards, ordinaryFloors, "every spawn outside the boss platform remains unchanged");
+  assert.equal(JSON.stringify(json), before, "the original boss and map progression stay intact");
 });
 
 test("every bundled custom map has reinforcements with native campaign health and safe feet placement", () => {

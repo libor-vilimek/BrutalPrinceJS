@@ -74,6 +74,7 @@ function fixture() {
           height,
           pixels,
           ctx: {
+            fillRect() {},
             drawImage(...args) {
               bitmap.source = args;
             },
@@ -322,6 +323,7 @@ test("shots crack the supports, release a native arch fragment, and crush Jaffar
   finale.destroy();
   assert.equal(sourcePillar.visible, true);
   assert.equal(finale.effects.archBitmap.destroyed, true);
+  assert.equal(finale.effects.archBackingBitmap.destroyed, true);
   assert.ok(sounds.every((sound) => sound.destroyed));
 });
 
@@ -349,7 +351,7 @@ test("the arch stone starts at its source pixels, accelerates downward, and neve
   assert.ok(Math.abs(finale.effects.fallingArch.y - sourceY) < 0.001);
   assert.equal(finale.effects.archHole.visible, true);
   assert.ok(
-    finale.effects.archHole.shapes.every(
+    finale.effects.archFracture.shapes.every(
       ({ args: [x, y, width, height] }) =>
         x >= arch.x && y >= arch.y && x + width <= arch.x + arch.width && y + height <= arch.y + arch.height
     )
@@ -368,6 +370,36 @@ test("the arch stone starts at its source pixels, accelerates downward, and neve
   }
   const aim = finale.pose(15.4).princess.aims[0];
   assert.ok(aim.x > arch.x + arch.width, "later shots hit the surviving arch instead of the new hole");
+});
+
+test("the opening reveals the native inner arch through the exact missing fragment, with only narrow fracture edges", () => {
+  const { PrinceJS, finale, advance } = fixture();
+  const arch = PrinceJS.Finale.ARCH;
+  const effects = finale.effects;
+  const backing = effects.archBackingBitmap;
+  const frame = JSON.parse(fs.readFileSync(path.join(__dirname, "../assets/gfx/cutscene.json"), "utf8")).frames.room
+    .frame;
+  assert.deepEqual(backing.source.slice(1, 5), [
+    frame.x + arch.backing.x,
+    frame.y + arch.backing.y,
+    arch.width,
+    arch.height
+  ]);
+  assert.equal(effects.archBacking.key, backing, "the exposed layer uses native room artwork");
+  assert.deepEqual([effects.archBacking.x, effects.archBacking.y], [arch.x, arch.y]);
+  assert.deepEqual(
+    [...backing.pixels.filter((value, index) => index % 4 === 3)],
+    [...effects.archBitmap.pixels.filter((value, index) => index % 4 === 3)],
+    "the backing covers precisely the stone's footprint and leaves adjacent masonry untouched"
+  );
+  assert.ok(effects.archFracture.shapes.length > 20);
+  assert.ok(effects.archFracture.shapes.every(({ args: [, , width, height] }) => width === 1 && height === 1));
+  assert.deepEqual(effects.archHole.children, [effects.archBacking, effects.archFracture]);
+  assert.equal(effects.archHole.shapes.length, 0, "no solid dark polygon covers the exposed room layer");
+  assert.equal(effects.archHole.visible, false);
+  advance(PrinceJS.Finale.TIMES.archImpact + 0.1);
+  assert.equal(effects.archHole.visible, true);
+  assert.ok(effects.archHole.z < effects.prince.z && effects.archHole.z < effects.fallingArch.z);
 });
 
 test("cinematic timing is stable at low and high frame rates, and long frames do not skip the action", () => {

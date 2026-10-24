@@ -179,7 +179,7 @@ Implementační rozhodnutí: zničitelné části jsou původní uvolněné podl
 
 ## Nepřátelé a jejich smrti
 
-- **ENEMY-01:** Ve všech levelech má být mnoho nepřátel.
+- **ENEMY-01:** Ve všech levelech má být mnoho nepřátel. Výjimkou je Jaffarova plošina podle ENEMY-10.
 - **ENEMY-02:** Viditelní strážci na stejném patře, kteří prince mohou skutečně dosáhnout, ho mají aktivně začít pronásledovat. Samotná blízkost přes neprůchodnou překážku nebo z jiného patra nestačí. Výjimkou je pasivní úvodní strážce tutoriálu podle TUTORIAL-05.
 - **ENEMY-03:** Zvuk při zabití nepřítele je odstraněný, protože při hromadném zabíjení ruší. Nezapínat ho znovu pro každého padlého strážce.
 - **ENEMY-04:** Minigun má několik různých smrtí: například zásah do obličeje s odhozením těla o několik dlaždic, ztrátu částí těla a různé pohyby či převracení těla. Nemá používat jedinou opakovanou nehybnou smrt.
@@ -188,6 +188,7 @@ Implementační rozhodnutí: zničitelné části jsou původní uvolněné podl
 - **ENEMY-07:** Hořící nepřátelé křičí, ale současně smějí být slyšet nejvýše dva překrývající se křiky hoření. Je to výjimka pro hoření, nikoli návrat obecného zvuku při každém zabití podle ENEMY-03.
 - **ENEMY-08:** Stín prince v levelu 12 vůbec neútočí mečem. Princ se s ním může přímo sloučit při přiblížení, bez nutnosti nejprve kapitulovat. Zabití stínu dál zabije i prince; sdílené poškození zůstává zachované.
 - **ENEMY-09:** Jaffar začíná souboj s 50 životy. Ostatní nepřátelé si zachovávají dosavadní zdraví a pravidla poškození. Implementační rozhodnutí: zdraví protivníka nad deset životů zobrazuje kompaktní ikona s přesným počtem `aktuální/maximum`, aby nepřekrývalo zbytek HUD.
+- **ENEMY-10:** Jaffar stojí na své horní souvislé plošině sám, bez dalších nepřátel i v jejím pokračování přes hranice sousedních místností. Nepřátelé na oddělených plošinách a nižších podlažích zůstávají.
 
 Implementační rozhodnutí pro stín: od objevení je ihned propojený s princem a zůstává aktivní pro zásahy zbraněmi, ale netasí meč ani nezahajuje boj. Sloučení vyžaduje oba živé ve stejné místnosti a patře; zachovává původní bonus života, animaci a zpřístupnění neviditelného mostu. Šipka dolů u tohoto pasivního stínu běžně přikrčí prince.
 
@@ -225,7 +226,7 @@ Implementační rozhodnutí pro věžičku: chrání mříž ve sloupci 2, řád
 - **END-01:** Ve vítězné scéně s princeznou přinese zakrvácený princ celé mrtvé Jaffarovo tělo s dosud připojenou hlavou a minigun. Jaffar musí být dobře rozpoznatelný podle svého původního vzhledu.
 - **END-02:** Princ se zastaví, položí tělo na zem a viditelně mu odkopne hlavu ven oknem. Hlava sklo roztříští a okno zůstane rozbité. Při průletu se hlava správně ořízne oknem a po průchodu úplně zmizí za zdí; nesmí zůstat částečně viditelná přes zdivo.
 - **END-03:** Po vykopnutí hlavy princ zvedne minigun nad sebe, střílí do stropu a tancuje. Princezna vytáhne dva kalašnikovy, v každé ruce jeden, a také tancuje a střílí do stropu.
-- **END-04:** Závěrečná střelba viditelně rozpraská sloupy a odlamuje drobné padající části. Sloupy zůstávají stát. Ze stropního oblouku se odlomí jeden větší těžký kus, spadne shora na Jaffarovo tělo a při dopadu z něj vystříkne krev. Padající kus musí vycházet ze skutečné grafiky oblouku a na původním místě po něm zůstane odpovídající otvor. Pád musí být spojitý, bez mizení částí; střelba dále míří na zachované zdivo.
+- **END-04:** Závěrečná střelba viditelně rozpraská sloupy a odlamuje drobné padající části. Sloupy zůstávají stát. Ze stropního oblouku se odlomí jeden větší těžký kus, spadne shora na Jaffarovo tělo a při dopadu z něj vystříkne krev. Padající kus musí vycházet ze skutečné grafiky oblouku a na původním místě po něm zůstane odpovídající otvor. V otvoru je vidět navazující pozadí místnosti nebo zachované zdivo za odlomeným kusem, bez černé výplně. Pád musí být spojitý, bez mizení částí; střelba dále míří na zachované zdivo.
 - **END-05:** Závěrečný příběhový text pojmenuje hrdinu „BRUTAL PRINCE OF PERSIA“. Ze slova „BRUTAL“ viditelně stéká a kape krev podobně jako v úvodním titulku. Implementační rozhodnutí: přeskupí se pouze poslední řádky původního epilogu, aby se nové slovo vešlo do zachovaného mozaikového rámu; jeho odkrývání, časování a přeskočení zůstávají původní.
 
 Implementační rozhodnutí: samostatná sekvence nahrazuje původní objetí ve scéně 15. Zachovává původní místnost, hlavy a proporce postav i grafiku minigunu. Příchod s tělem, zastavení, položení, nápřah, oddělení hlavy kopem, rozbití okna a zvednutí zbraní mají vlastní časování; teprve pak následuje společný tanec se záblesky, nábojnicemi, praskáním sloupů a pádem trosek a těžkého kusu stropního oblouku. Princ při střelbě minigun podepírá oběma rukama. Jde pouze o filmový závěr: kalašnikovy nevstupují do inventáře a běžná pravidla pohybu ani střelby se nemění. Scéna automaticky pokračuje do původního epilogu a lze ji přeskočit původním ovládáním. Odchod uklidí efekty, zvuk i čekající přechod.

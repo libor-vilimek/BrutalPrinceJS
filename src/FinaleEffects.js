@@ -98,6 +98,29 @@ PrinceJS.FinaleEffects.prototype = {
       arch.height
     );
     const image = context.getImageData(0, 0, arch.width, arch.height);
+    this.archBackingBitmap = this.game.add.bitmapData(arch.width, arch.height);
+    const backingContext = this.archBackingBitmap.ctx;
+    backingContext.imageSmoothingEnabled = false;
+    // The room atlas flattens the outer and inner arches. Reconstruct the
+    // hidden continuation with the native inner arch and its blue backdrop.
+    backingContext.fillStyle = "#080f35";
+    backingContext.fillRect(0, 0, arch.width, arch.height);
+    backingContext.drawImage(
+      this.game.cache.getImage("cutscene"),
+      frame.x + arch.backing.x,
+      frame.y + arch.backing.y,
+      arch.width,
+      arch.height,
+      0,
+      0,
+      arch.width,
+      arch.height
+    );
+    const backing = backingContext.getImageData(0, 0, arch.width, arch.height);
+    this.archBacking = this.game.make.sprite(arch.x, arch.y, this.archBackingBitmap);
+    this.archHole.addChild(this.archBacking);
+    this.archFracture = this.game.make.graphics(0, 0);
+    this.archHole.addChild(this.archFracture);
     // Cut both the moving stone and its hole on the same native pixel grid.
     // A single bitmap keeps the rotated texture continuous across every row.
     for (let y = 0; y < arch.height; y++) {
@@ -117,17 +140,20 @@ PrinceJS.FinaleEffects.prototype = {
           right = x + 1;
         } else {
           image.data[(y * arch.width + x) * 4 + 3] = 0;
+          backing.data[(y * arch.width + x) * 4 + 3] = 0;
         }
       }
       if (right > left) {
-        this.rect(this.archHole, 0x65452b, arch.x + left, arch.y + y, right - left, 1);
-        if (right - left > 2) {
-          this.rect(this.archHole, 0x100c08, arch.x + left + 1, arch.y + y, right - left - 2, 1);
-        }
+        // Narrow broken edges give the opening depth without hiding the
+        // surviving ceiling and background behind a solid dark fill.
+        this.rect(this.archFracture, 0x8d633c, arch.x + left, arch.y + y, 1, 1);
+        this.rect(this.archFracture, 0xf4c77e, arch.x + right - 1, arch.y + y, 1, 1);
       }
     }
     context.putImageData(image, 0, 0);
+    backingContext.putImageData(backing, 0, 0);
     this.archBitmap.dirty = true;
+    this.archBackingBitmap.dirty = true;
     this.archSprite = this.game.make.sprite(-Math.floor(arch.width / 2), -Math.floor(arch.height / 2), this.archBitmap);
     this.fallingArch.addChild(this.archSprite);
     this.archCracks = this.game.make.graphics(0, 0);
@@ -620,6 +646,7 @@ PrinceJS.FinaleEffects.prototype = {
     this.headLayer.mask = null;
     this.layers.forEach((layer) => layer.destroy(true));
     this.archBitmap.destroy();
+    this.archBackingBitmap.destroy();
     this.particles.length = 0;
   }
 };
