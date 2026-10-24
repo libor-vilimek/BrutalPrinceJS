@@ -89,10 +89,16 @@ function createApp({
     }
     if (ctx.path === "/api/v1/statistics") {
       const days = Number(ctx.query.days || 30);
+      const day = ctx.query.day;
       const level = ctx.query.level === undefined ? undefined : Number(ctx.query.level);
       const source = ctx.query.source || "all";
       if (
         ![7, 30, 90].includes(days) ||
+        (day !== undefined &&
+          (typeof day !== "string" ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(day) ||
+            !Number.isFinite(Date.parse(day)) ||
+            new Date(day).toISOString().slice(0, 10) !== day)) ||
         !["all", "gameplay", "samples"].includes(source) ||
         (level !== undefined && (!Number.isSafeInteger(level) || level < 1 || level > 100000))
       ) {
@@ -100,7 +106,10 @@ function createApp({
         ctx.body = { error: "invalid_filters" };
         return;
       }
-      ctx.body = { ...(await store.report({ days, level, source })), sampleData };
+      ctx.body = {
+        ...(await store.report({ ...(day === undefined ? { days } : { day }), level, source })),
+        sampleData
+      };
     } else {
       const file = files[ctx.path];
       ctx.type = path.extname(file);

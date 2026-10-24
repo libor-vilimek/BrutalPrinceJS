@@ -27,7 +27,7 @@ function svg(tag, attrs, text) {
   }
   return node;
 }
-function trend(id, rows, daysRange, key, color, label) {
+function trend(id, rows, { daysRange, rangeStart }, key, color, label) {
   const root = byId(id);
   root.replaceChildren();
   if (!rows.length) {
@@ -36,8 +36,9 @@ function trend(id, rows, daysRange, key, color, label) {
   }
   const days = new Map(rows.map((row) => [row._id, row]));
   const values = [];
-  for (let index = daysRange - 1; index >= 0; index--) {
-    const key = new Date(Date.now() - index * 86400000).toISOString().slice(0, 10);
+  const start = rangeStart ? Date.parse(rangeStart) : Date.now() - (daysRange - 1) * 86400000;
+  for (let index = 0; index < daysRange; index++) {
+    const key = new Date(start + index * 86400000).toISOString().slice(0, 10);
     values.push(days.get(key) || { _id: key, princeDeaths: 0, enemyDeaths: 0 });
   }
   const chart = svg("svg", { viewBox: "0 0 620 200", role: "img", "aria-label": label });
@@ -220,8 +221,8 @@ function render(data) {
     );
     metrics.append(card);
   }
-  trend("prince-trend", data.days, data.daysRange, "princeDeaths", "#eb8174", "Prince deaths per UTC day");
-  trend("enemy-trend", data.days, data.daysRange, "enemyDeaths", "#dbb56d", "Enemies defeated per UTC day");
+  trend("prince-trend", data.days, data, "princeDeaths", "#eb8174", "Prince deaths per UTC day");
+  trend("enemy-trend", data.days, data, "enemyDeaths", "#dbb56d", "Enemies defeated per UTC day");
   const causes = byId("causes");
   causes.replaceChildren();
   const deaths = data.causes.filter((row) => row._id.type === "prince_died").slice(0, 6);
@@ -330,9 +331,15 @@ function render(data) {
 let request = 0;
 async function refresh() {
   const current = ++request;
+  const singleDay = byId("days").value === "day";
+  if (singleDay && !byId("day").checkValidity()) {
+    byId("status").textContent = "Select a valid UTC day to view statistics.";
+    return;
+  }
   byId("status").textContent = "Loading statistics…";
   try {
-    const query = new window.URLSearchParams({ days: byId("days").value, source: byId("source").value });
+    const query = new window.URLSearchParams({ source: byId("source").value });
+    query.set(singleDay ? "day" : "days", singleDay ? byId("day").value : byId("days").value);
     if (byId("level").value) {
       query.set("level", byId("level").value);
     }
@@ -358,7 +365,12 @@ async function refresh() {
   }
 }
 byId("refresh").addEventListener("click", refresh);
-byId("days").addEventListener("change", refresh);
+byId("day").value = new Date().toISOString().slice(0, 10);
+byId("days").addEventListener("change", () => {
+  byId("day-filter").hidden = byId("days").value !== "day";
+  refresh();
+});
+byId("day").addEventListener("change", refresh);
 byId("level").addEventListener("change", refresh);
 byId("source").addEventListener("change", refresh);
 byId("preview-close").addEventListener("click", () => byId("room-preview").close());

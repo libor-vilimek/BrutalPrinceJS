@@ -298,6 +298,67 @@ test(
         (await store.report({ days: 7, level: 71, source: "samples" })).guardsPerPlayer[0].killsPer100Starters,
         400
       );
+      await t.test("single-day reports respect UTC boundaries for compact and legacy data", async () => {
+        const midnight = Date.parse(yesterday);
+        const legacyRows = [-1, 0, 86400000 - 1, 86400000].map((offset) => ({
+          ...death,
+          eventId: randomUUID(),
+          sessionId: randomUUID(),
+          mapId: "campaign:90",
+          mapRevision: "danger-test",
+          levelNumber: 90,
+          receivedAt: new Date(midnight + offset)
+        }));
+        await collection.insertMany(legacyRows);
+        const daily = (day, count) => ({
+          ...rankingSummary(90, day, 1, count),
+          counters: { starts: 1, princeDeaths: count * 2, hpLost: count * 20, enemyDeaths: count },
+          kills: [{ cause: "fire", weapon: "molotov", count }]
+        });
+        assert(
+          (await compact(randomUUID(), [daily(yesterday, 3), daily(today, 7)])).every((row) => row.status === "stored")
+        );
+        const response = await fetch(
+          `http://127.0.0.1:${listener.address().port}/api/v1/statistics?day=${yesterday}&level=90&source=gameplay`
+        );
+        assert.equal(response.status, 200);
+        const report = await response.json();
+        assert.equal(report.rangeStart, yesterday);
+        assert.equal(report.daysRange, 1);
+        assert.equal(report.days.length, 1);
+        assert.equal(report.days[0]._id, yesterday);
+        assert.equal(report.totals.enemyDeaths, 5, "include UTC midnight and final millisecond, exclude adjacent days");
+        assert.equal(report.totals.princeDeaths, 6);
+        assert.equal(report.totals.starts, 1);
+        assert.equal(report.totals.hpLost, 60);
+        assert.equal(report.levels.length, 1);
+        assert.equal(report.weapons.find((row) => row._id === "molotov").kills, 5);
+        assert(report.latestDeaths.length > 0);
+        assert(report.latestDeaths.every((row) => row.receivedAt.slice(0, 10) === yesterday));
+        for (const rows of [report.guardsPerPlayer, report.trapsPerPlayer]) {
+          assert.equal(rows[0].kills, 3);
+          assert.equal(rows[0].levelStarters, 1);
+          assert.equal(rows[0].killsPer100Starters, 300);
+        }
+        const empty = await store.report({ day: yesterday, level: 90, source: "samples" });
+        assert.equal(empty.totals.events, 0);
+        assert.deepEqual(empty.days, []);
+        assert.deepEqual(empty.latestDeaths, []);
+        const emptyDay = await store.report({ day: "2000-01-01", level: 90 });
+        assert.equal(emptyDay.daysRange, 1);
+        assert.equal(emptyDay.totals.events, 0);
+        assert.deepEqual(emptyDay.days, []);
+        const milestones = (await store.report({ day: yesterday, level: 6 })).milestones;
+        assert.equal(milestones.length, 7);
+        assert(milestones.every((row) => row.clients === 1 && row.occurrences === (row._id === "doors" ? 2 : 1)));
+        const rolling = await store.report({ days: 7, level: 90 });
+        assert.equal(rolling.daysRange, 7);
+        assert.equal(
+          rolling.totals.enemyDeaths,
+          14,
+          "rolling periods retain both compact days and all legacy fixtures"
+        );
+      });
       await t.test(
         "currently playing uses unique server receipts within 180 seconds, independent of history",
         async () => {
@@ -318,6 +379,7 @@ test(
             1,
             "live clients are global, even in an empty historical selection"
           );
+          assert.equal((await store.report({ day: "2000-01-01", level: 99, source: "samples" })).currentlyPlaying, 1);
           await collection.updateMany({ clientId: liveClient }, { $set: { updatedAt: expired, receivedAt: expired } });
           assert.equal(await readCurrentlyPlaying(collection), 0);
           await compact(liveClient, [liveRows[1]]);

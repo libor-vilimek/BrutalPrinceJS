@@ -211,6 +211,45 @@ test("statistics dashboard is public by default, with bounded filters and an exp
   }
 });
 
+test("statistics accepts a single UTC calendar day alongside level/source filters and rejects invalid dates", async (t) => {
+  const calls = [];
+  const url = await server(t, {
+    store: {
+      report: async (options) => {
+        calls.push(options);
+        return { totals: { events: 2 } };
+      }
+    }
+  });
+  for (const day of ["2026-10-24", "2024-02-29", "2026-01-01", "2026-12-31"]) {
+    const response = await fetch(`${url}/api/v1/statistics?day=${day}&level=3&source=gameplay`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls.at(-1), { day, level: 3, source: "gameplay" });
+  }
+  assert.equal((await fetch(`${url}/api/v1/statistics?day=2026-10-24&days=7`)).status, 200);
+  assert.deepEqual(calls.at(-1), { day: "2026-10-24", level: undefined, source: "all" });
+  const accepted = calls.length;
+  for (const query of [
+    "day=",
+    "day=2026-2-03",
+    "day=2026-02-29",
+    "day=2026-04-31",
+    "day=2026-00-01",
+    "day=2026-13-01",
+    "day=2026-01-00",
+    "day=2026-01-32",
+    "day=2026-10-24T00:00:00Z",
+    "day=today",
+    "day=2026-10-24&day=2026-10-25",
+    "day[$gte]=2026-10-24&day=invalid"
+  ]) {
+    const response = await fetch(`${url}/api/v1/statistics?${query}`);
+    assert.equal(response.status, 400, query);
+    assert.deepEqual(await response.json(), { error: "invalid_filters" });
+  }
+  assert.equal(calls.length, accepted, "invalid date filters must never reach the database");
+});
+
 test(
   "Heroku server exposes the dashboard at the public hostname without authentication",
   { timeout: 10000 },

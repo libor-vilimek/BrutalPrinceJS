@@ -281,6 +281,8 @@ Implementační rozhodnutí pro menu: bez zobrazeného dotykového panelu trvá 
 
 - **STATS-15:** Statistiky zobrazují počet právě hrajících jako počet unikátních klientů, od nichž server přijal aktualizaci v posledních 180 sekundách. Implementační rozhodnutí: každý klient se počítá jednou napříč levely, revizemi a dny; rozhoduje serverový čas přijetí, nikoli čas události od klienta. Ukazatel zahrnuje skutečné hraní ve všech levelech, nezávisí na historických filtrech a vylučuje generované ukázky. Obnovuje se s dashboardem každých 15 sekund; při chybě obnovení ukazuje pomlčku. Používá existující `updatedAt` souhrnů a u starých událostí `receivedAt` a `sessionId`, nepřidává další zprávy o aktivitě ani trvalou identitu. Hraniční stáří přesně 180 sekund se ještě započítá. Vypnutý sběr či nečinnost vyřadí klienta po zestárnutí poslední přijaté aktualizace; reload může dočasně započítat staré i nové ID podle STATS-09.
 
+- **STATS-16:** Dashboard `/statistics` umožňuje vybrat jeden konkrétní den a zobrazit pouze jeho historické statistiky. Implementační rozhodnutí: volba `Single day` ve filtru `Period` odkryje `Day (UTC)` s výběrem kalendářního dne. Všechny historické souhrny, grafy, žebříčky a poslední úmrtí používají interval od půlnoci UTC včetně do následující půlnoci UTC bez ní; nadále platí filtry levelu a zdroje dat. Kompaktní souhrny používají uložený den hraní, starší události den přijetí serverem. Prázdný den zobrazí nulové souhrny a prázdné výsledky. API přijímá validované `day=YYYY-MM-DD` a vrací počátek zvoleného období pro správné datum grafů. Dosavadní klouzavá období a nezávislý živý počet podle STATS-15 zůstávají.
+
 ## Nahrazená rozhodnutí
 
 Tento přehled brání návratu ke starším požadavkům. Nejde o aktivní alternativy.

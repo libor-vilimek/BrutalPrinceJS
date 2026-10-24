@@ -91,6 +91,9 @@ h1 {
   gap: 10px;
   align-items: flex-end;
 }
+.filters [hidden] {
+  display: none;
+}
 .source-info {
   display: flex;
   flex-wrap: wrap;
@@ -110,6 +113,7 @@ label {
   font-size: 11px;
 }
 select,
+input[type="date"],
 button {
   background: var(--panel);
   color: var(--text);
@@ -124,6 +128,7 @@ button {
   padding: 4px 13px;
 }
 button:hover,
+input[type="date"]:hover,
 select:hover {
   border-color: var(--gold);
 }
@@ -472,9 +477,11 @@ footer {
     width: 100%;
   }
   .filters label {
-    flex: 1;
+    flex: 1 1 130px;
+    min-width: 0;
   }
-  select {
+  select,
+  input[type="date"] {
     width: 100%;
   }
 }

@@ -4,11 +4,16 @@ const { milestonePipeline } = require("./milestones");
 const { dangerRanking } = require("./danger-rankings");
 const { readCurrentlyPlaying } = require("./currently-playing");
 
-async function readStatistics(collection, { days = 30, level, source = "all" } = {}) {
+async function readStatistics(collection, { days = 30, day, level, source = "all" } = {}) {
   const now = new Date();
-  const since = new Date(now.toISOString().slice(0, 10));
-  since.setUTCDate(since.getUTCDate() - days + 1);
-  const match = { receivedAt: { $gte: since } };
+  const since = new Date(day || now.toISOString().slice(0, 10));
+  if (!day) {
+    since.setUTCDate(since.getUTCDate() - days + 1);
+  }
+  const until = day ? new Date(since.getTime() + 86400000) : undefined;
+  const receivedRange = { $gte: since, ...(until ? { $lt: until } : {}) };
+  const playDayRange = day ? { $eq: day } : { $gte: since.toISOString().slice(0, 10) };
+  const match = { playDay: playDayRange };
   if (source === "samples") {
     match.sampleData = true;
   }
@@ -48,10 +53,10 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
     .aggregate([
       {
         $match: {
-          ...Object.fromEntries(Object.entries(match).filter(([key]) => key !== "receivedAt")),
+          ...Object.fromEntries(Object.entries(match).filter(([key]) => key !== "playDay")),
           $or: [
-            { schemaVersion: 2, day: { $gte: since.toISOString().slice(0, 10) } },
-            { schemaVersion: { $ne: 2 }, receivedAt: { $gte: since } }
+            { schemaVersion: 2, day: playDayRange },
+            { schemaVersion: { $ne: 2 }, receivedAt: receivedRange }
           ]
         }
       },
@@ -148,7 +153,8 @@ async function readStatistics(collection, { days = 30, level, source = "all" } =
       hpLost: 0,
       activeMs: 0
     },
-    daysRange: days
+    daysRange: day ? 1 : days,
+    rangeStart: since.toISOString().slice(0, 10)
   };
 }
 

@@ -121,6 +121,17 @@ causes, daily trends, level completion, actual guard damage, traps, weapons and 
 groups and their repeat counts. Period filters include complete UTC play days; guard rankings separate revisions and
 screens. Completion compares starts/completions within the selected period, not individually tracked cohorts.
 
+Choose **Single day** in **Period**, then select **Day (UTC)** to see only that calendar day's observations in every
+historical total, chart and table. The day starts at 00:00 UTC and ends just before the next UTC midnight. Level and data
+filters still apply; choose a rolling period again to return to multiple days. A day without observations shows zero
+totals and empty results. **Currently playing** remains the live count described below.
+
+The read API accepts `GET /api/v1/statistics?day=2026-10-24` with optional `level` and `source` filters. `day` must be a
+real calendar date in `YYYY-MM-DD` format and takes precedence over a valid `days` parameter. Without `day`, `days=7`,
+`30` (default) or `90` selects a rolling period. The response includes `rangeStart` (the first UTC day) and `daysRange`
+(1 for a single day), so historical charts use the requested date. Compact summaries use their stored play day; legacy
+events use their server receipt day, as in the rolling reports.
+
 The dashboard refreshes every 15 seconds while visible and immediately on return. Allow for the three-second game batch
 delay, or use manual refresh.
 
