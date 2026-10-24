@@ -181,6 +181,7 @@ PrinceJS.Game.prototype = {
     this.enemyDeathEffects = new PrinceJS.EnemyDeathEffects(this);
     this.burningEnemyEffects = new PrinceJS.BurningEnemyEffects(this);
     this.laserTurret = PrinceJS.LaserTurret.create(this);
+    this.levelHints = new PrinceJS.LevelHints(this);
 
     this.world.sort("z");
     this.world.alpha = 1;
@@ -246,6 +247,9 @@ PrinceJS.Game.prototype = {
       this.bloodEffects.update(delta);
     }
     this.updateCamera(delta);
+    if (this.levelHints) {
+      this.levelHints.update(delta);
+    }
     if (PrinceJS.Utils.continueGame(this.game)) {
       this.buttonPressed();
       let pos = PrinceJS.Utils.effectivePointer(this.game);
@@ -334,6 +338,10 @@ PrinceJS.Game.prototype = {
     if (this.tutorial) {
       this.tutorial.destroy();
       this.tutorial = null;
+    }
+    if (this.levelHints) {
+      this.levelHints.destroy();
+      this.levelHints = null;
     }
     if (this.kick) {
       this.kick.destroy();

@@ -17,6 +17,7 @@ test("the local preview serves isolated demos but has no database, game page, pr
   assert.equal(engine.status, 200);
   assert.match(html, /Finale.js/);
   assert.match(html, /TutorialOverlay.js/);
+  assert.match(html, /LevelHints.js/);
   assert.doesNotMatch(html, /Statistics|GameSettings|\/Game.js|Preloader/);
   for (const pathname of ["/.env", "/server/index.js", "/package.json", "/index.html", "/api/v2/gameplay-statistics"]) {
     assert.equal((await fetch(origin + pathname)).status, 404, pathname);

@@ -10,6 +10,8 @@ const demos = new Set([
   "tutorial-torches",
   "tutorial-inventory",
   "tutorial-ledge",
+  "guidance-route",
+  "guidance-exit",
   "finale",
   "epilogue"
 ]);
@@ -44,10 +46,11 @@ const preview = {
     this.game.sound.mute = true;
     this.game.sound.volume = 0;
     this.load.onFileError.add((key) => this.report("Could not load " + key + ". Reload this preview."));
-    for (const key of ["kid", "palace", "general", "princess", "jaffar", "cutscene", "title"]) {
+    for (const key of ["kid", "dungeon", "palace", "general", "princess", "jaffar", "cutscene", "title"]) {
       this.load.atlasJSONHash(key, `/assets/gfx/${key}.png`, `/assets/gfx/${key}.json`);
     }
     this.load.json("kid-anims", "/assets/anims/kid.json");
+    this.load.json("guidance-rooms", "/dev/preview/guidance-rooms.json");
     this.load.bitmapFont("font", "/assets/font/prince_0.png", "/assets/font/prince.fnt");
   },
 
@@ -78,11 +81,18 @@ const preview = {
     if (this.casings) {
       this.casings.destroy();
     }
+    if (this.hints) {
+      this.hints.destroy();
+    }
+    if (this.roomCamera) {
+      this.roomCamera.destroy();
+    }
     if (this.level) {
       this.level.dummyWall.destroy();
     }
     this.overlay = this.finale = this.epilogue = this.casings = this.scene = this.lesson = null;
     this.level = this.kid = null;
+    this.hints = this.roomCamera = this.minigun = null;
     this.keys.clear();
     this.world.removeAll(true);
     this.world.scale.setTo(2);
@@ -109,6 +119,8 @@ const preview = {
       this.epilogue = Object.assign(Object.create(PrinceJS.EndTitle.prototype), { game: this.game });
       this.epilogue.createBrutalEpilogue();
       this.report("The final story page · BRUTAL Prince of Persia, with animated blood.");
+    } else if (id.startsWith("guidance-")) {
+      this.buildGuidanceStage(id === "guidance-exit");
     } else {
       this.buildCasingStage(id === "deep-casings");
       if (id.startsWith("tutorial-")) {
@@ -118,6 +130,48 @@ const preview = {
       }
     }
     this.world.sort("z");
+  },
+
+  buildGuidanceStage: function (exit) {
+    // Only the two room fragments are bundled here, without running a campaign.
+    const fixture = this.game.cache.getJSON("guidance-rooms");
+    const room = structuredClone(exit ? fixture.exit : fixture.route);
+    this.level = new PrinceJS.LevelBuilder(this.game, this).buildFromJSON({
+      number: 1,
+      name: "Level 1 guidance",
+      type: PrinceJS.Level.TYPE_DUNGEON,
+      size: { width: 1, height: 1 },
+      room: [room],
+      prince: { room: -1, location: 0 },
+      events: fixture.events
+    });
+    this.kid = new PrinceJS.Actor(this.game, exit ? 25 : 105, PrinceJS.Utils.convertBlockYtoY(1), 1, "kid");
+    Object.assign(this.kid, {
+      baseY: 3,
+      room: room.id,
+      level: this.level,
+      alive: true,
+      active: true,
+      hasMinigun: true
+    });
+    this.kid.updateActor();
+    if (!exit) {
+      this.minigun = {
+        pickup: { room: room.id, worldX: 240, worldY: PrinceJS.Utils.convertBlockYtoY(1) + 3, collected: true }
+      };
+    }
+    this.roomCamera = new PrinceJS.RoomCamera(this);
+    this.roomCamera.setRoom(room.id);
+    this.hints = new PrinceJS.LevelHints(this);
+    this.report(
+      exit
+        ? 'The real exit plate, on the upper-left shelf · "press this" points down to the floor that opens the door.'
+        : 'Just after collecting the minigun · "recommended path" points right, fixed above the pickup location.'
+    );
+  },
+
+  fireEvent: function (event, type, stuck) {
+    this.level.fireEvent(event, type, stuck);
   },
 
   buildCasingStage: function (deep) {
@@ -237,6 +291,14 @@ const preview = {
       }
     } else if (this.epilogue) {
       this.epilogue.updateBrutalEpilogue(dt);
+    } else if (this.hints) {
+      this.hints.update(dt);
+      this.actorClock += dt;
+      if (this.actorClock >= 0.08) {
+        this.actorClock -= 0.08;
+        this.level.update();
+        this.kid.updateActor();
+      }
     } else if (this.kid) {
       const left = this.keys.has(Phaser.Keyboard.LEFT),
         right = this.keys.has(Phaser.Keyboard.RIGHT);

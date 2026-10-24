@@ -78,7 +78,9 @@ Blood stains, fallen body parts and brass remain throughout the level, even afte
 
 For isolated local previews, run `npm run preview` and open [the preview launcher](http://127.0.0.1:8090/dev/preview/).
 Category buttons show the Prince walking through increasingly tall casing piles, the real tutorial windows, the
-full ending animation, and the dripping epilogue title. Replay, pause and the ending timeline make each moment easy
+level-one guidance arrows, the full ending animation, and the dripping epilogue title. Under **Level 1 guidance**,
+**Recommended path** shows the flashing right arrow above the collected minigun location, and **Exit floor switch**
+shows the down arrow over the actual exit-opening plate. Replay, pause and the ending timeline make each moment easy
 to inspect; **Open larger** gives the selected preview the full browser area. This static server
 binds only to localhost, never loads `.env` or MongoDB, and has no statistics API. Its separate engine instance does
 not start campaign levels, load a statistics recorder, change saved settings or play sound.

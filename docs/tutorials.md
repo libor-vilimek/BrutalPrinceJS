@@ -46,6 +46,21 @@ The exit lessons are independent of the earlier launcher and demolition lessons.
 
 The jetpack lesson requires the collected level-12 pickup and waits out falls, jumps, other special actions and potion pickups. It does not activate on automatic ownership in later levels or while the pack is already equipped. A keyboard press or tap on its J keycap uses the existing toggle once, without changing the selected weapon or supplying arrow input. The player controls takeoff, flight and removal. The minigun selection text simply explains that weapon 3 is the minigun; it contains no implementation notes about an already selected weapon.
 
+## First-level direction signs
+
+[LevelHints.js](../src/LevelHints.js) adds two small, non-blocking world signs in level 1. After the actual minigun
+pickup in room 2, a flashing pixel arrow points right with **recommended path**, fixed above the pickup location.
+It stays in that room as the Prince and camera move. Entering exit room 9 reveals **press this**, pointing down to
+the real raise plate on the upper-left shelf (column 0, row 0). The target is resolved through the plate's native
+event chain to the exit door, so unrelated gate switches are not marked. That sign disappears when the exit starts
+opening or is destroyed. Neither sign pauses play, changes equipment or supplies input. The gold arrows alternate
+between bright and dim every 450 ms of simulation time; their bitmap labels remain readable.
+
+Run `npm run preview`, then choose **Level 1 guidance → Recommended path** or **Exit floor switch**. Both buttons
+immediately show the same hints renderer with the actual room artwork, without playing the campaign. **Pause**
+freezes the flashing and **Replay** resets the scene; **Open larger** opens the selected example at full size. These
+isolated room fragments do not start Game, access saved settings, record statistics or play audio.
+
 ## Adding a lesson
 
 Add an entry to `PrinceJS.TutorialLessons` in [src/TutorialLessons.js](../src/TutorialLessons.js). Keep the list in the desired priority order. Only the first eligible entry opens, and another cannot interrupt an active lesson or its assisted input. Entries are normally eligible only until completed.

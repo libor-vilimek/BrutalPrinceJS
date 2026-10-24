@@ -6,7 +6,7 @@ const { test } = require("node:test");
 const { createPreviewApp } = require("../tools/preview-server");
 
 test(
-  "preview buttons run real casings, tutorial overlays and the full ending without maps, telemetry or saved settings",
+  "preview buttons show casings, tutorials, direction signs and the ending without a campaign, telemetry or saved settings",
   {
     skip: process.env.RUN_BROWSER_TESTS !== "1",
     timeout: 60000
@@ -86,6 +86,49 @@ test(
       }
       await frame.locator(".tutorial-key").first().click();
       await frame.locator(".tutorial-overlay").waitFor({ state: "hidden" });
+    }
+    for (const [button, id, text, direction] of [
+      ["Recommended path", "guidance-route", "recommended path", "right"],
+      ["Exit floor switch", "guidance-exit", "press this", "down"]
+    ]) {
+      await page.getByRole("button", { name: button, exact: true }).click();
+      await frame.waitForFunction((id) => window.PrincePreview.id === id && window.PrincePreview.hints, id);
+      const sign = await frame.evaluate(() => {
+        const preview = window.PrincePreview;
+        const hint = preview.hints.hints[0];
+        return {
+          label: hint.label.text,
+          visible: hint.layer.visible,
+          worldPosition: [hint.layer.x, hint.layer.y],
+          fixedToCamera: hint.layer.fixedToCamera,
+          abovePrince: hint.layer.y < preview.kid.y - preview.kid.height,
+          foreground: hint.layer.z > preview.level.front.z
+        };
+      });
+      assert.equal(sign.label, text);
+      assert.ok(sign.visible && !sign.fixedToCamera && sign.foreground);
+      if (direction === "right") {
+        assert.ok(sign.abovePrince, "the path arrow sits above the Prince's head");
+      }
+      await frame.waitForFunction(() => window.PrincePreview.hints.hints[0].arrow.alpha === 0.3);
+      await frame.waitForFunction(() => window.PrincePreview.hints.hints[0].arrow.alpha === 1);
+      await page.getByRole("button", { name: "Pause", exact: true }).click();
+      await frame.waitForFunction(() => window.PrincePreview.paused);
+      const frozen = await frame.evaluate(() => window.PrincePreview.hints.elapsed);
+      await page.waitForTimeout(120);
+      assert.equal(await frame.evaluate(() => window.PrincePreview.hints.elapsed), frozen);
+      if (process.env.PREVIEW_SCREENSHOT_DIR) {
+        await page.screenshot({ path: path.join(process.env.PREVIEW_SCREENSHOT_DIR, `preview-${id}.png`) });
+      }
+      if (direction === "down") {
+        await frame.evaluate(() => {
+          const preview = window.PrincePreview;
+          preview.hints.hints[0].button.push();
+          preview.hints.update(0);
+        });
+        assert.equal(await frame.evaluate(() => window.PrincePreview.level.exitDoorOpen), true);
+        assert.equal(await frame.evaluate(() => window.PrincePreview.hints.hints[0].layer.visible), false);
+      }
     }
     await page.getByRole("button", { name: "Play the full ending" }).click();
     await frame.waitForFunction(() => window.PrincePreview.id === "finale" && window.PrincePreview.finale);

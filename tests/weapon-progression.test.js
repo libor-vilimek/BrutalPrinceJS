@@ -230,6 +230,7 @@ function fixture(number, inventory) {
   };
   PrinceJS.WeaponAudio =
     PrinceJS.Tutorial =
+    PrinceJS.LevelHints =
     PrinceJS.RoomCamera =
     PrinceJS.Jetpack =
     PrinceJS.BloodEffects =
