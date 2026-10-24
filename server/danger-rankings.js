@@ -1,4 +1,5 @@
 "use strict";
+const { clientFlag, groupWithClients } = require("./report-clients");
 
 const kills = { $sum: { $cond: [{ $eq: ["$eventType", "prince_died"] }, { $ifNull: ["$count", 1] }, 0] } };
 const hpLost = {
@@ -6,6 +7,7 @@ const hpLost = {
 };
 const hits = { $sum: { $cond: [{ $eq: ["$eventType", "prince_damaged"] }, { $ifNull: ["$count", 1] }, 0] } };
 const level = { level: "$levelNumber", map: "$mapId", revision: "$mapRevision" };
+const death = { $eq: ["$eventType", "prince_died"] };
 
 function dangerRanking(kind, relative = false) {
   const source =
@@ -25,7 +27,11 @@ function dangerRanking(kind, relative = false) {
   if (!relative) {
     return [
       { $match: match },
-      { $group: { _id: { ...level, ...source }, kills, hpLost, ...(kind === "guards" ? { hits } : {}) } },
+      ...groupWithClients(
+        { ...level, ...source },
+        { kills, hpLost, ...(kind === "guards" ? { hits } : {}) },
+        { deathClients: death }
+      ),
       { $sort: kind === "guards" ? { hpLost: -1, kills: -1 } : { kills: -1, hpLost: -1 } },
       { $limit: 8 }
     ];
@@ -43,9 +49,11 @@ function dangerRanking(kind, relative = false) {
         _id: {
           ...level,
           source: { $cond: [started, null, source] },
-          client: { $cond: [started, "$clientId", null] }
+          client: "$clientId"
         },
-        started: { $max: { $cond: [started, 1, 0] } },
+        started: clientFlag(started),
+        clients: clientFlag({ $in: ["$eventType", ["prince_damaged", "prince_died"]] }),
+        deathClients: clientFlag(death),
         kills,
         hpLost,
         hits
@@ -57,7 +65,19 @@ function dangerRanking(kind, relative = false) {
         output: { levelStarters: { $sum: "$started", window: { documents: ["unbounded", "unbounded"] } } }
       }
     },
-    { $match: { "_id.source": { $ne: null }, kills: { $gt: 0 }, levelStarters: { $gt: 0 } } },
+    { $match: { "_id.source": { $ne: null }, levelStarters: { $gt: 0 } } },
+    {
+      $group: {
+        _id: { level: "$_id.level", map: "$_id.map", revision: "$_id.revision", source: "$_id.source" },
+        kills: { $sum: "$kills" },
+        hpLost: { $sum: "$hpLost" },
+        hits: { $sum: "$hits" },
+        clients: { $sum: "$clients" },
+        deathClients: { $sum: "$deathClients" },
+        levelStarters: { $max: "$levelStarters" }
+      }
+    },
+    { $match: { kills: { $gt: 0 } } },
     {
       $project: {
         _id: {
@@ -66,6 +86,8 @@ function dangerRanking(kind, relative = false) {
         kills: 1,
         hpLost: 1,
         hits: 1,
+        clients: 1,
+        deathClients: 1,
         levelStarters: 1,
         killsPer100Starters: { $multiply: [{ $divide: ["$kills", "$levelStarters"] }, 100] }
       }

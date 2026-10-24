@@ -2,6 +2,7 @@
 
 const byId = (id) => document.getElementById(id);
 const number = (value) => new Intl.NumberFormat("en").format(value || 0);
+const clientText = (value) => `${number(value)} ${value === 1 ? "client" : "clients"}`;
 const duration = (ms) => `${(ms / 3600000).toFixed(1)}h`;
 const title = (value) => (value || "unknown").replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
 function element(tag, text, className) {
@@ -16,6 +17,12 @@ function element(tag, text, className) {
 }
 function empty(node) {
   node.append(element("p", "No observations in this period.", "empty"));
+}
+function selectDay(day) {
+  byId("days").value = "day";
+  byId("day").value = day;
+  byId("day-filter").hidden = false;
+  refresh();
 }
 function svg(tag, attrs, text) {
   const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -41,7 +48,7 @@ function trend(id, rows, { daysRange, rangeStart }, key, color, label) {
     const key = new Date(start + index * 86400000).toISOString().slice(0, 10);
     values.push(days.get(key) || { _id: key, princeDeaths: 0, enemyDeaths: 0 });
   }
-  const chart = svg("svg", { viewBox: "0 0 620 200", role: "img", "aria-label": label });
+  const chart = svg("svg", { viewBox: "0 0 620 200", role: "group", "aria-label": label });
   const maximum = Math.ceil(Math.max(1, ...values.map((row) => row[key] || 0)) / 4) * 4;
   for (let i = 0; i <= 4; i++) {
     const y = 15 + i * 37;
@@ -51,10 +58,12 @@ function trend(id, rows, { daysRange, rangeStart }, key, color, label) {
     );
   }
   const slot = 558 / values.length;
+  const clientKey = key === "princeDeaths" ? "princeDeathClients" : "enemyDeathClients";
+  const describe = (row) => `${row._id} UTC: ${number(row[key])} · ${clientText(row[clientKey])}`;
   values.forEach((row, index) => {
     const value = row[key] || 0;
     const height = (value / maximum) * 148;
-    const description = `${row._id} UTC: ${number(value)}`;
+    const description = describe(row);
     const bar = svg("rect", {
       x: 52 + index * slot + slot * 0.15,
       y: 163 - height,
@@ -64,7 +73,9 @@ function trend(id, rows, { daysRange, rangeStart }, key, color, label) {
       opacity: value ? 1 : 0.25,
       "data-day": row._id,
       "data-count": value,
-      "aria-label": description,
+      "data-clients": row[clientKey] || 0,
+      role: "button",
+      "aria-label": `${description}. Show statistics for this day.`,
       tabindex: 0
     });
     bar.append(svg("title", {}, description));
@@ -76,6 +87,13 @@ function trend(id, rows, { daysRange, rangeStart }, key, color, label) {
     });
     bar.addEventListener("click", () => {
       byId(`${id}-value`).textContent = description;
+      selectDay(row._id);
+    });
+    bar.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        selectDay(row._id);
+      }
     });
     chart.append(bar);
   });
@@ -84,7 +102,13 @@ function trend(id, rows, { daysRange, rangeStart }, key, color, label) {
     svg("text", { x: 610, y: 190, "text-anchor": "end" }, values.at(-1)._id.slice(5))
   );
   root.append(chart);
-  root.append(element("p", "Select a day to see its count.", "footnote"));
+  root.append(
+    element(
+      "p",
+      daysRange === 1 ? describe(values[0]) : "Click a day to show its statistics. Hover or focus for counts.",
+      "footnote"
+    )
+  );
   root.lastChild.id = `${id}-value`;
 }
 function previewTarget(row) {
@@ -143,6 +167,7 @@ function ranks(id, rows, details, primary, relative = false) {
             : `${number(row.hpLost)} HP lost`
       )
     );
+    value.append(element("small", `${clientText(row.clients)} affected · ${clientText(row.deathClients)} died`));
     item.append(element("span", String(index + 1).padStart(2, "0"), "rank-number"), name, value);
     root.append(item);
   });
@@ -151,7 +176,10 @@ function render(data) {
   byId("sample").hidden = !data.sampleData;
   byId("storage").textContent = data.storage ? `${data.storage.database}.${data.storage.collection}` : "";
   byId("data-counts").textContent = (data.dataSources || [])
-    .map((row) => `${number(row.events)} ${row._id === "samples" ? "sample" : "gameplay"} observations`)
+    .map(
+      (row) =>
+        `${number(row.events)} ${row._id === "samples" ? "sample" : "gameplay"} observations · ${clientText(row.clients)}`
+    )
     .join(" · ");
   const deathsTable = byId("latest-deaths");
   deathsTable.replaceChildren();
@@ -199,15 +227,23 @@ function render(data) {
   const metrics = byId("metrics");
   metrics.replaceChildren();
   for (const [label, value, note, id] of [
-    ["Prince deaths", number(t.princeDeaths), "Observed fatal outcomes"],
-    ["Enemies defeated", number(t.enemyDeaths), "One kill per actor per attempt"],
-    ["Level attempts", number(t.starts), `${number(t.observations)} additional partial observations`],
+    ["Prince deaths", number(t.princeDeaths), `${clientText(t.princeDeathClients)} died`],
+    ["Enemies defeated", number(t.enemyDeaths), `${clientText(t.enemyDeathClients)} defeated enemies`],
+    [
+      "Level attempts",
+      number(t.starts),
+      `${clientText(t.startedClients)} started · ${number(t.observations)} partial observations`
+    ],
     [
       "Completion rate",
       t.starts ? `${Math.round((t.completed / t.starts) * 100)}%` : "—",
-      `${number(t.completed)} full attempts completed`
+      `${number(t.completed)} full ${t.completed === 1 ? "attempt" : "attempts"} · ${clientText(t.completedClients)} finished`
     ],
-    ["Active play", duration(t.activeMs), `${number(t.hpLost)} Prince HP lost`],
+    [
+      "Active play",
+      duration(t.activeMs),
+      `${clientText(t.activeClients)} active · ${number(t.hpLost)} HP lost by ${clientText(t.damagedClients)}`
+    ],
     ["Currently playing", number(data.currentlyPlaying), "Unique clients · last 180s · all levels", "currently-playing"]
   ]) {
     const card = element("article", undefined, "metric");
@@ -232,7 +268,12 @@ function render(data) {
   for (const row of deaths) {
     const item = element("div");
     const label = element("div", title(row._id.cause), "bar-label");
-    label.append(element("span", `${number(row.deaths)} · ${Math.round((row.deaths / t.princeDeaths) * 100)}%`));
+    label.append(
+      element(
+        "span",
+        `${number(row.deaths)} · ${Math.round((row.deaths / t.princeDeaths) * 100)}% · ${clientText(row.clients)}`
+      )
+    );
     const track = element("div", undefined, "track");
     const fill = element("div", undefined, "fill");
     fill.style.width = `${(row.deaths / Math.max(...deaths.map((r) => r.deaths))) * 100}%`;
@@ -247,15 +288,20 @@ function render(data) {
     const name = element("td", `Level ${row._id.level}`);
     name.append(element("small", `${row._id.map} · ${row._id.revision.slice(0, 8)}`));
     tr.append(name);
-    for (const value of [
-      number(row.starts),
-      number(row.completed),
-      row.starts ? `${Math.round((row.completed / row.starts) * 100)}%` : "—",
-      number(row.princeDeaths),
-      number(row.enemyDeaths),
-      duration(row.activeMs)
+    for (const [value, clients] of [
+      [number(row.starts), row.startedClients],
+      [number(row.completed), row.completedClients],
+      [row.starts ? `${Math.round((row.completed / row.starts) * 100)}%` : "—"],
+      [number(row.princeDeaths), row.princeDeathClients],
+      [number(row.enemyDeaths), row.enemyDeathClients],
+      [duration(row.activeMs), row.activeClients]
     ]) {
-      tr.append(element("td", value));
+      const cell = element("td");
+      cell.append(element("span", value));
+      if (clients !== undefined) {
+        cell.append(element("small", clientText(clients)));
+      }
+      tr.append(cell);
     }
     levels.append(tr);
   }
@@ -289,7 +335,8 @@ function render(data) {
       element("h3", title(row._id)),
       element("strong", number(row.kills)),
       element("span", " kills", "subtle"),
-      element("p", `${number(row.shots)} uses · ${number(row.hits)} hits`)
+      element("p", `${number(row.shots)} uses · ${number(row.hits)} hits`),
+      element("p", `${clientText(row.usedClients)} used · ${clientText(row.killClients)} with kills`)
     );
     weapons.append(item);
   }
@@ -353,7 +400,7 @@ async function refresh() {
     }
     render(data);
     byId("status").textContent =
-      `${number(data.totals.events)} observations · updated ${new Date().toLocaleTimeString()}`;
+      `${number(data.totals.events)} observations · ${clientText(data.totals.clients)} · updated ${new Date().toLocaleTimeString()}`;
   } catch (error) {
     if (current === request) {
       byId("status").textContent = "Statistics unavailable. Use refresh to try again.";

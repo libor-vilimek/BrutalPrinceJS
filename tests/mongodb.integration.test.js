@@ -360,6 +360,220 @@ test(
         );
       });
       await t.test(
+        "unique clients are deduplicated across attempts, days, levels and revisions for each metric",
+        async () => {
+          const baseline = await store.report({ days: 7, source: "gameplay" });
+          const [a, b, c, legacyClient] = Array.from({ length: 4 }, () => randomUUID());
+          const guard = {
+            kind: "guard",
+            guardId: 1,
+            roomId: 1,
+            spawnLocation: { roomId: 1, tileColumn: 3, tileRow: 1 }
+          };
+          const location = { roomId: 1, tileColumn: 3, tileRow: 1 };
+          const payloads = {
+            level_started: {},
+            level_observation_started: {},
+            level_ended: { outcome: "completed", activeMs: 0 },
+            prince_died: { mechanism: "sword", source: guard },
+            enemy_died: { mechanism: "fire", weapon: "molotov" }
+          };
+          function daily(day, levelNumber, revision, values) {
+            const summary = new StatisticsSummary();
+            const base = {
+              ...events[0],
+              mapId: `campaign:${levelNumber}`,
+              levelNumber,
+              mapRevision: revision,
+              occurredAt: `${day}T12:00:00.000Z`,
+              location,
+              partialAttempt: false
+            };
+            let key;
+            const add = (eventType, payload, partialAttempt = false) => {
+              key = summary.add({ ...base, eventType, payload, partialAttempt });
+            };
+            for (const [name, type] of Object.entries({
+              starts: "level_started",
+              completed: "level_ended",
+              deaths: "prince_died",
+              kills: "enemy_died",
+              observations: "level_observation_started"
+            })) {
+              for (let index = 0; index < (values[name] || 0); index++) {
+                add(type, payloads[type]);
+              }
+            }
+            if (values.partialCompleted) {
+              add("level_ended", payloads.level_ended, true);
+            }
+            if (values.damage) {
+              add("prince_damaged", { mechanism: "sword", source: guard, hpLost: values.damage });
+            }
+            if (values.activeMs) {
+              add("level_activity", { activeMs: values.activeMs });
+            }
+            if (values.shots) {
+              add("weapon_used", { weapon: "molotov", shots: values.shots, hits: values.kills || 0 });
+            }
+            return summary.snapshot(key);
+          }
+          const rowsA = [
+            daily(yesterday, 91, "clients-a", {
+              starts: 3,
+              completed: 2,
+              deaths: 2,
+              kills: 4,
+              damage: 3,
+              activeMs: 1000,
+              shots: 10
+            }),
+            daily(today, 91, "clients-a", {
+              starts: 1,
+              completed: 1,
+              deaths: 1,
+              kills: 1,
+              damage: 1,
+              activeMs: 500,
+              shots: 4
+            }),
+            daily(today, 91, "clients-b", { starts: 1, damage: 1, activeMs: 250, shots: 1 }),
+            daily(today, 92, "clients-a", {
+              starts: 2,
+              completed: 1,
+              deaths: 1,
+              kills: 2,
+              damage: 2,
+              activeMs: 1000,
+              shots: 8
+            })
+          ];
+          const rowsB = [
+            daily(today, 91, "clients-a", { starts: 2, completed: 1, kills: 2, damage: 4, activeMs: 200, shots: 6 })
+          ];
+          const rowsC = [
+            daily(today, 91, "clients-a", { observations: 1, partialCompleted: 1, deaths: 1, damage: 1, activeMs: 100 })
+          ];
+          for (const [id, rows] of [
+            [a, rowsA],
+            [b, rowsB],
+            [c, rowsC]
+          ]) {
+            assert((await compact(id, rows)).every((row) => row.status === "stored"));
+          }
+          // Legacy retries/attempts use sessionId and join the same selected level/revision.
+          const legacyEvents = [
+            ["level_started", {}],
+            ["level_started", {}],
+            ["level_ended", payloads.level_ended],
+            ["prince_died", payloads.prince_died],
+            ["prince_died", payloads.prince_died],
+            ["enemy_died", payloads.enemy_died],
+            ["enemy_died", payloads.enemy_died],
+            ["prince_damaged", { mechanism: "sword", source: guard, hpLost: 1 }],
+            ["level_activity", { activeMs: 300 }],
+            ["weapon_used", { weapon: "molotov", shots: 2, hits: 2 }]
+          ];
+          await collection.insertMany(
+            legacyEvents.map(([eventType, payload]) => ({
+              ...events[0],
+              eventId: randomUUID(),
+              sessionId: legacyClient,
+              mapId: "campaign:91",
+              mapRevision: "clients-a",
+              levelNumber: 91,
+              eventType,
+              payload,
+              location,
+              partialAttempt: false,
+              receivedAt: new Date(`${today}T12:00:00.000Z`)
+            }))
+          );
+          const all = await store.report({ days: 7, source: "gameplay" });
+          for (const [metric, expected] of Object.entries({
+            clients: 4,
+            startedClients: 3,
+            completedClients: 3,
+            observationClients: 1,
+            princeDeathClients: 3,
+            enemyDeathClients: 3,
+            damagedClients: 4,
+            activeClients: 4
+          })) {
+            assert.equal(
+              all.totals[metric] - baseline.totals[metric],
+              expected,
+              `overall ${metric} deduplicates levels and revisions`
+            );
+          }
+          const report = await store.report({ days: 7, level: 91, source: "gameplay" });
+          assert.equal(report.totals.starts, 9);
+          assert.equal(report.totals.completed, 5, "partial completions are excluded");
+          assert.equal(report.totals.startedClients, 3);
+          assert.equal(report.totals.completedClients, 3);
+          assert.equal(report.totals.observationClients, 1);
+          assert.equal(report.totals.clients, 4);
+          assert.equal(report.totals.princeDeathClients, 3);
+          assert.equal(report.totals.enemyDeathClients, 3);
+          assert.equal(report.dataSources[0].clients, 4);
+          const levelRow = report.levels.find((row) => row._id.revision === "clients-a");
+          assert.equal(levelRow.starts, 8);
+          assert.equal(levelRow.startedClients, 3);
+          assert.equal(levelRow.completedClients, 3);
+          assert.equal(report.levels.find((row) => row._id.revision === "clients-b").startedClients, 1);
+          const cause = report.causes.find((row) => row._id.type === "prince_died");
+          assert.equal(cause.deaths, 6);
+          assert.equal(cause.clients, 3);
+          const weapon = report.weapons.find((row) => row._id === "molotov");
+          assert.equal(weapon.kills, 9);
+          assert.equal(weapon.usedClients, 3);
+          assert.equal(weapon.killClients, 3);
+          for (const rows of [report.guards, report.guardsPerPlayer]) {
+            const row = rows.find((row) => row._id.revision === "clients-a");
+            assert.equal(row.clients, 4);
+            assert.equal(row.deathClients, 3);
+            assert.equal(row.kills, 6);
+            assert.equal(row.hpLost, 10, "relative rankings retain damage-only clients");
+          }
+          assert.equal(report.guardsPerPlayer[0].levelStarters, 3);
+          const day = await store.report({ day: yesterday, level: 91 });
+          assert.equal(day.totals.startedClients, 1);
+          assert.equal(day.totals.completedClients, 1);
+          assert.equal(day.totals.starts, 3);
+          assert.equal(day.days[0].princeDeathClients, 1);
+          await collection.updateMany({ clientId: b }, { $set: { sampleData: true } });
+          assert.equal((await store.report({ days: 7, level: 91, source: "gameplay" })).totals.startedClients, 2);
+          const samples = await store.report({ days: 7, level: 91, source: "samples" });
+          assert.equal(samples.totals.startedClients, 1);
+          assert.equal(samples.totals.completedClients, 1);
+          assert.equal(samples.totals.princeDeathClients, 0);
+          const beforeMissingId = await store.report({ days: 7, level: 91, source: "gameplay" });
+          await collection.insertOne({
+            ...events[0],
+            eventId: randomUUID(),
+            sessionId: null,
+            mapId: "campaign:91",
+            mapRevision: "clients-a",
+            levelNumber: 91,
+            eventType: "level_started",
+            payload: {},
+            receivedAt: new Date(`${today}T12:00:00.000Z`)
+          });
+          const missingId = await store.report({ days: 7, level: 91, source: "gameplay" });
+          assert.equal(missingId.totals.starts, beforeMissingId.totals.starts + 1);
+          assert.equal(missingId.totals.startedClients, beforeMissingId.totals.startedClients);
+          assert.equal(
+            missingId.totals.clients,
+            beforeMissingId.totals.clients,
+            "a missing identity never invents a client"
+          );
+          const empty = await store.report({ day: "2000-01-01", level: 91 });
+          assert.equal(empty.totals.clients, 0);
+          assert.equal(empty.totals.startedClients, 0);
+          assert.equal(empty.totals.completedClients, 0);
+        }
+      );
+      await t.test(
         "currently playing uses unique server receipts within 180 seconds, independent of history",
         async () => {
           const expired = new Date(Date.now() - 3600000);

@@ -249,6 +249,9 @@ h2 {
   fill: var(--muted);
   font: 10px system-ui;
 }
+.daily-chart [role="button"] {
+  cursor: pointer;
+}
 .footnote,
 .subtle {
   font-size: 11px;

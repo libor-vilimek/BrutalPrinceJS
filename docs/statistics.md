@@ -121,7 +121,9 @@ causes, daily trends, level completion, actual guard damage, traps, weapons and 
 groups and their repeat counts. Period filters include complete UTC play days; guard rankings separate revisions and
 screens. Completion compares starts/completions within the selected period, not individually tracked cohorts.
 
-Choose **Single day** in **Period**, then select **Day (UTC)** to see only that calendar day's observations in every
+Click a day in either daily chart to switch the whole dashboard to that UTC day. A focused bar also opens with Enter
+or Space. The level and data filters are preserved, including when selecting a zero-count day.
+You can also choose **Single day** in **Period**, then select **Day (UTC)** to see only that calendar day's observations in every
 historical total, chart and table. The day starts at 00:00 UTC and ends just before the next UTC midnight. Level and data
 filters still apply; choose a rolling period again to return to multiple days. A day without observations shows zero
 totals and empty results. **Currently playing** remains the live count described below.
@@ -150,11 +152,36 @@ someone is currently playing. No additional heartbeat or player tracking is adde
 with statistics disabled disappear after their last receipt ages out. Reloads create new client IDs, so this estimates
 active clients rather than identifying individual people.
 
-### Daily charts and relative danger
+### Daily charts
 
 Prince deaths and enemy kills have separate bar charts and independent scales. Every bar is that UTC play day's count,
-not a running total. Missing days are zero; hover, focus or select a bar for its exact date and value. The summary cards
-continue to show totals for the selected period. Compact rows use their stored play day rather than the delivery date.
+not a running total. Missing days are zero; hover or focus a bar for its exact date, event count and unique clients.
+Clicking opens that day's report. The summary cards show totals for the selected period. Compact rows use their stored
+play day rather than the delivery date.
+
+### Unique clients alongside totals
+
+Summary cards retain event/attempt totals and also show unique clients who started or completed a level, died,
+defeated enemies, lost HP or reported active play. Level rows show clients beneath starts, completions, deaths, enemy
+kills and active time. Starts and completions count actual recorded starts and full
+completions; partial observations do not become starts or completed attempts. Completion percentages still use attempts.
+The daily charts, death causes, data-source summaries, weapons and danger rankings also show clients. Weapon cards
+distinguish clients who used the weapon from clients with kills; rankings show affected clients and clients who died.
+
+Each client counts once for each metric within the selected period, level and data filter. Repeat attempts, multiple
+days and revisions do not add another client to a whole-period metric. Each level/map/revision row deduplicates
+independently, so adding row counts or daily client counts can exceed the overall unique count. A client who only has
+damage observations is included among affected clients, even without a death. Active clients require recorded active
+time greater than zero. The counts use `clientId`, falling back to `sessionId` for legacy rows; missing IDs do not
+invent a client. Reloading or re-enabling collection creates a new client as described above.
+
+The read API adds `clients`, `startedClients`, `completedClients`, `observationClients`, `princeDeathClients`,
+`enemyDeathClients`, `damagedClients` and `activeClients` to totals, with the same fields on daily and level rows.
+Causes and data sources add `clients`; weapons add `clients`, `usedClients` and `killClients`; danger rankings add
+`clients` and `deathClients`. Reporting groups first by client and then sums counts, without returning client IDs or
+storing new gameplay data.
+
+### Relative danger
 
 The absolute guard ranking (HP removed) and place ranking (Prince deaths) are retained. Two additional rankings show
 **Prince deaths per 100 unique clients who started the level**: `deaths / levelStarters × 100`. The denominator uses the
