@@ -326,6 +326,48 @@ function nativeTerrain(f, key = "dungeon") {
   return { source, scratch, opaque };
 }
 
+test("saturated native spike floors preserve recessed sockets and do not store floating blade silhouettes", () => {
+  for (const key of ["dungeon", "palace"]) {
+    const f = fixture();
+    const tile = f.setTile(1, 3, 1, f.PrinceJS.Level.TILE_SPIKES);
+    nativeTerrain(f, key);
+    tile.tileChildBack = f.game.make.sprite(0, 0, key, key + "_2_5");
+    tile.tileChildFront = f.game.make.sprite(0, 0, key, key + "_2_5_fg");
+    tile.back.addChild(tile.tileChildBack);
+    tile.front.addChild(tile.tileChildFront);
+    const terrain = f.blood.terrain({ room: 1, x: 112, y: 119 }, 64, 80);
+    const layer = f.blood.roomDecals(1);
+    for (let depth = 0; depth < 10; depth++) {
+      f.blood.paint(layer, terrain, 96, 50, 60, 90, "#b42a32", depth);
+    }
+    const base = f.blood.textureMask(tile.back);
+    const blade = f.blood.textureMask(tile.tileChildBack);
+    let sockets = 0,
+      blades = 0,
+      pools = 0;
+    const hasInk = (x, y) =>
+      [layer, ...layer.floorDepths.values()].some((cache) =>
+        cache.bitmap.pixels.has((y - layer.y) * cache.bitmap.width + x - layer.x)
+      );
+    for (let y = 0; y < base.height; y++) {
+      for (let x = 0; x < base.width; x++) {
+        const worldX = 96 + x,
+          worldY = 50 + y;
+        if (base.recess[y * base.width + x]) {
+          sockets++;
+          assert.equal(hasInk(worldX, worldY), false, key + " socket remains open under saturation");
+        } else if (y < 60 && blade.alpha[y * blade.width + x]) {
+          blades++;
+          assert.equal(hasInk(worldX, worldY), false, "moving steel never becomes a permanent floating decal");
+        } else if (y >= 63 && base.alpha[y * base.width + x] && hasInk(worldX, worldY)) {
+          pools++;
+        }
+      }
+    }
+    assert.ok(sockets >= 10 && blades > 20 && pools > 250, key + " keeps both the trap and abundant blood");
+  }
+});
+
 function assertNativePaint(layer, native) {
   for (const bitmap of [
     layer.bitmap,

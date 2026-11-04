@@ -299,16 +299,16 @@ test("every bundled custom map has reinforcements with native campaign health an
   assert.ok(totalGuards >= totalFloors * 0.7, "custom armies scale with the amount of permanent floor in their maps");
 });
 
-test("mission one opens with two molotov targets under the shaft and a clear approach to the minigun", () => {
+test("mission one keeps one molotov target under the shaft and removes the second guard on the right", () => {
   const { PrinceJS, level, json } = fixture(1);
   const below = level.rooms[json.prince.room].links.down;
   assert.equal(below, 2);
   const guards = PrinceJS.HordeSpawns.create(level, json);
   const intro = guards.filter((guard) => guard.room === below);
-  assert.equal(intro.length, 2);
+  assert.equal(intro.length, 1);
   assert.deepEqual(
     Array.from(intro, (guard) => guard.location),
-    [16, 17]
+    [16]
   );
   assert.ok(intro.every((guard) => guard.skill === 0));
   assert.ok(

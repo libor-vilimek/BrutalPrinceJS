@@ -31,7 +31,7 @@ PrinceJS.TutorialLessons = [
     category: "The art of movement",
     title: "Trust your grip",
     description:
-      "The burning guard has opened the shaft. Lower yourself from this edge and hold on above the guards below.",
+      "The burning guard has opened the shaft. Lower yourself from this edge and hold on above the guard below.",
     instruction: "Press Shift + Down together to climb down and hang.",
     hint: "For this lesson, we will keep your grip while you prepare the next move.",
     keys: [{ code: Phaser.Keyboard.DOWN, label: "↓", modifiers: [Phaser.Keyboard.SHIFT] }],
@@ -43,8 +43,8 @@ PrinceJS.TutorialLessons = [
   {
     id: "ledge-molotov",
     category: "Fire from above",
-    title: "A gift for the guards",
-    description: "Two guards wait below. Keep one hand on the ledge, light a molotov and drop it into their path.",
+    title: "A gift for the guard",
+    description: "A guard waits below. Keep one hand on the ledge, light a molotov and drop it into his path.",
     instruction: "Press Ctrl to light and drop a molotov. During normal play, hold Shift to keep your grip.",
     hint: "The molotov is weapon 2. We have selected it for this demonstration.",
     keys: [

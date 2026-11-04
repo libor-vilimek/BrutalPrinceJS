@@ -19,6 +19,15 @@ document.querySelectorAll("[data-demo]").forEach((button) => {
     send("select", current);
   });
 });
+
+const requestedDemo = new URLSearchParams(window.location.search).get("demo");
+const initialButton = [...document.querySelectorAll("[data-demo]")].find(
+  (button) => button.dataset.demo === requestedDemo
+);
+if (initialButton) {
+  initialButton.click();
+  frame.src = "engine.html?demo=" + encodeURIComponent(current);
+}
 document.getElementById("replay").addEventListener("click", () => send("select", current));
 document.getElementById("pause").addEventListener("click", () => send("pause", !paused));
 document.getElementById("auto-walk").addEventListener("change", (event) => send("auto-walk", event.target.checked));

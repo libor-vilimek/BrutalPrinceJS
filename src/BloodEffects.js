@@ -17,6 +17,7 @@ PrinceJS.BloodEffects = function (delegate) {
   this.drawnPixelCount = 0;
   this.textureMasks = new WeakMap();
   this.maskBitmap = null;
+  this.spikeOverlays = new Map();
   this.maxParticles = 1000;
   this.spray = this.game.add.graphics(0, 0);
   this.spray.z = 29.5;
@@ -216,10 +217,12 @@ PrinceJS.BloodEffects.prototype = {
     ctx.drawImage(source, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
     let rgba = ctx.getImageData(0, 0, crop.width, crop.height).data;
     let alpha = new Uint8Array(crop.width * crop.height);
+    let recess = new Uint8Array(alpha.length);
     for (let i = 0; i < alpha.length; i++) {
       alpha[i] = rgba[i * 4 + 3];
+      recess[i] = alpha[i] > 32 && Math.max(rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2]) < 40 ? 1 : 0;
     }
-    let mask = { width: crop.width, height: crop.height, alpha };
+    let mask = { width: crop.width, height: crop.height, alpha, recess };
     masks.set(key, mask);
     return mask;
   },
@@ -241,11 +244,17 @@ PrinceJS.BloodEffects.prototype = {
           scaleY,
           mask,
           foreground,
-          tile
+          tile,
+          spikeSockets: tile.element === PrinceJS.Level.TILE_SPIKES && sprite === tile.back
         });
       }
       let found = !!mask;
       for (let child of sprite.children || []) {
+        // Sliding steel is not a stationary surface: otherwise a splash leaves
+        // a frozen red silhouette suspended above the retracted trap.
+        if (tile.element === PrinceJS.Level.TILE_SPIKES && [tile.tileChildBack, tile.tileChildFront].includes(child)) {
+          continue;
+        }
         found = addSprite(child, x + child.x, y + child.y, foreground, tile) || found;
       }
       return found;
@@ -273,6 +282,9 @@ PrinceJS.BloodEffects.prototype = {
         }
         let native = addSprite(tile.back, x, y, false, tile);
         native = addSprite(tile.front, x, y, true, tile) || native;
+        if (tile.element === PrinceJS.Level.TILE_SPIKES) {
+          this.preserveSpikes(tile);
+        }
         if (!native) {
           // Geometry remains useful for editor/test levels that have no texture atlas.
           result.fallback.push({ tile, x, y: y + 13 });
@@ -280,6 +292,47 @@ PrinceJS.BloodEffects.prototype = {
       }
     }
     return result;
+  },
+
+  preserveSpikes: function (tile) {
+    if (this.spikeOverlays.has(tile) || !tile.tileChildBack || !tile.tileChildFront || !this.level.back?.add) {
+      return;
+    }
+    if (!this.spikeBack) {
+      this.spikeBack = this.game.add.group(this.level.back);
+      this.spikeFront = this.game.add.group(this.level.front);
+    }
+    let copies = {};
+    for (let side of ["back", "front"]) {
+      let child = side === "back" ? tile.tileChildBack : tile.tileChildFront;
+      let copy = this.game.make.sprite(tile[side].x + child.x, tile[side].y + child.y, tile.key, child.frameName);
+      copy.smoothed = false;
+      (side === "back" ? this.spikeBack : this.spikeFront).add(copy);
+      copies[side] = copy;
+    }
+    this.spikeOverlays.set(tile, copies);
+  },
+
+  syncSpikes: function () {
+    for (let [tile, copies] of this.spikeOverlays) {
+      for (let side of ["back", "front"]) {
+        let child = side === "back" ? tile.tileChildBack : tile.tileChildFront;
+        let copy = copies[side];
+        copy.visible = tile[side].exists !== false && tile[side].visible && child.visible;
+        copy.x = tile[side].x + child.x;
+        copy.y = tile[side].y + child.y;
+        if (copy.frameName !== child.frameName) {
+          copy.frameName = child.frameName;
+        }
+      }
+    }
+    // Stay above new ink, within the original scenery groups: rear blades
+    // remain behind actors and front blades retain the native occlusion.
+    for (let layer of [this.spikeBack, this.spikeFront]) {
+      if (layer && layer.parent.children.at(-1) !== layer) {
+        layer.parent.bringToTop(layer);
+      }
+    }
   },
 
   materialAt: function (terrain, x, y) {
@@ -310,6 +363,25 @@ PrinceJS.BloodEffects.prototype = {
         localY < sprite.mask.height &&
         sprite.mask.alpha[localY * sprite.mask.width + localX] > 32
       ) {
+        if (sprite.spikeSockets && sprite.mask.recess) {
+          // Pools surround the recessed sockets, with a one-pixel stone/metal
+          // rim. Keep the native dark openings readable without a glowing UI.
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              let column = localX + dx;
+              let row = localY + dy;
+              if (
+                column >= 0 &&
+                column < sprite.mask.width &&
+                row >= 0 &&
+                row < sprite.mask.height &&
+                sprite.mask.recess[row * sprite.mask.width + column]
+              ) {
+                return null;
+              }
+            }
+          }
+        }
         if (this.isDoorFacade(sprite.tile, y)) {
           background = background || { material: "door", tile: sprite.tile };
         } else if (sprite.foreground) {
@@ -391,6 +463,12 @@ PrinceJS.BloodEffects.prototype = {
   },
 
   removeSurface: function (tile) {
+    let copies = this.spikeOverlays.get(tile);
+    if (copies) {
+      copies.back.destroy();
+      copies.front.destroy();
+      this.spikeOverlays.delete(tile);
+    }
     let surfaces = this.surfacePixels.get(tile);
     if (this.destroyed || !surfaces) {
       return;
@@ -699,6 +777,7 @@ PrinceJS.BloodEffects.prototype = {
       this.spray.drawRect(x - (particle.vx > 0 ? length : 0), y, length, particle.size);
       this.spray.endFill();
     }
+    this.syncSpikes();
   },
 
   destroy: function () {
@@ -707,6 +786,10 @@ PrinceJS.BloodEffects.prototype = {
     }
     this.destroyed = true;
     this.particles.length = 0;
+    this.spikeOverlays.clear();
+    this.spikeBack?.destroy();
+    this.spikeFront?.destroy();
+    this.spikeBack = this.spikeFront = null;
     for (let layer of this.decalRooms.values()) {
       if (layer.background) {
         layer.background.pixelOwners.clear();

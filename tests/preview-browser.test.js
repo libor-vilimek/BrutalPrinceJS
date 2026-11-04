@@ -6,7 +6,7 @@ const { test } = require("node:test");
 const { createPreviewApp } = require("../tools/preview-server");
 
 test(
-  "preview buttons show casings, tutorials, direction signs and the ending without a campaign, telemetry or saved settings",
+  "preview buttons show casings, tutorials, direction signs, bloody spikes and the ending without a campaign, telemetry or saved settings",
   {
     skip: process.env.RUN_BROWSER_TESTS !== "1",
     timeout: 60000
@@ -129,6 +129,64 @@ test(
         assert.equal(await frame.evaluate(() => window.PrincePreview.level.exitDoorOpen), true);
         assert.equal(await frame.evaluate(() => window.PrincePreview.hints.hints[0].layer.visible), false);
       }
+    }
+    for (const type of ["Dungeon", "Palace"]) {
+      await page.getByRole("button", { name: "Spikes in blood · " + type, exact: true }).click();
+      await frame.waitForFunction(() => window.PrincePreview.spikes?.length === 3);
+      const pool = await frame.evaluate(() => {
+        const preview = window.PrincePreview;
+        const blood = preview.bloodEffects;
+        return {
+          stains: blood.stainCount,
+          depthCount: blood.decalRooms.get(1).floorDepths.size,
+          revision: blood.decalRooms.get(1).revision,
+          overlays: blood.spikeOverlays.size,
+          behindActors: blood.spikeBack.parent === preview.level.back,
+          inFront: blood.spikeFront.parent === preview.level.front
+        };
+      });
+      assert.ok(pool.stains > 100 && pool.depthCount === 10 && pool.overlays >= 2);
+      assert.ok(pool.behindActors && pool.inFront);
+      await frame.waitForFunction(() => window.PrincePreview.spikes[2].state === PrinceJS.Tile.Spikes.STATE_FULL_OUT);
+      await page.getByRole("button", { name: "Pause", exact: true }).click();
+      await frame.waitForFunction(() => window.PrincePreview.paused);
+      assert.equal(
+        await frame.evaluate(() => {
+          const blood = window.PrincePreview.bloodEffects;
+          return [...blood.spikeOverlays].every(
+            ([tile, copies]) =>
+              copies.back.frameName === tile.tileChildBack.frameName &&
+              copies.front.frameName === tile.tileChildFront.frameName &&
+              copies.back.visible &&
+              copies.front.visible &&
+              copies.back.x === tile.back.x &&
+              copies.front.y === tile.front.y
+          );
+        }),
+        true
+      );
+      if (process.env.PREVIEW_SCREENSHOT_DIR) {
+        await page.screenshot({
+          path: path.join(process.env.PREVIEW_SCREENSHOT_DIR, `preview-spikes-${type.toLowerCase()}-raised.png`)
+        });
+      }
+      const frozen = await frame.evaluate(() => window.PrincePreview.elapsed);
+      await page.waitForTimeout(100);
+      assert.equal(await frame.evaluate(() => window.PrincePreview.elapsed), frozen);
+      await page.getByRole("button", { name: "Resume", exact: true }).click();
+      await frame.waitForFunction(() => window.PrincePreview.spikes[2].state === PrinceJS.Tile.Spikes.STATE_INACTIVE);
+      assert.equal(
+        await frame.evaluate(() => window.PrincePreview.bloodEffects.decalRooms.get(1).revision),
+        pool.revision
+      );
+      await page.getByRole("button", { name: "Pause", exact: true }).click();
+      if (process.env.PREVIEW_SCREENSHOT_DIR) {
+        await page.screenshot({
+          path: path.join(process.env.PREVIEW_SCREENSHOT_DIR, `preview-spikes-${type.toLowerCase()}-retracted.png`)
+        });
+      }
+      await page.getByRole("button", { name: "Replay", exact: true }).click();
+      await frame.waitForFunction(() => !window.PrincePreview.paused && window.PrincePreview.elapsed < 0.8);
     }
     await page.getByRole("button", { name: "Play the full ending" }).click();
     await frame.waitForFunction(() => window.PrincePreview.id === "finale" && window.PrincePreview.finale);

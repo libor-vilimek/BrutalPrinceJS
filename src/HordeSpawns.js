@@ -104,9 +104,9 @@ PrinceJS.HordeSpawns = {
           ) {
             continue;
           }
-          // A small first encounter directly beneath the loose-floor shaft gives
-          // the hanging molotov a purpose before the minigun pickup on the right.
-          if (roomId === introRoom && (row !== 1 || ![6, 7].includes(column))) {
+          // Keep one molotov target beneath the shaft; the second soldier on
+          // the right was removed to leave a safer approach to the minigun.
+          if (roomId === introRoom && (row !== 1 || column !== 6)) {
             continue;
           }
           // Omit the two nearest soldiers as well, leaving a five-column

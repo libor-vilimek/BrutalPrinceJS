@@ -1360,8 +1360,8 @@ async function prepareOpeningEncounter() {
     );
     const targets = state.enemies.filter((enemy) => enemy.room === state.minigun.pickup.room);
     check(
-      targets.length === 2 && targets.every((enemy) => enemy.alive && enemy.health === 2),
-      "Only two guards wait under the drop"
+      targets.length === 1 && targets.every((enemy) => enemy.alive && enemy.health === 2),
+      "One guard waits under the drop; the second guard on the right is removed"
     );
     check(
       targets.every((enemy) => enemy.opponent !== kid || !enemy.startFight),
@@ -1485,7 +1485,7 @@ async function openingPreview() {
     await watchCamera(prepared.state, () => !prepared.state.roomCamera.transition);
     testGame.paused = true;
     report(
-      "Opening: two torches are collected automatically, the molotov stays upstairs, and the glowing minigun waits beside two guards below. Hold Shift to keep hanging, select 2 and press Ctrl to drop a bottle. Keys 1/2/3/4 select torches/molotov/minigun/rockets; X uses the whip."
+      "Opening: two torches are collected automatically, the molotov stays upstairs, and the glowing minigun waits beside one guard below. Hold Shift to keep hanging, select 2 and press Ctrl to drop a bottle. Keys 1/2/3/4 select torches/molotov/minigun/rockets; X uses the whip."
     );
   } catch (error) {
     report("FAIL: " + error.message);
@@ -2804,7 +2804,7 @@ document.getElementById("boundary-preview").addEventListener("click", async () =
   await watchCamera(state, () => !state.roomCamera.transition);
   testGame.paused = true;
   output.textContent =
-    "The starting screen provides two torches and the molotov. Drop through the loose-floor shaft to the two guards and the minigun in the next room below.";
+    "The starting screen provides two torches and the molotov. Drop through the loose-floor shaft to the guard and the minigun in the next room below.";
 });
 document.getElementById("run").addEventListener("click", combatChecks);
 document.getElementById("melee-fire").addEventListener("click", meleeFireChecks);

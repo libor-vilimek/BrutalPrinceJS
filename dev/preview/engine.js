@@ -12,6 +12,8 @@ const demos = new Set([
   "tutorial-ledge",
   "guidance-route",
   "guidance-exit",
+  "blood-spikes-dungeon",
+  "blood-spikes-palace",
   "finale",
   "epilogue"
 ]);
@@ -84,6 +86,9 @@ const preview = {
     if (this.hints) {
       this.hints.destroy();
     }
+    if (this.bloodEffects) {
+      this.bloodEffects.destroy();
+    }
     if (this.roomCamera) {
       this.roomCamera.destroy();
     }
@@ -93,6 +98,7 @@ const preview = {
     this.overlay = this.finale = this.epilogue = this.casings = this.scene = this.lesson = null;
     this.level = this.kid = null;
     this.hints = this.roomCamera = this.minigun = null;
+    this.bloodEffects = this.spikes = null;
     this.keys.clear();
     this.world.removeAll(true);
     this.world.scale.setTo(2);
@@ -121,6 +127,8 @@ const preview = {
       this.report("The final story page · BRUTAL Prince of Persia, with animated blood.");
     } else if (id.startsWith("guidance-")) {
       this.buildGuidanceStage(id === "guidance-exit");
+    } else if (id.startsWith("blood-spikes-")) {
+      this.buildSpikeStage(id === "blood-spikes-palace");
     } else {
       this.buildCasingStage(id === "deep-casings");
       if (id.startsWith("tutorial-")) {
@@ -172,6 +180,47 @@ const preview = {
 
   fireEvent: function (event, type, stuck) {
     this.level.fireEvent(event, type, stuck);
+  },
+
+  buildSpikeStage: function (palace) {
+    const type = palace ? PrinceJS.Level.TYPE_PALACE : PrinceJS.Level.TYPE_DUNGEON;
+    this.level = new PrinceJS.Level(this.game, 0, "Blood and spikes", type);
+    this.level.delegate = this;
+    this.level.rooms[1] = { x: 0, y: 0, links: {}, tiles: [] };
+    this.spikes = [];
+    for (let row = 0; row < 3; row++) {
+      for (let column = 0; column < 10; column++) {
+        const tile =
+          row === 2 && [1, 4, 7].includes(column)
+            ? new PrinceJS.Tile.Spikes(this.game, 0, type)
+            : new PrinceJS.Tile.Base(this.game, row === 2 ? 1 : 0, 0, type);
+        this.level.addTile(column, row, 1, tile);
+        if (tile.element === PrinceJS.Level.TILE_SPIKES) {
+          this.spikes.push(tile);
+          this.level.addTrob(tile);
+        }
+      }
+    }
+    const title = this.game.add.bitmapText(160, 28, "font", "BLOOD AND SPIKES", 16);
+    title.anchor.setTo(0.5, 0);
+    const subtitle = this.game.add.bitmapText(160, 56, "font", "ORIGINAL TRAPS / REAL BLOOD LAYERS", 8);
+    subtitle.anchor.setTo(0.5, 0);
+    this.bloodEffects = new PrinceJS.BloodEffects(this);
+    this.spikes.forEach((tile, index) => {
+      const label = this.game.add.bitmapText(tile.x + 24, 105, "font", ["CLEAN", "SPLASHED", "SOAKED"][index], 8);
+      label.anchor.setTo(0.5, 0);
+      for (let i = 0; i < [0, 8, 180][index]; i++) {
+        this.bloodEffects.stain(
+          { room: 1, tile, x: tile.x + 4 + ((i * 7) % 32), y: 182, normalY: -1 },
+          { size: i % 3 ? 1 : 2, vx: 1, depthLayer: i % 10 }
+        );
+      }
+    });
+    this.lastSpikeCycle = -1;
+    this.bloodEffects.update(0);
+    this.report(
+      "Clean, splashed and soaked · sockets stay recessed and steel slides above the pools. Traps repeat every 4 seconds; Pause freezes any position."
+    );
   },
 
   buildCasingStage: function (deep) {
@@ -291,6 +340,18 @@ const preview = {
       }
     } else if (this.epilogue) {
       this.epilogue.updateBrutalEpilogue(dt);
+    } else if (this.spikes) {
+      const cycle = Math.floor((this.elapsed - 0.8) / 4);
+      if (cycle > this.lastSpikeCycle) {
+        this.lastSpikeCycle = cycle;
+        this.spikes.forEach((tile) => tile.raise());
+      }
+      this.actorClock += dt;
+      if (this.actorClock >= 0.12) {
+        this.actorClock -= 0.12;
+        this.level.update();
+      }
+      this.bloodEffects.update(dt);
     } else if (this.hints) {
       this.hints.update(dt);
       this.actorClock += dt;

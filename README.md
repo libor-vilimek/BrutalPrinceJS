@@ -78,7 +78,11 @@ Blood stains, fallen body parts and brass remain throughout the level, even afte
 
 For isolated local previews, run `npm run preview` and open [the preview launcher](http://127.0.0.1:8090/dev/preview/).
 Category buttons show the Prince walking through increasingly tall casing piles, the real tutorial windows, the
-level-one guidance arrows, the full ending animation, and the dripping epilogue title. Under **Level 1 guidance**,
+level-one guidance arrows, blood-covered spike traps, the full ending animation, and the dripping epilogue title.
+Under **Blood and traps**, choose **Spikes in blood · Dungeon** or **Palace** to compare clean, splashed and soaked
+traps through their full raising/retraction cycle. Pools surround the recessed sockets and their narrow native rims;
+sliding steel stays visible above the blood in its original front/back layers. Pause and Replay work for both previews.
+Under **Level 1 guidance**,
 **Recommended path** shows the flashing right arrow above the collected minigun location, and **Exit floor switch**
 shows the down arrow over the actual exit-opening plate. Replay, pause and the ending timeline make each moment easy
 to inspect; **Open larger** gives the selected preview the full browser area. This static server

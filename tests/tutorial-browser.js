@@ -272,7 +272,7 @@ async function runCampaign(preview = false) {
     let s = state();
     const target = s.enemies.find((enemy) => enemy.burnRoute === "opening-shaft");
     const guards = s.enemies.filter((enemy) => enemy.room === 2 && enemy.reinforcement);
-    check(target && guards.length === 2, "The opening has its torch target and two molotov targets");
+    check(target && guards.length === 1, "The opening has its torch target and one molotov target");
     tap(17);
     await until(() => target.burningDeath, "first ignition");
     await until(() => !s.tutorial.assist && !s.kid.specialAction && s.kid.action === "stand", "torch stow");
@@ -314,15 +314,15 @@ async function runCampaign(preview = false) {
     check(["hang", "hangstraight"].includes(s.kid.action), "Shift + Down really hangs the Prince over the shaft");
     check(
       guards.every((enemy) => enemy.alive && enemy.visible),
-      "Both molotov targets are visible and alive below"
+      "The molotov target is visible and alive below"
     );
     tap(17);
     await until(() => s.molotov.bottles.length > 0, "hanging bottle release");
     check(s.molotov.throwState.hanging, "Ctrl performs the real one-handed hanging throw");
-    await until(() => guards.every((enemy) => !enemy.alive && enemy.burningDeath), "both guards ignite");
+    await until(() => guards.every((enemy) => !enemy.alive && enemy.burningDeath), "the guard ignites");
     check(
       guards.every((enemy) => enemy.burningDeath.weapon === "molotov"),
-      "The real molotov ignites both guards below"
+      "The real molotov ignites the guard below"
     );
     await until(() => !s.kid.specialAction && s.kid.action === "stand" && s.kid.room === 2, "landing after the throw");
     key("keydown", 39);
