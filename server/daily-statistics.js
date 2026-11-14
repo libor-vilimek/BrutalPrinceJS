@@ -176,7 +176,8 @@ function createDailyStatistics(client, events, archives, { now = Date.now, pause
           await archives.updateOne(
             { _id, format: { $exists: false } },
             { $set: { ...report, deleteAfter }, $unset: { writeSerial: "" } },
-            operations
+            // Uploading a full day can take longer on a throttled connection than a small batch write.
+            { ...operations, timeoutMS: 60000 }
           );
         }
         // Only a majority-visible, complete report authorizes removal of source documents.
