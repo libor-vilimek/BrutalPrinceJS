@@ -110,8 +110,8 @@ in batches, normally three seconds after the last event. Failures show no error 
 
 Run `npm test` for automated checks. To test actual MongoDB persistence using your ignored local `.env`, run
 `npm run test:mongodb`. Tests use the dedicated `testbrutalprince` database (override with `MONGODB_TEST_DATABASE`).
-Each run creates and removes only its own `test_gameplay_events_…` collection; it never wipes
-the production collection. These network tests are opt-in and do not run during `npm test`.
+Each test creates and removes its own `test_gameplay_events_…` collection and its paired `_daily` collection.
+These network tests are opt-in and do not run during `npm test`.
 
 Game logic runs at 60 fixed steps per second independently of the display refresh rate, with bounded catch-up when
 the browser renders at 30 fps. Weapons, effects, camera movement and cinematic animations use this same logic step;
@@ -122,6 +122,9 @@ To view statistics locally, open `/statistics` on the local Koa server. For a sa
 Reset fills only `testbrutalprince.test_dashboard_events` with random observations through the API. Use
 `statistics:seed` to add samples or `statistics:wipe` to empty that collection. The dashboard and reporting API are public,
 including on Heroku: open `/statistics` on the deployed game. See [preview details](docs/statistics.md#statistics-page-and-local-preview).
+
+The level table combines all revisions of each level. The dashboard also reads complete UTC days from the
+[daily archive](docs/statistics.md#archive-completed-days). Set `STATISTICS_DAILY_TOKEN` to enable the protected job.
 
 Prince deaths and enemy kills have separate daily charts. Alongside the two absolute danger rankings, two more show
 deaths per 100 unique clients who started each level and map revision. Select a guard, dangerous place or recent death

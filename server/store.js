@@ -4,8 +4,9 @@ const { MongoClient } = require("mongodb");
 const { validateEvent, fingerprint, semanticKey } = require("./events");
 const { readStatistics } = require("./reports");
 const { persistSummaries } = require("./summaries");
+const { createDailyStatistics, writeHistoricalSummary } = require("./daily-statistics");
 
-function createEventStore({ uri, database, retentionDays = 90, collectionName = "brutalprince" }) {
+function createEventStore({ uri, database, retentionDays = 90, collectionName = "brutalprince", dailyOptions }) {
   let client;
   let ready;
   async function collection() {
@@ -42,9 +43,12 @@ function createEventStore({ uri, database, retentionDays = 90, collectionName = 
           { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
           { key: { updatedAt: 1, clientId: 1 } },
           { key: { receivedAt: 1, sessionId: 1 } },
+          { key: { schemaVersion: 1, receivedAt: 1 } },
           { key: { schemaVersion: 1, day: 1, levelNumber: 1 } }
         ]);
-        return events;
+        const archives = client.db(database).collection(`${collectionName}_daily`);
+        await archives.createIndex({ format: 1, day: 1 });
+        return { events, archives, daily: createDailyStatistics(client, events, archives, dailyOptions) };
       })().catch((error) => {
         ready = null;
         throw error;
@@ -54,16 +58,26 @@ function createEventStore({ uri, database, retentionDays = 90, collectionName = 
   }
   return {
     async writeSummaries(clientId, levels) {
-      return persistSummaries(await collection(), clientId, levels, retentionDays);
+      const { events, archives } = await collection();
+      return persistSummaries(events, clientId, levels, retentionDays, (day, write) =>
+        writeHistoricalSummary(client, archives, day, write)
+      );
     },
     async write(events, droppedEventCount = 0) {
-      return persistBatch(await collection(), events, retentionDays, droppedEventCount);
+      return persistBatch((await collection()).events, events, retentionDays, droppedEventCount);
     },
     async report(options) {
+      const { events, archives } = await collection();
       return {
-        ...(await readStatistics(await collection(), options)),
+        ...(await readStatistics(events, archives, options)),
         storage: { database, collection: collectionName }
       };
+    },
+    async startDailyStatistics() {
+      return (await collection()).daily.start();
+    },
+    async dailyStatisticsStatus() {
+      return (await collection()).daily.status();
     },
     async close() {
       if (client) {

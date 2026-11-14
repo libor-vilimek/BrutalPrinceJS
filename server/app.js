@@ -4,9 +4,12 @@ const path = require("node:path");
 const Koa = require("koa");
 const serve = require("koa-static");
 const { readFile } = require("node:fs/promises");
+const { createHash, timingSafeEqual } = require("node:crypto");
 const { UUID } = require("./summaries");
 
 const MAX_BYTES = 256 * 1024;
+const DAILY_JOB_PATH = "/api/admin/statistics/daily";
+const tokenDigest = (value) => createHash("sha256").update(value).digest();
 
 async function readJson(request) {
   let length = 0;
@@ -37,11 +40,13 @@ function createApp({
   now = Date.now,
   gameVersion = "development",
   dashboard = true,
-  sampleData = false
+  sampleData = false,
+  dailyStatisticsToken
 } = {}) {
   const app = new Koa();
   app.silent = true; // Never log raw driver errors containing connection credentials.
   const buckets = new Map();
+  const dailyToken = dailyStatisticsToken && tokenDigest(`Bearer ${dailyStatisticsToken}`);
   app.use(async (ctx, next) => {
     try {
       await next();
@@ -53,6 +58,27 @@ function createApp({
       if (ctx.status === 503) {
         ctx.set("Retry-After", "10");
       }
+    }
+  });
+  app.use(async (ctx, next) => {
+    if (ctx.path !== DAILY_JOB_PATH || !dailyToken) {
+      await next();
+      return;
+    }
+    ctx.set("Cache-Control", "no-store");
+    if (!timingSafeEqual(tokenDigest(ctx.get("Authorization")), dailyToken)) {
+      ctx.status = 401;
+      ctx.set("WWW-Authenticate", "Bearer");
+      ctx.body = { error: "unauthorized" };
+    } else if (ctx.method === "GET") {
+      ctx.body = await store.dailyStatisticsStatus();
+    } else if (ctx.method === "POST") {
+      const started = await store.startDailyStatistics();
+      ctx.status = started ? 202 : 409;
+      ctx.body = { status: "running" };
+    } else {
+      ctx.status = 405;
+      ctx.set("Allow", "GET, POST");
     }
   });
   app.use(async (ctx, next) => {

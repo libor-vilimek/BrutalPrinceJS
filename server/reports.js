@@ -4,17 +4,18 @@ const { milestonePipeline } = require("./milestones");
 const { dangerRanking } = require("./danger-rankings");
 const { readCurrentlyPlaying } = require("./currently-playing");
 const { groupWithClients, positiveCount } = require("./report-clients");
+const { DAY_MS, dayKey, liveDays } = require("./statistics-days");
 
-async function readStatistics(collection, { days = 30, day, level, source = "all" } = {}) {
+async function readStatistics(collection, archives, { days = 30, day, level, source = "all" } = {}) {
   const now = new Date();
-  const since = new Date(day || now.toISOString().slice(0, 10));
+  const since = new Date(day || dayKey(now));
   if (!day) {
     since.setUTCDate(since.getUTCDate() - days + 1);
   }
-  const until = day ? new Date(since.getTime() + 86400000) : undefined;
+  const until = day ? new Date(since.getTime() + DAY_MS) : undefined;
   const receivedRange = { $gte: since, ...(until ? { $lt: until } : {}) };
-  const playDayRange = day ? { $eq: day } : { $gte: since.toISOString().slice(0, 10) };
-  const match = { playDay: playDayRange };
+  const playDayRange = day ? { $eq: day } : { $gte: dayKey(since) };
+  const match = {};
   if (source === "samples") {
     match.sampleData = true;
   }
@@ -63,95 +64,116 @@ async function readStatistics(collection, { days = 30, day, level, source = "all
   };
   const observationCount = { $cond: [{ $eq: ["$eventType", "milestone"] }, 0, { $ifNull: ["$count", 1] }] };
   const totalFields = { events: { $sum: observationCount }, ...totals };
-  const statistics = collection
-    .aggregate([
-      {
-        $match: {
-          ...Object.fromEntries(Object.entries(match).filter(([key]) => key !== "playDay")),
-          $or: [
-            { schemaVersion: 2, day: playDayRange },
-            { schemaVersion: { $ne: 2 }, receivedAt: receivedRange }
-          ]
-        }
-      },
-      ...reportRows(),
-      { $match: match },
-      {
-        $facet: {
-          milestones: milestonePipeline(),
-          dataSources: groupWithClients(
-            { $cond: [{ $eq: ["$sampleData", true] }, "samples", "gameplay"] },
-            { events: { $sum: observationCount } }
-          ),
-          latestDeaths: [
-            { $match: { eventType: "prince_died" } },
-            { $sort: { receivedAt: -1, sequence: -1 } },
-            { $limit: 5 },
-            {
-              $project: {
-                _id: 0,
-                levelNumber: 1,
-                mapId: 1,
-                mapRevision: 1,
-                receivedAt: 1,
-                location: 1,
-                sampleData: 1,
-                count: { $ifNull: ["$count", 1] },
-                "payload.mechanism": 1,
-                "payload.source": 1
-              }
+  const statistics = collection.client.withSession({ snapshot: true }, async (session) => {
+    const completeDays = { format: 1, day: playDayRange };
+    // Keep completed days out of the live scan without looking up an archive for each observation.
+    const archived = await archives
+      .find(completeDays, { session, projection: { _id: 0, day: 1 }, readPreference: "primary" })
+      .toArray();
+    const archiveKeys = archived.map(({ day }) => day);
+    const live = liveDays(playDayRange, receivedRange, archiveKeys);
+    const current =
+      day && archiveKeys.length
+        ? [{ $match: { _id: { $in: [] } } }]
+        : [{ $match: { ...match, ...live } }, ...reportRows()];
+    return collection
+      .aggregate(
+        [
+          ...current,
+          ...(archiveKeys.length
+            ? [
+                {
+                  $unionWith: {
+                    coll: archives.collectionName,
+                    pipeline: [
+                      { $match: completeDays },
+                      { $project: { _id: 0, day: 1, rows: 1 } },
+                      { $unwind: "$rows" },
+                      { $replaceWith: { $mergeObjects: ["$rows", { playDay: "$day" }] } },
+                      { $match: match }
+                    ]
+                  }
+                }
+              ]
+            : []),
+          {
+            $facet: {
+              milestones: milestonePipeline(),
+              dataSources: [
+                ...groupWithClients(
+                  { $cond: [{ $eq: ["$sampleData", true] }, "samples", "gameplay"] },
+                  { events: { $sum: observationCount } }
+                ),
+                { $sort: { _id: 1 } }
+              ],
+              latestDeaths: [
+                { $match: { eventType: "prince_died" } },
+                { $sort: { receivedAt: -1, sequence: -1, sourceId: 1, rowIndex: 1 } },
+                { $limit: 5 },
+                {
+                  $project: {
+                    _id: 0,
+                    levelNumber: 1,
+                    mapId: 1,
+                    mapRevision: 1,
+                    receivedAt: 1,
+                    location: 1,
+                    sampleData: 1,
+                    count: { $ifNull: ["$count", 1] },
+                    "payload.mechanism": 1,
+                    "payload.source": 1
+                  }
+                }
+              ],
+              totals: groupWithClients(null, totalFields, clientConditions),
+              days: [...groupWithClients("$playDay", totals, clientConditions), { $sort: { _id: 1 } }],
+              levels: [
+                ...groupWithClients({ level: "$levelNumber" }, totals, clientConditions),
+                { $sort: { "_id.level": 1 } },
+                { $limit: 50 }
+              ],
+              causes: [
+                { $match: { eventType: { $in: ["prince_died", "enemy_died"] } } },
+                ...groupWithClients(
+                  { type: "$eventType", cause: "$payload.mechanism" },
+                  { deaths: { $sum: { $ifNull: ["$count", 1] } } }
+                ),
+                { $sort: { deaths: -1, "_id.type": 1, "_id.cause": 1 } }
+              ],
+              guards: dangerRanking("guards"),
+              traps: dangerRanking("traps"),
+              guardsPerPlayer: dangerRanking("guards", true),
+              trapsPerPlayer: dangerRanking("traps", true),
+              weapons: [
+                { $match: { eventType: { $in: ["weapon_used", "enemy_died"] } } },
+                ...groupWithClients(
+                  { $ifNull: ["$payload.weapon", "unknown"] },
+                  {
+                    shots: sum(["weapon_used"], "$payload.shots"),
+                    hits: sum(["weapon_used"], "$payload.hits"),
+                    kills: count("enemy_died")
+                  },
+                  {
+                    usedClients: {
+                      $and: [
+                        { $eq: ["$eventType", "weapon_used"] },
+                        { $or: [{ $gt: ["$payload.shots", 0] }, { $gt: ["$payload.hits", 0] }] }
+                      ]
+                    },
+                    killClients: occurred("enemy_died")
+                  }
+                ),
+                { $sort: { kills: -1, _id: 1 } },
+                { $limit: 12 }
+              ],
+              availableLevels: [{ $group: { _id: "$levelNumber" } }, { $sort: { _id: 1 } }]
             }
-          ],
-          totals: groupWithClients(null, totalFields, clientConditions),
-          days: [...groupWithClients("$playDay", totals, clientConditions), { $sort: { _id: 1 } }],
-          levels: [
-            ...groupWithClients(
-              { level: "$levelNumber", map: "$mapId", revision: "$mapRevision" },
-              totals,
-              clientConditions
-            ),
-            { $sort: { "_id.level": 1, "_id.revision": 1 } },
-            { $limit: 50 }
-          ],
-          causes: [
-            { $match: { eventType: { $in: ["prince_died", "enemy_died"] } } },
-            ...groupWithClients(
-              { type: "$eventType", cause: "$payload.mechanism" },
-              { deaths: { $sum: { $ifNull: ["$count", 1] } } }
-            ),
-            { $sort: { deaths: -1 } }
-          ],
-          guards: dangerRanking("guards"),
-          traps: dangerRanking("traps"),
-          guardsPerPlayer: dangerRanking("guards", true),
-          trapsPerPlayer: dangerRanking("traps", true),
-          weapons: [
-            { $match: { eventType: { $in: ["weapon_used", "enemy_died"] } } },
-            ...groupWithClients(
-              { $ifNull: ["$payload.weapon", "unknown"] },
-              {
-                shots: sum(["weapon_used"], "$payload.shots"),
-                hits: sum(["weapon_used"], "$payload.hits"),
-                kills: count("enemy_died")
-              },
-              {
-                usedClients: {
-                  $and: [
-                    { $eq: ["$eventType", "weapon_used"] },
-                    { $or: [{ $gt: ["$payload.shots", 0] }, { $gt: ["$payload.hits", 0] }] }
-                  ]
-                },
-                killClients: occurred("enemy_died")
-              }
-            ),
-            { $sort: { kills: -1 } },
-            { $limit: 12 }
-          ],
-          availableLevels: [{ $group: { _id: "$levelNumber" } }, { $sort: { _id: 1 } }]
-        }
-      }
-    ])
-    .toArray();
+          }
+        ],
+        { session, readPreference: "primary" }
+      )
+      .toArray();
+  });
   const [[result], currentlyPlaying] = await Promise.all([statistics, readCurrentlyPlaying(collection, now)]);
   return {
     ...result,
@@ -162,7 +184,7 @@ async function readStatistics(collection, { days = 30, day, level, source = "all
         [...Object.keys(totalFields), "clients", ...Object.keys(clientConditions)].map((name) => [name, 0])
       ),
     daysRange: day ? 1 : days,
-    rangeStart: since.toISOString().slice(0, 10)
+    rangeStart: dayKey(since)
   };
 }
 

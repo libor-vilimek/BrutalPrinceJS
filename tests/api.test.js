@@ -60,6 +60,27 @@ async function server(t, options = {}) {
   return `http://127.0.0.1:${listener.address().port}`;
 }
 
+test("daily statistics requires a configured bearer token and starts in the background", async (t) => {
+  let calls = 0;
+  const route = "/api/admin/statistics/daily";
+  const off = await server(t);
+  assert.equal((await fetch(off + route, { method: "POST" })).status, 404);
+  const url = await server(t, {
+    dailyStatisticsToken: "test-secret",
+    store: {
+      startDailyStatistics: async () => ++calls === 1,
+      dailyStatisticsStatus: async () => ({ status: "running", processedDays: 1 })
+    }
+  });
+  const headers = { Authorization: "Bearer test-secret" };
+  assert.equal((await fetch(url + route, { method: "POST" })).status, 401);
+  assert.equal((await fetch(url + route, { headers: { Authorization: "Bearer wrong" } })).status, 401);
+  assert.equal(calls, 0);
+  assert.equal((await fetch(url + route, { headers, method: "POST" })).status, 202);
+  assert.equal((await fetch(url + route, { headers, method: "POST" })).status, 409);
+  assert.deepEqual(await (await fetch(url + route, { headers })).json(), { status: "running", processedDays: 1 });
+});
+
 test("Koa serves the existing game and assets but never environment files, repository files or backend source", async (t) => {
   const url = await server(t);
   for (const route of ["/", "/src/Statistics.js", "/assets/web/game.css", "/game-version.js"]) {

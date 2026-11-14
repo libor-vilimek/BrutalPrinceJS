@@ -67,8 +67,8 @@ groups as objects under deterministic hashes, so individual counters can be upda
 starts with `summary:`; metadata is stored once. Map revisions separate layouts/spawns and guard identity.
 The [ADR](../dev/adr/2016-10-11-gameplay-statistics-api-and-mongodb.md) documents the grouping tradeoffs.
 
-Existing raw version-1 documents and the old `/api/v1/gameplay-events` endpoint remain compatible. The dashboard sums
-both formats; no previous observations are wiped or migrated automatically. New gameplay and sample seeding use v2.
+Existing raw version-1 documents and the old `/api/v1/gameplay-events` endpoint remain compatible. The dashboard reads
+both formats and archived days. New gameplay and sample seeding use v2.
 A fatal hit contributes actual HP once and a death once. Corpse animation cannot add another kill. Indirect kills
 retain known initiating weapons. Enemy damage/encounters are omitted from compact transmission.
 
@@ -108,9 +108,36 @@ stops collection/sending, clears summaries, queues and retry/activity state, and
 Already accepted data cannot be recalled. Mid-level re-enabling creates a fresh client ID and partial observation;
 missing starts/time/damage/deaths are not replayed, and partial observations do not count as full starts/completions.
 
-Summaries expire 90 days after the end of their UTC play day; MongoDB TTL cleanup is asynchronous. Older raw documents
-retain expiry 90 days after receipt. No names, emails, keystroke logs, screenshots, full URLs, permanent player IDs, IPs
+Per-client summaries expire 90 days after their UTC play day ends unless archived first. Older raw documents expire
+90 days after receipt unless archived first. MongoDB TTL cleanup is asynchronous. Daily archives have no TTL or
+application limit on the number of days retained. No names, emails, keystroke logs, screenshots, full URLs, permanent player IDs, IPs
 or user-agent strings are stored. Host access logs are separate. These observations are incomplete and untrusted.
+
+## Archive completed days
+
+Set **`STATISTICS_DAILY_TOKEN`** to a strong secret in the server environment. After deploying, start the job with
+`POST /api/admin/statistics/daily` and an `Authorization: Bearer <token>` header. It returns `202` immediately or
+`409` when another run holds the database lease. Use `GET` on the same route with the same header to see the
+status, current day and number of days processed. The route is disabled when the token is unset.
+
+The job works oldest first, keeping today and yesterday UTC open for delayed game uploads. It runs one day at a time,
+pauses for five seconds between days and waits 250 ms between batches of up to 100 records during cleanup.
+It stores one complete day in `brutalprince_daily` (the configured collection name plus `_daily`). The document contains
+the grouped report inputs and the original source documents as gzip-compressed, concatenated BSON records. This retains
+client membership across days and levels, detailed counters, recent deaths, map data for room previews, and any
+information outside the dashboard's current tables. Client IDs and the compressed source are private to MongoDB.
+
+The job seals a day against backdated updates while taking its snapshot. A late v2 upload to that day receives
+`day_archived`. MongoDB confirms the entire report before the job deletes anything. The dashboard uses a consistent
+snapshot and reads the completed archive in preference to any source documents awaiting cleanup. The live player count
+keeps using the original server receipt times. Cleanup waits for any recently received source documents to age out of
+the 180-second live window.
+
+If the process restarts, call `POST` again after the lease expires (at most two minutes after its last renewal).
+A new run picks up unfinished days, including days whose reports were saved before cleanup. A failed day can be retried
+with the same call. If a day's complete report exceeds MongoDB's [16 MiB BSON document limit](https://www.mongodb.com/docs/manual/reference/limits/),
+the job reports `day_too_large` and leaves its source records in place subject to the original TTL. Days already
+archived remain available after 90 days through **Single day**. No automatic schedule is installed.
 
 ## Statistics page and local preview
 
@@ -118,8 +145,9 @@ The statistics page and read-only reporting API are public without a login, incl
 on the deployed game, or `http://localhost:8080/statistics` locally, to inspect **`brutalprince.brutalprince`**.
 The page displays its exact database and collection. **Play game** uses that server's same collection. It shows deaths,
 causes, daily trends, level completion, actual guard damage, traps, weapons and active play, plus recent Prince death
-groups and their repeat counts. Period filters include complete UTC play days; guard rankings separate revisions and
-screens. Completion compares starts/completions within the selected period, not individually tracked cohorts.
+groups and their repeat counts. Period filters include complete UTC play days. The level table combines all revisions
+of the same level. Guard rankings distinguish revisions and screens to preserve attribution. Completion compares
+starts/completions within the selected period, not individually tracked cohorts.
 
 Click a day in either daily chart to switch the whole dashboard to that UTC day. A focused bar also opens with Enter
 or Space. The level and data filters are preserved, including when selecting a zero-count day.
@@ -169,7 +197,7 @@ The daily charts, death causes, data-source summaries, weapons and danger rankin
 distinguish clients who used the weapon from clients with kills; rankings show affected clients and clients who died.
 
 Each client counts once for each metric within the selected period, level and data filter. Repeat attempts, multiple
-days and revisions do not add another client to a whole-period metric. Each level/map/revision row deduplicates
+days and revisions do not add another client to a whole-period metric. Each level row deduplicates
 independently, so adding row counts or daily client counts can exceed the overall unique count. A client who only has
 damage observations is included among affected clients, even without a death. Active clients require recorded active
 time greater than zero. The counts use `clientId`, falling back to `sessionId` for legacy rows; missing IDs do not
@@ -281,15 +309,16 @@ db.brutalprince.aggregate([
 ]);
 ```
 
-These examples intentionally select v2; the dashboard's `GET /api/v1/statistics` combines legacy and compact data.
+These examples select unarchived v2 records. The dashboard's `GET /api/v1/statistics` also reads legacy and archived data.
 Missing ends do not establish deaths or abandonment. Exact attempt histories and per-hit chronology are no longer stored.
 
 ## Tests
 
 - `npm test` checks grouping, substantial JSON reduction, gameplay attribution, activity, transport, opt-out and local API.
 - `npm run test:mongodb` loads ignored `.env` and uses `testbrutalprince` (or `MONGODB_TEST_DATABASE`). It verifies real
-  HTTP persistence, duplicate/older/concurrent snapshots, raw/compact reports, validation, indexes and expiry. Each run
-  creates and removes only its own fresh `test_gameplay_events_<random-id>` collection.
+  HTTP persistence, duplicate/older/concurrent snapshots, raw/compact reports, validation, indexes, expiry and retry
+  after interrupted daily cleanup. Each test creates and removes its own fresh `test_gameplay_events_<random-id>`
+  collection and its paired `_daily` collection.
 - Optional `tests/statistics-browser.test.js` uses `RUN_BROWSER_TESTS=1`, Playwright and `BROWSER_EXECUTABLE`, and keeps
   music/effects muted. It checks the real game, compact batches, attribution, opt-out, failures, inventory and restarts.
 - The same switch runs `tests/statistics-preview-browser.test.js`: separate daily counts including zero days, all four

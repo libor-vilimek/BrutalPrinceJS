@@ -286,7 +286,6 @@ function render(data) {
   for (const row of data.levels) {
     const tr = element("tr");
     const name = element("td", `Level ${row._id.level}`);
-    name.append(element("small", `${row._id.map} · ${row._id.revision.slice(0, 8)}`));
     tr.append(name);
     for (const [value, clients] of [
       [number(row.starts), row.startedClients],

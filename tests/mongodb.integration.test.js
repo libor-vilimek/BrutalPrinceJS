@@ -2,6 +2,8 @@
 
 const assert = require("node:assert/strict");
 const { randomUUID } = require("node:crypto");
+const { gunzipSync } = require("node:zlib");
+const { setTimeout: wait } = require("node:timers/promises");
 const { test } = require("node:test");
 const { MongoClient, BSON } = require("mongodb");
 const { createEventStore } = require("../server/store");
@@ -31,6 +33,7 @@ test(
         // Cleanup is restricted to this run's fresh collection; never wipe a shared or production collection.
         assert(/^test_gameplay_events_[a-f0-9]{32}$/.test(collectionName));
         await client.db(database).collection(collectionName).drop();
+        await client.db(database).collection(`${collectionName}_daily`).drop();
       } catch (error) {
         if (error.codeName !== "NamespaceNotFound") {
           // eslint-disable-next-line preserve-caught-error -- The driver cause may contain credentials; do not let the test runner print it.
@@ -516,11 +519,12 @@ test(
           assert.equal(report.totals.princeDeathClients, 3);
           assert.equal(report.totals.enemyDeathClients, 3);
           assert.equal(report.dataSources[0].clients, 4);
-          const levelRow = report.levels.find((row) => row._id.revision === "clients-a");
-          assert.equal(levelRow.starts, 8);
+          assert.equal(report.levels.length, 1);
+          const [levelRow] = report.levels;
+          assert.equal(levelRow._id.level, 91);
+          assert.equal(levelRow.starts, 9);
           assert.equal(levelRow.startedClients, 3);
           assert.equal(levelRow.completedClients, 3);
-          assert.equal(report.levels.find((row) => row._id.revision === "clients-b").startedClients, 1);
           const cause = report.causes.find((row) => row._id.type === "prince_died");
           assert.equal(cause.deaths, 6);
           assert.equal(cause.clients, 3);
@@ -657,6 +661,180 @@ test(
       }
       // eslint-disable-next-line preserve-caught-error -- The driver cause may contain credentials; do not let the test runner print it.
       throw new Error("MongoDB integration operation failed; credentials and driver details suppressed");
+    }
+  }
+);
+
+test(
+  "real MongoDB: the daily job publishes before cleanup and preserves mixed reports across retries",
+  {
+    skip: process.env.RUN_MONGODB_TESTS !== "1",
+    timeout: 90000
+  },
+  async (t) => {
+    const uri = process.env.mongoconnectionurl || process.env.MONGODB_URI;
+    assert(uri);
+    const database = process.env.MONGODB_TEST_DATABASE || "testbrutalprince";
+    const collectionName = `test_gameplay_events_${randomUUID().replaceAll("-", "")}`;
+    const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
+    const events = client.db(database).collection(collectionName);
+    const daily = client.db(database).collection(`${collectionName}_daily`);
+    const oneDay = 86400000;
+    const time = Date.now();
+    const day = (offset) => new Date(time - offset * oneDay).toISOString().slice(0, 10);
+    const deadlines = [];
+    let fail = true;
+    let clock = time;
+    const store = createEventStore({
+      uri,
+      database,
+      collectionName,
+      dailyOptions: {
+        now: () => clock,
+        async pause(ms) {
+          clock += ms;
+          if (ms === 5000) {
+            deadlines.push(ms);
+          }
+          if (fail && ms === 250) {
+            fail = false;
+            throw new Error("simulate interruption during cleanup");
+          }
+        }
+      }
+    });
+    t.after(async () => {
+      await store.close();
+      try {
+        await events.drop();
+        await daily.drop();
+      } catch (error) {
+        if (error.codeName !== "NamespaceNotFound") {
+          // eslint-disable-next-line preserve-caught-error -- Avoid logging database credentials.
+          throw new Error("Isolated daily test cleanup failed");
+        }
+      } finally {
+        await client.close();
+      }
+    });
+
+    async function finish() {
+      for (let poll = 0; poll < 80; poll++) {
+        const state = await store.dailyStatisticsStatus();
+        if (state.status !== "running") {
+          return state;
+        }
+        await wait(250);
+      }
+      assert.fail("The daily job did not finish");
+    }
+    const clientId = randomUUID();
+    const compact = (offset, mapRevision, count) => {
+      const source = { kind: "guard", guardId: 1, roomId: 1, spawnLocation: { roomId: 1, tileColumn: 2, tileRow: 1 } };
+      return {
+        mapId: "campaign:1",
+        mapRevision,
+        levelNumber: 1,
+        day: day(offset),
+        counters: {
+          starts: 1,
+          completed: 1,
+          princeDeaths: count,
+          enemyDeaths: count,
+          hpLost: count,
+          activeMs: 300,
+          healthUpgrades: 1
+        },
+        kills: [{ cause: "fire", weapon: "molotov", count }],
+        damage: [{ cause: "sword", source, hits: count, hpLost: count }],
+        deaths: [
+          {
+            cause: "sword",
+            source,
+            location: { roomId: 1, tileColumn: 3, tileRow: 1 },
+            weapon: "sword",
+            count,
+            lastAt: `${day(offset)}T12:00:00.000Z`
+          },
+          {
+            cause: "sword",
+            source,
+            location: { roomId: 1, tileColumn: 4, tileRow: 1 },
+            weapon: "sword",
+            count: 1,
+            lastAt: `${day(offset)}T12:00:00.000Z`
+          }
+        ],
+        rooms: [{ roomId: 1, activeMs: 300, visits: 2 }],
+        extras: [{ type: "tutorial_completed", value: "molotov", count: 1 }],
+        weapons: [{ weapon: "molotov", shots: count, hits: count }]
+      };
+    };
+
+    try {
+      await client.connect();
+      const levels = [
+        compact(3, "first", 2),
+        compact(3, "second", 3),
+        compact(2, "second", 4),
+        compact(1, "second", 5)
+      ];
+      for (const row of levels) {
+        row.counters.princeDeaths++;
+      }
+      assert((await store.writeSummaries(clientId, levels)).every((entry) => entry.status === "stored"));
+      const raw = fixture().events()[0];
+      await events.insertOne({ ...raw, sessionId: clientId, receivedAt: new Date(day(3)), sampleData: true });
+      const report = async (filters) => {
+        const { currentlyPlaying, ...historical } = await store.report(filters);
+        return historical;
+      };
+      const filters = [{ days: 7 }, { day: day(3), level: 1, source: "gameplay" }, { day: day(3), source: "samples" }];
+      const expected = [];
+      for (const options of filters) {
+        expected.push(await report(options));
+      }
+      assert.equal(expected[0].levels.length, 1);
+      assert.equal(expected[0].levels[0].startedClients, 1);
+
+      assert.deepEqual((await Promise.all([store.startDailyStatistics(), store.startDailyStatistics()])).sort(), [
+        false,
+        true
+      ]);
+      assert.equal((await finish()).status, "failed");
+      const archived = await daily.findOne({ day: day(3), format: 1 });
+      assert(archived.cleanupPending);
+      assert.equal(archived.sourceCount, 3);
+      const bytes = gunzipSync(archived.source.buffer);
+      const restored = [];
+      for (let offset = 0; offset < bytes.length; ) {
+        const length = bytes.readInt32LE(offset);
+        restored.push(BSON.deserialize(bytes.subarray(offset, offset + length)));
+        offset += length;
+      }
+      assert.equal(restored.filter((row) => row.rooms && row.extras).length, 2);
+      assert(restored.some((row) => row.eventId === raw.eventId));
+      // Recreate a partially deleted source set to exercise the coexistence window.
+      await events.insertOne(restored[0]);
+      assert.deepEqual(await report(filters[0]), expected[0]);
+      assert.equal((await store.writeSummaries(clientId, [levels[0]]))[0].reason, "day_archived");
+      assert(await store.startDailyStatistics());
+      assert.equal((await finish()).status, "completed");
+      assert.equal(await daily.countDocuments({ format: 1 }), 2);
+      assert.equal(await daily.countDocuments({ expiresAt: { $exists: true } }), 0);
+      assert.equal(await events.countDocuments(), 1, "keep yesterday writable");
+      assert.deepEqual(deadlines, [5000]);
+      for (const [index, options] of filters.entries()) {
+        assert.deepEqual(await report(options), expected[index]);
+      }
+      assert(await store.startDailyStatistics());
+      assert.equal((await finish()).processedDays, 0);
+    } catch (error) {
+      if (error instanceof assert.AssertionError) {
+        throw error;
+      }
+      // eslint-disable-next-line preserve-caught-error -- Avoid logging database credentials.
+      throw new Error(`Daily integration operation failed (${error.codeName || error.name})`);
     }
   }
 );

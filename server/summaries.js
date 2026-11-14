@@ -2,6 +2,7 @@
 
 const { fingerprint } = require("./events");
 const { StatisticsSummary } = require("../src/StatisticsSummary");
+const { dayKey } = require("./statistics-days");
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const COUNTERS = [
   "starts",
@@ -152,7 +153,7 @@ function validateSummary(level) {
   return null;
 }
 
-async function persistSummaries(collection, clientId, levels, retentionDays = 90) {
+async function persistSummaries(collection, clientId, levels, retentionDays = 90, writeHistorical) {
   const results = [];
   for (const level of levels) {
     const reason = validateSummary(level);
@@ -206,18 +207,26 @@ async function persistSummaries(collection, clientId, levels, retentionDays = 90
       },
       ...(Object.keys(maximum).length ? { $max: maximum } : {})
     };
-    try {
-      await collection.updateOne({ _id: id }, update, { upsert: true });
-    } catch (error) {
-      if (error.code !== 11000) {
-        throw error;
+    const write = async (session) => {
+      try {
+        await collection.updateOne({ _id: id }, update, { upsert: true, session });
+      } catch (error) {
+        if (session || error.code !== 11000) {
+          throw error;
+        }
+        const result = await collection.updateOne({ _id: id }, update);
+        if (!result.matchedCount) {
+          throw new Error("Summary update was not confirmed", { cause: error });
+        }
       }
-      const result = await collection.updateOne({ _id: id }, update);
-      if (!result.matchedCount) {
-        throw new Error("Summary update was not confirmed", { cause: error });
-      }
+    };
+    if (writeHistorical && level.day < dayKey(now)) {
+      const stored = await writeHistorical(level.day, write);
+      results.push(stored ? { key, status: "stored" } : { key, status: "rejected", reason: "day_archived" });
+    } else {
+      await write();
+      results.push({ key, status: "stored" });
     }
-    results.push({ key, status: "stored" });
   }
   return results;
 }

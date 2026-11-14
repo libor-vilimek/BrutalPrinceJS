@@ -32,7 +32,7 @@ function dangerRanking(kind, relative = false) {
         { kills, hpLost, ...(kind === "guards" ? { hits } : {}) },
         { deathClients: death }
       ),
-      { $sort: kind === "guards" ? { hpLost: -1, kills: -1 } : { kills: -1, hpLost: -1 } },
+      { $sort: kind === "guards" ? { hpLost: -1, kills: -1, _id: 1 } : { kills: -1, hpLost: -1, _id: 1 } },
       { $limit: 8 }
     ];
   }
@@ -93,7 +93,7 @@ function dangerRanking(kind, relative = false) {
       }
     },
     // Rank every source by the rate, not just the eight winners of the absolute ranking.
-    { $sort: { killsPer100Starters: -1, kills: -1, hpLost: -1, "_id.level": 1, "_id.room": 1 } },
+    { $sort: { killsPer100Starters: -1, kills: -1, hpLost: -1, "_id.level": 1, "_id.room": 1, _id: 1 } },
     { $limit: 8 }
   ];
 }

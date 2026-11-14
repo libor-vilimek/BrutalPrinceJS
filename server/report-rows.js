@@ -9,6 +9,7 @@ function reportRows() {
   return [
     {
       $project: {
+        sourceId: "$_id",
         mapId: 1,
         mapRevision: 1,
         levelNumber: 1,
@@ -108,7 +109,7 @@ function reportRows() {
         }
       }
     },
-    { $unwind: "$reportingRows" },
+    { $unwind: { path: "$reportingRows", includeArrayIndex: "rowIndex" } },
     {
       $replaceWith: {
         $mergeObjects: [
@@ -121,7 +122,8 @@ function reportRows() {
             playDay: "$playDay",
             receivedAt: "$receivedAt"
           },
-          "$reportingRows"
+          "$reportingRows",
+          { sourceId: "$sourceId", rowIndex: "$rowIndex" }
         ]
       }
     }
