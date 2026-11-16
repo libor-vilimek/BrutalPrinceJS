@@ -12,12 +12,14 @@ test(
     const selectedDay = "2024-02-29";
     const emptyDay = "2024-03-01";
     const zeroDay = "2026-10-23";
+    const firstDay = "2026-06-01";
     const calls = [];
     const listener = createApp({
       store: {
         report: async (options) => {
           calls.push(options);
           const day = options.day || today;
+          const allTime = options.days === "all";
           const count = day === selectedDay ? 3 : [emptyDay, zeroDay].includes(day) ? 0 : 6;
           const totals = {
             events: count * 4,
@@ -39,10 +41,24 @@ test(
           return {
             currentlyPlaying: 2,
             totals,
-            daysRange: options.day ? 1 : options.days,
+            daysRange: options.day
+              ? 1
+              : allTime
+                ? (Date.parse(today) - Date.parse(firstDay)) / 86400000 + 1
+                : options.days,
             rangeStart:
-              options.day || new Date(Date.parse(today) - (options.days - 1) * 86400000).toISOString().slice(0, 10),
-            days: count ? [{ _id: day, ...totals }] : [],
+              options.day ||
+              (allTime
+                ? firstDay
+                : new Date(Date.parse(today) - (options.days - 1) * 86400000).toISOString().slice(0, 10)),
+            days: allTime
+              ? [
+                  { _id: firstDay, ...totals },
+                  { _id: today, ...totals }
+                ]
+              : count
+                ? [{ _id: day, ...totals }]
+                : [],
             levels: count ? [{ _id: { level: 3, map: "campaign:3", revision: "test" }, ...totals }] : [],
             causes: count ? [{ _id: { type: "prince_died", cause: "fire" }, deaths: count, clients: 1 }] : [],
             weapons: count
@@ -63,7 +79,11 @@ test(
     await new Promise((resolve) => listener.once("listening", resolve));
     t.after(() => new Promise((resolve) => listener.close(resolve)));
     const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
-    const browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_EXECUTABLE });
+    const browser = await chromium.launch({
+      headless: true,
+      executablePath: process.env.BROWSER_EXECUTABLE,
+      args: ["--mute-audio"]
+    });
     t.after(() => browser.close());
     const page = await browser.newPage({
       viewport: { width: 1440, height: 1100 },
@@ -152,6 +172,20 @@ test(
     assert.deepEqual(calls.at(-1), { day: zeroDay, level: 3, source: "gameplay" });
     assert.equal(await page.locator("#day").inputValue(), zeroDay);
     assert.equal(await page.locator("#days").inputValue(), "day");
+    await page.locator("#days").selectOption("90");
+    await updated();
+    assert.equal(await page.locator("#prince-trend [data-day]").count(), 90);
+    await page.locator("#days").selectOption("all");
+    await updated();
+    assert.deepEqual(calls.at(-1), { days: "all", level: 3, source: "gameplay" });
+    assert.equal(await page.locator("#day").isVisible(), false);
+    const plot = page.locator("#prince-trend .daily-chart-plot");
+    assert(await plot.evaluate((node) => node.scrollWidth > node.clientWidth));
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    await page.locator(`#prince-trend [data-day="${firstDay}"]`).focus();
+    await page.locator(`#prince-trend [data-day="${firstDay}"]`).press("Enter");
+    await updated();
+    assert.deepEqual(calls.at(-1), { day: firstDay, level: 3, source: "gameplay" });
     for (const [chart, key] of [
       ["prince-trend", "Enter"],
       ["enemy-trend", "Space"]

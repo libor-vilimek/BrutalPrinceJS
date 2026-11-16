@@ -294,6 +294,8 @@ Implementační rozhodnutí pro menu: bez zobrazeného dotykového panelu trvá 
 
 - **STATS-18:** Ručně spustitelný job zpracuje uzavřené UTC dny od nejstaršího. Pro každý den uloží jediný úplný souhrn a původní záznamy odstraní až po potvrzení zápisu. Denní dokumenty nemají TTL ani aplikační limit počtu dní. Dashboard čte archiv i dosud nezpracovaná data a zachovává filtry, deduplikaci klientů napříč dny a živý počet hráčů. V tabulce levelů se sčítají všechny revize stejného levelu. Revize zůstává podkladem pro přiřazení strážců, pastí a náhledy místností. Implementační rozhodnutí: chráněný endpoint spouští jeden běh na pozadí, dnešek a včerejšek UTC slouží k příjmu opožděných dávek, mezi dny je pauza pět sekund. Při přerušení další spuštění naváže na dokončené souhrny. Překročení limitu velikosti dokumentu MongoDB zastaví job před úklidem daného dne.
 
+- **STATS-19:** Volba All time zobrazuje ve statistikách všechny dochované dny z archivu i dosud nezpracovaná data. Platí ostatní filtry, deduplikace klientů a nezávislý živý počet. Graf začíná prvním dnem s odpovídajícími daty. Implementační rozhodnutí: server sdílí probíhající výpočty pro stejný výběr a hotové historické výsledky uchovává nejvýše deset sekund. Živý počet načte při každém požadavku.
+
 ## Nahrazená rozhodnutí
 
 Tento přehled brání návratu ke starším požadavkům. Nejde o aktivní alternativy.

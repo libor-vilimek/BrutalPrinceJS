@@ -36,6 +36,7 @@ function svg(tag, attrs, text) {
 }
 function trend(id, rows, { daysRange, rangeStart }, key, color, label) {
   const root = byId(id);
+  const scrollLeft = root.querySelector(".daily-chart-plot")?.scrollLeft || 0;
   root.replaceChildren();
   if (!rows.length) {
     empty(root);
@@ -49,15 +50,22 @@ function trend(id, rows, { daysRange, rangeStart }, key, color, label) {
     values.push(days.get(key) || { _id: key, princeDeaths: 0, enemyDeaths: 0 });
   }
   const chart = svg("svg", { viewBox: "0 0 620 200", role: "group", "aria-label": label });
-  const maximum = Math.ceil(Math.max(1, ...values.map((row) => row[key] || 0)) / 4) * 4;
+  const allTime = byId("days").value === "all";
+  const chartWidth = allTime ? Math.max(620, 62 + 6 * values.length) : 620;
+  if (chartWidth > 620) {
+    chart.style.minWidth = `${chartWidth}px`;
+    chart.setAttribute("viewBox", `0 0 ${chartWidth} 200`);
+  }
+  const right = chartWidth - 10;
+  const maximum = Math.ceil(values.reduce((max, row) => Math.max(max, row[key] || 0), 1) / 4) * 4;
   for (let i = 0; i <= 4; i++) {
     const y = 15 + i * 37;
     chart.append(
-      svg("line", { x1: 52, x2: 610, y1: y, y2: y, stroke: "#2b2e33" }),
+      svg("line", { x1: 52, x2: right, y1: y, y2: y, stroke: "#2b2e33" }),
       svg("text", { x: 44, y: y + 4, "text-anchor": "end" }, number((maximum * (4 - i)) / 4))
     );
   }
-  const slot = 558 / values.length;
+  const slot = (right - 52) / values.length;
   const clientKey = key === "princeDeaths" ? "princeDeathClients" : "enemyDeathClients";
   const describe = (row) => `${row._id} UTC: ${number(row[key])} · ${clientText(row[clientKey])}`;
   values.forEach((row, index) => {
@@ -97,11 +105,15 @@ function trend(id, rows, { daysRange, rangeStart }, key, color, label) {
     });
     chart.append(bar);
   });
+  const dateLabel = (row) => (allTime ? row._id : row._id.slice(5));
   chart.append(
-    svg("text", { x: 52, y: 190 }, values[0]._id.slice(5)),
-    svg("text", { x: 610, y: 190, "text-anchor": "end" }, values.at(-1)._id.slice(5))
+    svg("text", { x: 52, y: 190 }, dateLabel(values[0])),
+    svg("text", { x: right, y: 190, "text-anchor": "end" }, dateLabel(values.at(-1)))
   );
-  root.append(chart);
+  const plot = element("div", undefined, "daily-chart-plot");
+  plot.append(chart);
+  root.append(plot);
+  plot.scrollLeft = scrollLeft;
   root.append(
     element(
       "p",
@@ -374,39 +386,53 @@ function render(data) {
     }
   }
 }
-let request = 0;
+let pending;
 async function refresh() {
-  const current = ++request;
   const singleDay = byId("days").value === "day";
   if (singleDay && !byId("day").checkValidity()) {
+    pending?.controller.abort();
+    pending = undefined;
     byId("status").textContent = "Select a valid UTC day to view statistics.";
     return;
   }
-  byId("status").textContent = "Loading statistics…";
+  const query = new window.URLSearchParams({ source: byId("source").value });
+  query.set(singleDay ? "day" : "days", singleDay ? byId("day").value : byId("days").value);
+  if (byId("level").value) {
+    query.set("level", byId("level").value);
+  }
+  const url = `/api/v1/statistics?${query}`;
+  if (pending?.url === url) {
+    return;
+  }
+  pending?.controller.abort();
+  const controller = new window.AbortController();
+  pending = { url, controller };
+  const status = byId("status");
+  status.textContent = "Loading statistics…";
   try {
-    const query = new window.URLSearchParams({ source: byId("source").value });
-    query.set(singleDay ? "day" : "days", singleDay ? byId("day").value : byId("days").value);
-    if (byId("level").value) {
-      query.set("level", byId("level").value);
-    }
-    const response = await window.fetch(`/api/v1/statistics?${query}`, { signal: window.AbortSignal.timeout(10000) });
+    const response = await window.fetch(url, {
+      signal: window.AbortSignal.any([controller.signal, window.AbortSignal.timeout(20000)])
+    });
     if (!response.ok) {
       throw new Error("unavailable");
     }
     const data = await response.json();
-    if (current !== request) {
+    if (pending?.controller !== controller) {
       return;
     }
     render(data);
-    byId("status").textContent =
-      `${number(data.totals.events)} observations · ${clientText(data.totals.clients)} · updated ${new Date().toLocaleTimeString()}`;
+    status.textContent = `${number(data.totals.events)} observations · ${clientText(data.totals.clients)} · updated ${new Date().toLocaleTimeString()}`;
   } catch (error) {
-    if (current === request) {
-      byId("status").textContent = "Statistics unavailable. Use refresh to try again.";
+    if (pending?.controller === controller) {
+      status.textContent = "Statistics unavailable. Use refresh to try again.";
       const liveCount = byId("currently-playing")?.querySelector(".metric-value");
       if (liveCount) {
         liveCount.textContent = "—";
       }
+    }
+  } finally {
+    if (pending?.controller === controller) {
+      pending = undefined;
     }
   }
 }

@@ -125,6 +125,7 @@ including on Heroku: open `/statistics` on the deployed game. See [preview detai
 
 The level table combines all revisions of each level. The dashboard also reads complete UTC days from the
 [daily archive](docs/statistics.md#archive-completed-days). Set `STATISTICS_DAILY_TOKEN` to enable the protected job.
+Choose **All time** to view the full retained history.
 
 Prince deaths and enemy kills have separate daily charts. Alongside the two absolute danger rankings, two more show
 deaths per 100 unique clients who started each level and map revision. Select a guard, dangerous place or recent death

@@ -789,7 +789,13 @@ test(
         const { currentlyPlaying, ...historical } = await store.report(filters);
         return historical;
       };
-      const filters = [{ days: 7 }, { day: day(3), level: 1, source: "gameplay" }, { day: day(3), source: "samples" }];
+      const filters = [
+        { days: 7 },
+        { day: day(3), level: 1, source: "gameplay" },
+        { day: day(3), source: "samples" },
+        { days: 90 },
+        { days: "all" }
+      ];
       const expected = [];
       for (const options of filters) {
         expected.push(await report(options));
@@ -829,6 +835,21 @@ test(
       }
       assert(await store.startDailyStatistics());
       assert.equal((await finish()).processedDays, 0);
+
+      const older = day(100);
+      await daily.insertOne({
+        _id: `daily:${older}`,
+        day: older,
+        format: 1,
+        rows: [{ levelNumber: 1, clientId, eventType: "level_started", count: 2 }]
+      });
+      assert.deepEqual(await report({ days: 90 }), expected[3]);
+      const lifetime = await report({ days: "all", level: 1, source: "gameplay" });
+      assert.equal(lifetime.rangeStart, older);
+      assert.equal(lifetime.daysRange, 101);
+      assert.equal(lifetime.totals.starts, 6, "include historical archives and live observations");
+      assert.equal(lifetime.totals.startedClients, 1, "deduplicate the same client across all days and revisions");
+      assert.deepEqual(lifetime.days[0]._id, older);
     } catch (error) {
       if (error instanceof assert.AssertionError) {
         throw error;

@@ -59,13 +59,8 @@ function dangerRanking(kind, relative = false) {
         hits
       }
     },
-    {
-      $setWindowFields: {
-        partitionBy: { level: "$_id.level", map: "$_id.map", revision: "$_id.revision" },
-        output: { levelStarters: { $sum: "$started", window: { documents: ["unbounded", "unbounded"] } } }
-      }
-    },
-    { $match: { "_id.source": { $ne: null }, levelStarters: { $gt: 0 } } },
+    // Reduce client rows to one row per source, plus one row for all starters in each map revision.
+    // The window then sorts sources instead of sorting every source/client pair.
     {
       $group: {
         _id: { level: "$_id.level", map: "$_id.map", revision: "$_id.revision", source: "$_id.source" },
@@ -74,10 +69,17 @@ function dangerRanking(kind, relative = false) {
         hits: { $sum: "$hits" },
         clients: { $sum: "$clients" },
         deathClients: { $sum: "$deathClients" },
-        levelStarters: { $max: "$levelStarters" }
+        started: { $sum: "$started" }
       }
     },
-    { $match: { kills: { $gt: 0 } } },
+    { $match: { $or: [{ "_id.source": null, started: { $gt: 0 } }, { kills: { $gt: 0 } }] } },
+    {
+      $setWindowFields: {
+        partitionBy: { level: "$_id.level", map: "$_id.map", revision: "$_id.revision" },
+        output: { levelStarters: { $sum: "$started", window: { documents: ["unbounded", "unbounded"] } } }
+      }
+    },
+    { $match: { kills: { $gt: 0 }, levelStarters: { $gt: 0 } } },
     {
       $project: {
         _id: {

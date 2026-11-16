@@ -137,7 +137,7 @@ If the process restarts, call `POST` again after the lease expires (at most two 
 A new run picks up unfinished days, including days whose reports were saved before cleanup. A failed day can be retried
 with the same call. If a day's complete report exceeds MongoDB's [16 MiB BSON document limit](https://www.mongodb.com/docs/manual/reference/limits/),
 the job reports `day_too_large` and leaves its source records in place subject to the original TTL. Days already
-archived remain available after 90 days through **Single day**. No automatic schedule is installed.
+archived remain available after 90 days through **All time** and **Single day**. No automatic schedule is installed.
 
 ## Statistics page and local preview
 
@@ -153,17 +153,21 @@ Click a day in either daily chart to switch the whole dashboard to that UTC day.
 or Space. The level and data filters are preserved, including when selecting a zero-count day.
 You can also choose **Single day** in **Period**, then select **Day (UTC)** to see only that calendar day's observations in every
 historical total, chart and table. The day starts at 00:00 UTC and ends just before the next UTC midnight. Level and data
-filters still apply; choose a rolling period again to return to multiple days. A day without observations shows zero
+filters still apply. Choose **All time** to include the entire retained archive and unarchived observations. The daily
+charts start at the first day matching the current filters, and scroll horizontally when the history is long.
+A day without observations shows zero
 totals and empty results. **Currently playing** remains the live count described below.
 
 The read API accepts `GET /api/v1/statistics?day=2026-10-24` with optional `level` and `source` filters. `day` must be a
 real calendar date in `YYYY-MM-DD` format and takes precedence over a valid `days` parameter. Without `day`, `days=7`,
-`30` (default) or `90` selects a rolling period. The response includes `rangeStart` (the first UTC day) and `daysRange`
-(1 for a single day), so historical charts use the requested date. Compact summaries use their stored play day; legacy
+`30` (default) or `90` selects a rolling period and `days=all` selects all retained observations. The response includes
+`rangeStart` (the first UTC day) and numeric `daysRange` (1 for a single day), so historical charts use the requested date.
+Compact summaries use their stored play day; legacy
 events use their server receipt day, as in the rolling reports.
 
-The dashboard refreshes every 15 seconds while visible and immediately on return. Allow for the three-second game batch
-delay, or use manual refresh.
+The dashboard refreshes every 15 seconds while visible and immediately on return. The server shares identical historical
+queries already in progress and reuses their results for up to ten seconds per selection. The live count is queried
+separately on each request.
 
 ### Currently playing
 
@@ -220,7 +224,8 @@ Sources with no observed starters are omitted from the relative lists. Absolute 
 each rate. All sources are ranked before taking eight results, independently of the absolute top eight.
 
 The read API adds `guardsPerPlayer` and `trapsPerPlayer`; rows retain source `_id`, `kills`, `hpLost` and `hits`, plus
-`levelStarters` and `killsPer100Starters`. The relative aggregation uses MongoDB 5.0+ `$setWindowFields` after deduplicating
+`levelStarters` and `killsPer100Starters`. The relative aggregation uses MongoDB 5.0+ `$setWindowFields` after grouping by
+source and deduplicating
 client starts across days. Reporting remains read-only and collection never sends additional player or enemy data.
 
 ### Animated room previews

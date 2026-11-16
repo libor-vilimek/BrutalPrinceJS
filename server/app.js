@@ -114,12 +114,12 @@ function createApp({
       return;
     }
     if (ctx.path === "/api/v1/statistics") {
-      const days = Number(ctx.query.days || 30);
+      const days = ctx.query.days === "all" ? "all" : Number(ctx.query.days || 30);
       const day = ctx.query.day;
       const level = ctx.query.level === undefined ? undefined : Number(ctx.query.level);
       const source = ctx.query.source || "all";
       if (
-        ![7, 30, 90].includes(days) ||
+        ![7, 30, 90, "all"].includes(days) ||
         (day !== undefined &&
           (typeof day !== "string" ||
             !/^\d{4}-\d{2}-\d{2}$/.test(day) ||

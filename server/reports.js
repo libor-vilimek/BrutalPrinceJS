@@ -6,15 +6,24 @@ const { readCurrentlyPlaying } = require("./currently-playing");
 const { groupWithClients, positiveCount } = require("./report-clients");
 const { DAY_MS, dayKey, liveDays } = require("./statistics-days");
 
-async function readStatistics(collection, archives, { days = 30, day, level, source = "all" } = {}) {
+async function readStatistics(collection, archives, options = {}, reuseHistory) {
   const now = new Date();
-  const since = new Date(day || dayKey(now));
-  if (!day) {
+  const load = () => readHistory(collection, archives, now, options);
+  const history = reuseHistory ? reuseHistory(JSON.stringify([dayKey(now), options]), load) : load();
+  const [report, currentlyPlaying] = await Promise.all([history, readCurrentlyPlaying(collection, now)]);
+  return { ...report, currentlyPlaying };
+}
+
+async function readHistory(collection, archives, now, { days = 30, day, level, source = "all" }) {
+  const today = dayKey(now);
+  const since = new Date(day || today);
+  const allTime = !day && days === "all";
+  if (!day && !allTime) {
     since.setUTCDate(since.getUTCDate() - days + 1);
   }
   const until = day ? new Date(since.getTime() + DAY_MS) : undefined;
-  const receivedRange = { $gte: since, ...(until ? { $lt: until } : {}) };
-  const playDayRange = day ? { $eq: day } : { $gte: dayKey(since) };
+  const receivedRange = allTime ? { $type: "date" } : { $gte: since, ...(until ? { $lt: until } : {}) };
+  const playDayRange = day ? { $eq: day } : allTime ? { $type: "string" } : { $gte: dayKey(since) };
   const match = {};
   if (source === "samples") {
     match.sampleData = true;
@@ -64,7 +73,7 @@ async function readStatistics(collection, archives, { days = 30, day, level, sou
   };
   const observationCount = { $cond: [{ $eq: ["$eventType", "milestone"] }, 0, { $ifNull: ["$count", 1] }] };
   const totalFields = { events: { $sum: observationCount }, ...totals };
-  const statistics = collection.client.withSession({ snapshot: true }, async (session) => {
+  const [result] = await collection.client.withSession({ snapshot: true }, async (session) => {
     const completeDays = { format: 1, day: playDayRange };
     // Keep completed days out of the live scan without looking up an archive for each observation.
     const archived = await archives
@@ -170,22 +179,52 @@ async function readStatistics(collection, archives, { days = 30, day, level, sou
             }
           }
         ],
-        { session, readPreference: "primary" }
+        { session, readPreference: "primary", timeoutMS: 12000 }
       )
       .toArray();
   });
-  const [[result], currentlyPlaying] = await Promise.all([statistics, readCurrentlyPlaying(collection, now)]);
+  const rangeStart = (allTime && result.days[0]?._id) || dayKey(since);
+  const rangeEnd = allTime && result.days.at(-1)?._id > today ? result.days.at(-1)._id : today;
   return {
     ...result,
-    currentlyPlaying,
     totals:
       result.totals[0] ||
       Object.fromEntries(
         [...Object.keys(totalFields), "clients", ...Object.keys(clientConditions)].map((name) => [name, 0])
       ),
-    daysRange: day ? 1 : days,
-    rangeStart: dayKey(since)
+    daysRange: allTime ? (Date.parse(rangeEnd) - Date.parse(rangeStart)) / DAY_MS + 1 : day ? 1 : days,
+    rangeStart
   };
 }
 
-module.exports = { readStatistics };
+function createHistoryCache() {
+  const entries = new Map();
+  return (key, load) => {
+    const existing = entries.get(key);
+    entries.delete(key);
+    if (existing?.expiresAt > Date.now()) {
+      entries.set(key, existing);
+      return existing.report;
+    }
+    const entry = { expiresAt: Infinity };
+    entry.report = load().then(
+      (report) => {
+        entry.expiresAt = Date.now() + 10000;
+        return report;
+      },
+      (error) => {
+        if (entries.get(key) === entry) {
+          entries.delete(key);
+        }
+        throw error;
+      }
+    );
+    entries.set(key, entry);
+    if (entries.size > 32) {
+      entries.delete(entries.keys().next().value);
+    }
+    return entry.report;
+  };
+}
+
+module.exports = { readStatistics, createHistoryCache };

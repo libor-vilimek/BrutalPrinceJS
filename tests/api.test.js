@@ -201,6 +201,8 @@ test("statistics dashboard is public by default, with bounded filters and an exp
   await fetch(url + "/api/v1/statistics?source=gameplay");
   assert.equal(options.source, "gameplay");
   assert.equal((await fetch(url + "/api/v1/statistics?source=unknown")).status, 400);
+  assert.equal((await fetch(url + "/api/v1/statistics?days=all&level=3&source=gameplay")).status, 200);
+  assert.deepEqual(options, { days: "all", level: 3, source: "gameplay" });
   assert.equal((await fetch(url + "/api/v1/statistics?days=999")).status, 400);
   assert.equal((await fetch(url + "/api/v1/statistics?level=abc")).status, 400);
   assert.equal(

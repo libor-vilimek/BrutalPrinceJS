@@ -8,7 +8,8 @@ const path = require("node:path");
 
 const store = createEventStore({
   uri: process.env.mongoconnectionurl || process.env.MONGODB_URI,
-  database: process.env.MONGODB_DATABASE || "brutalprince"
+  database: process.env.MONGODB_DATABASE || "brutalprince",
+  cacheHistory: true
 });
 const sourceRoot = path.join(__dirname, "../src");
 const hash = createHash("sha256");

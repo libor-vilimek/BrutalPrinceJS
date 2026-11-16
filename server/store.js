@@ -2,13 +2,21 @@
 
 const { MongoClient } = require("mongodb");
 const { validateEvent, fingerprint, semanticKey } = require("./events");
-const { readStatistics } = require("./reports");
+const { readStatistics, createHistoryCache } = require("./reports");
 const { persistSummaries } = require("./summaries");
 const { createDailyStatistics, writeHistoricalSummary } = require("./daily-statistics");
 
-function createEventStore({ uri, database, retentionDays = 90, collectionName = "brutalprince", dailyOptions }) {
+function createEventStore({
+  uri,
+  database,
+  retentionDays = 90,
+  collectionName = "brutalprince",
+  dailyOptions,
+  cacheHistory
+}) {
   let client;
   let ready;
+  const reuseHistory = cacheHistory ? createHistoryCache() : undefined;
   async function collection() {
     if (!uri || !database) {
       throw new Error("Statistics database is not configured");
@@ -69,7 +77,7 @@ function createEventStore({ uri, database, retentionDays = 90, collectionName = 
     async report(options) {
       const { events, archives } = await collection();
       return {
-        ...(await readStatistics(events, archives, options)),
+        ...(await readStatistics(events, archives, options, reuseHistory)),
         storage: { database, collection: collectionName }
       };
     },
